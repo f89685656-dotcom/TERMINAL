@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -13,8 +14,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
+using HidSharp;
 
-namespace PressureMonitor
+namespace TERMINAL
 {
     public class ConnectedClient : INotifyPropertyChanged
     {
@@ -23,7 +25,6 @@ namespace PressureMonitor
         private string _statusText = "Готов";
         private bool _isOffline = false;
 
-        // volatile-поля для потокобезопасности
         private volatile bool _isWaiting = false;
         private volatile bool _lastDoneOk = false;
         private volatile bool _lastDoneFail = false;
@@ -62,44 +63,24 @@ namespace PressureMonitor
         public TcpClient TcpClient { get; set; } = null!;
         public DateTime ConnectedAt { get; set; } = DateTime.Now;
 
-        public bool IsWaiting
-        {
-            get => _isWaiting;
-            set => _isWaiting = value;
-        }
-
-        public bool LastDoneOk
-        {
-            get => _lastDoneOk;
-            set => _lastDoneOk = value;
-        }
-
-        public bool LastDoneFail
-        {
-            get => _lastDoneFail;
-            set => _lastDoneFail = value;
-        }
+        public bool IsWaiting { get => _isWaiting; set => _isWaiting = value; }
+        public bool LastDoneOk { get => _lastDoneOk; set => _lastDoneOk = value; }
+        public bool LastDoneFail { get => _lastDoneFail; set => _lastDoneFail = value; }
 
         public bool IsOffline => _isOffline;
-
         public DateTime? DisconnectedAt { get; set; } = null;
         public DateTime LastActivityAt { get; set; } = DateTime.Now;
 
         public event PropertyChangedEventHandler? PropertyChanged;
-
-        private void OnPropertyChanged(string name)
-        {
+        private void OnPropertyChanged(string name) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        }
 
         private static void RunOnUI(Action action)
         {
             var app = Application.Current;
             if (app == null) { action(); return; }
-            if (app.Dispatcher.CheckAccess())
-                action();
-            else
-                app.Dispatcher.Invoke(action);
+            if (app.Dispatcher.CheckAccess()) action();
+            else app.Dispatcher.Invoke(action);
         }
 
         public string DisplayText => $"SID: {Sid}";
@@ -111,9 +92,7 @@ namespace PressureMonitor
                 _isOffline = false;
                 StatusColor = CreateFrozenBrush(Colors.Green);
                 StatusText = "Готов";
-                IsWaiting = false;
-                LastDoneOk = true;
-                DisconnectedAt = null;
+                IsWaiting = false; LastDoneOk = true; DisconnectedAt = null;
             });
         }
 
@@ -124,8 +103,17 @@ namespace PressureMonitor
                 _isOffline = false;
                 StatusColor = CreateFrozenBrush(Colors.Orange);
                 StatusText = "Занят съёмом";
-                IsWaiting = true;
-                LastDoneOk = false;
+                IsWaiting = true; LastDoneOk = false;
+            });
+        }
+
+        public void SetStatusWaitingWithTime(int seconds)
+        {
+            RunOnUI(() =>
+            {
+                _isOffline = false;
+                StatusColor = CreateFrozenBrush(Colors.Orange);
+                StatusText = $"Занят съёмом ({seconds} сек)";
             });
         }
 
@@ -136,10 +124,8 @@ namespace PressureMonitor
                 _isOffline = true;
                 StatusColor = CreateFrozenBrush(Colors.Red);
                 StatusText = "Не отвечает";
-                IsWaiting = false;
-                LastDoneOk = false;
-                if (DisconnectedAt == null)
-                    DisconnectedAt = DateTime.Now;
+                IsWaiting = false; LastDoneOk = false;
+                if (DisconnectedAt == null) DisconnectedAt = DateTime.Now;
             });
         }
 
@@ -194,8 +180,7 @@ namespace PressureMonitor
                 _isOffline = false;
                 StatusColor = CreateFrozenBrush(Colors.Green);
                 StatusText = "Съём завершён";
-                IsWaiting = false;
-                LastDoneOk = true;
+                IsWaiting = false; LastDoneOk = true;
             });
         }
 
@@ -206,17 +191,81 @@ namespace PressureMonitor
                 _isOffline = false;
                 StatusColor = CreateFrozenBrush(Colors.Orange);
                 StatusText = "Ошибка съёма";
-                IsWaiting = false;
-                LastDoneFail = true;
+                IsWaiting = false; LastDoneFail = true;
+            });
+        }
+
+        public void SetStatusClearing()
+        {
+            RunOnUI(() =>
+            {
+                _isOffline = false;
+                StatusColor = CreateFrozenBrush(Colors.Orange);
+                StatusText = "Ожидает очистки";
+            });
+        }
+
+        public void SetStatusCleared()
+        {
+            RunOnUI(() =>
+            {
+                _isOffline = false;
+                StatusColor = CreateFrozenBrush(Colors.Green);
+                StatusText = "Очищено";
+            });
+        }
+
+        public void SetStatusClearFailed()
+        {
+            RunOnUI(() =>
+            {
+                _isOffline = false;
+                StatusColor = CreateFrozenBrush(Colors.Orange);
+                StatusText = "Очистка не удалась";
             });
         }
     }
 
-    public class StepItem
+    public class StepItem : INotifyPropertyChanged
     {
+        private string _timerText = "";
+        private string _arrowText = "  ";
+        private string _statusMark = "☐";
+        private string _kosaCounterText = "";
+
         public string IndexText { get; set; } = "";
-        public string ValueText { get; set; } = "";
-        public string CheckMark { get; set; } = "☐";
+        public string ValueNumber { get; set; } = "";
+        public string ValueUnits { get; set; } = "";
+
+        public string TimerText
+        {
+            get => _timerText;
+            set { _timerText = value; OnPropertyChanged(nameof(TimerText)); }
+        }
+
+        public string ArrowText
+        {
+            get => _arrowText;
+            set { _arrowText = value; OnPropertyChanged(nameof(ArrowText)); }
+        }
+
+        public string StatusMark
+        {
+            get => _statusMark;
+            set { _statusMark = value; OnPropertyChanged(nameof(StatusMark)); }
+        }
+
+        public string KosaCounterText
+        {
+            get => _kosaCounterText;
+            set { _kosaCounterText = value; OnPropertyChanged(nameof(KosaCounterText)); }
+        }
+
+        public int PlannedDuration { get; set; }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged(string name) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
     public partial class MainWindow : Window
@@ -226,6 +275,10 @@ namespace PressureMonitor
         private readonly object _streamLock = new object();
 
         private DispatcherTimer? _timer;
+        private DispatcherTimer? _statusResetTimer;
+        private DispatcherTimer? _furnaceTempTimer;
+        private DispatcherTimer? _platinaTimer;
+
         private string? _selectedTargetPressure;
         private int _currentStepIndex = 0;
         private int _completedSteps = 0;
@@ -233,8 +286,12 @@ namespace PressureMonitor
         private bool _isRunning = false;
         private bool _stopRequested = false;
 
-        private DateTime _timerEnd = DateTime.MinValue;
+        private volatile bool _pauseRequested = false;
+
         private bool _timerActive = false;
+
+        private DateTime _totalTimerStart = DateTime.MinValue;
+        private bool _totalTimerActive = false;
 
         private TcpListener? _broadcastServer;
         private readonly List<ConnectedClient> _connectedClients = new();
@@ -249,39 +306,91 @@ namespace PressureMonitor
         private const string DeviceIp = "192.168.0.159";
         private const int DevicePort = 8888;
 
-        // ─── Печь (ST-351, Modbus TCP) ───
         private const string FurnaceIp = "192.168.0.167";
         private const int FurnacePort = 502;
         private const ushort FurnaceSetPointRegister = 201;
+        private const ushort FurnaceSetPointReadRegister = 202;
+        private const ushort FurnaceCurrentTempRegister = 205;
+        private const ushort FurnaceModeRegister = 200;
+        private const ushort FurnaceModeManual = 2;
+        private const ushort FurnaceModeIdle = 1;
 
-        /// <summary>
-        /// Последняя записанная уставка печи (°C). Используется для имени файла.
-        /// </summary>
-        private float _lastFurnaceSetPoint = 0f;
+        // СКТБ ЭлПа (платина) — USB HID
+        private const int PlatinaVid = 0xFFFF;
+        private const int PlatinaPid = 0x0009;
+        private const string PlatinaRequest = "pass2 meas2? 2\n\0";
 
-        /// <summary>
-        /// Кто из клиентов уже ответил SAVED_OK / SAVED_FAIL в текущей операции сохранения.
-        /// </summary>
+        private double _platinaLastValue = double.NaN;
+        private DateTime _platinaLastSuccess = DateTime.MinValue;
+        private int _platinaFailCount = 0;
+
+        // Порт broadcast-сервера
+        private const int BroadcastPort = 9990;
+
+        // Таймер стабилизации температуры печи
+        private DateTime _stabilizationTimerStart = DateTime.MinValue;
+        private bool _stabilizationTimerActive = false;
+        private const double FurnaceStabilizationTolerance = 0.1;
+
+        // Последнее известное значение уставки (для отслеживания смены)
+        private double _lastFurnaceSetPoint = double.NaN;
+
+        // Последнее валидное значение уставки печи (для имени CSV-файла)
+        private float _lastValidFurnaceSetPoint = 0f;
+
+        // Гистерезис связи
+        private const int ConnectionLostThreshold = 5;
+
+        private int _agkFailCount = 0;
+        private int _furnaceTempFailCount = 0;
+        private int _furnaceSetPointFailCount = 0;
+
         private readonly HashSet<string> _saveResponses = new();
         private readonly object _saveLock = new();
+
+        private readonly HashSet<string> _clearResponses = new();
+        private readonly object _clearLock = new();
+
+        private ObservableCollection<StepItem> _stepItems = new();
+
+        private string _savedStartStep = "1";
+        private string _savedCycleCount = "10";
+
+        private bool _isCalibrationMode = true;
+
+        private bool _uiLoaded = false;
+
+        private bool _kosaEnabled = false;
+        private int _kosaTimerSeconds = 25;
+
+        private string _currentPressureUnitsLabel = "";
 
         private static readonly string SettingsDir =
             Path.Combine(Environment.GetFolderPath(
                 Environment.SpecialFolder.ApplicationData),
-                "PressureMonitor");
+                "TERMINAL");
 
         private static readonly string SettingsFile =
             Path.Combine(SettingsDir, "settings.json");
 
+        private Settings? _loadedSettings = null;
+
         public MainWindow()
         {
             InitializeComponent();
+
+            _uiLoaded = false;
+
             LoadTargetPressures();
             LoadTimerSets();
             LoadSettings();
+
+            _uiLoaded = true;
+
+            ApplyLoadedSettingsToUi();
         }
 
-        // ─────────────────────────── ЗАПОЛНЕНИЕ СПИСКОВ ───────────────────────────
+        // ─────────────────────────── ЗАПОЛНЕНИЕ ───────────────────────────
 
         private void LoadTargetPressures()
         {
@@ -307,7 +416,6 @@ namespace PressureMonitor
             TargetPressureCombo.Items.Add("140 МПа");
             TargetPressureCombo.Items.Add("160 МПа (БУРСЕРВИС)");
             TargetPressureCombo.Items.Add("160 МПа (Schlumberger)");
-
             TargetPressureCombo.SelectedIndex = 0;
         }
 
@@ -350,8 +458,12 @@ namespace PressureMonitor
         {
             public int TargetPressureIndex { get; set; } = 0;
             public int TimerSetIndex { get; set; } = 0;
-            public string CycleCount { get; set; } = "10";
             public string SavePath { get; set; } = "";
+            public int ModeIndex { get; set; } = 0;
+            public string StartStep { get; set; } = "1";
+            public string CycleCount { get; set; } = "10";
+            public bool KosaEnabled { get; set; } = false;
+            public int KosaTimerSeconds { get; set; } = 25;
         }
 
         private void LoadSettings()
@@ -361,39 +473,105 @@ namespace PressureMonitor
                 if (File.Exists(SettingsFile))
                 {
                     string json = File.ReadAllText(SettingsFile);
-                    var s = JsonSerializer.Deserialize<Settings>(json);
-                    if (s != null)
-                    {
-                        if (s.TargetPressureIndex >= 0 &&
-                            s.TargetPressureIndex < TargetPressureCombo.Items.Count)
-                            TargetPressureCombo.SelectedIndex = s.TargetPressureIndex;
-
-                        if (s.TimerSetIndex >= 0 &&
-                            s.TimerSetIndex < TimerSetCombo.Items.Count)
-                            TimerSetCombo.SelectedIndex = s.TimerSetIndex;
-
-                        if (!string.IsNullOrWhiteSpace(s.CycleCount))
-                            CycleCountBox.Text = s.CycleCount;
-
-                        if (!string.IsNullOrWhiteSpace(s.SavePath))
-                            SavePathBox.Text = s.SavePath;
-                    }
+                    _loadedSettings = JsonSerializer.Deserialize<Settings>(json);
                 }
 
-                if (string.IsNullOrWhiteSpace(SavePathBox.Text))
+                if (_loadedSettings == null)
+                    _loadedSettings = new Settings();
+
+                if (string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
                 {
                     string docs = Environment.GetFolderPath(
                         Environment.SpecialFolder.MyDocuments);
-                    SavePathBox.Text = Path.Combine(docs, "PressureMonitor");
+                    _loadedSettings.SavePath = Path.Combine(docs, "TERMINAL");
                 }
+
+                _savedStartStep = string.IsNullOrWhiteSpace(_loadedSettings.StartStep)
+                    ? "1" : _loadedSettings.StartStep;
+                _savedCycleCount = string.IsNullOrWhiteSpace(_loadedSettings.CycleCount)
+                    ? "10" : _loadedSettings.CycleCount;
+                _kosaEnabled = _loadedSettings.KosaEnabled;
+                _kosaTimerSeconds = _loadedSettings.KosaTimerSeconds > 0
+                    ? _loadedSettings.KosaTimerSeconds : 25;
             }
-            catch { }
+            catch
+            {
+                _loadedSettings = new Settings();
+                _savedStartStep = "1";
+                _savedCycleCount = "10";
+                _kosaEnabled = false;
+                _kosaTimerSeconds = 25;
+
+                string docs = Environment.GetFolderPath(
+                    Environment.SpecialFolder.MyDocuments);
+                _loadedSettings.SavePath = Path.Combine(docs, "TERMINAL");
+            }
+        }
+
+        private void ApplyLoadedSettingsToUi()
+        {
+            if (_loadedSettings == null) return;
+
+            if (_loadedSettings.TargetPressureIndex >= 0 &&
+                _loadedSettings.TargetPressureIndex < TargetPressureCombo.Items.Count)
+            {
+                TargetPressureCombo.SelectedIndex = _loadedSettings.TargetPressureIndex;
+            }
+            else
+            {
+                TargetPressureCombo.SelectedIndex = 0;
+            }
+
+            if (_loadedSettings.TimerSetIndex >= 0 &&
+                _loadedSettings.TimerSetIndex < TimerSetCombo.Items.Count)
+            {
+                TimerSetCombo.SelectedIndex = _loadedSettings.TimerSetIndex;
+            }
+            else
+            {
+                TimerSetCombo.SelectedIndex = 0;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
+                SavePathBox.Text = _loadedSettings.SavePath;
+
+            if (_loadedSettings.ModeIndex >= 0 &&
+                _loadedSettings.ModeIndex < ModeCombo.Items.Count)
+            {
+                ModeCombo.SelectedIndex = _loadedSettings.ModeIndex;
+            }
+            else
+            {
+                ModeCombo.SelectedIndex = 0;
+            }
+
+            if (KosaCheckBox != null)
+                KosaCheckBox.IsChecked = _kosaEnabled;
+            if (KosaTimerBox != null)
+                KosaTimerBox.Text = _kosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
+
+            UpdateModeUi();
+
+            if (TargetPressureCombo.SelectedItem != null)
+            {
+                _selectedTargetPressure = TargetPressureCombo.SelectedItem.ToString();
+                _currentStepIndex = 0;
+                _completedSteps = 0;
+                ShowSteps();
+                UpdateMaxMinFromRange();
+            }
         }
 
         private void SaveSettings()
         {
             try
             {
+                if (!_uiLoaded) return;
+                if (SavePathBox == null) return;
+                if (TargetPressureCombo == null) return;
+                if (TimerSetCombo == null) return;
+                if (ModeCombo == null) return;
+
                 if (!Directory.Exists(SettingsDir))
                     Directory.CreateDirectory(SettingsDir);
 
@@ -401,8 +579,12 @@ namespace PressureMonitor
                 {
                     TargetPressureIndex = TargetPressureCombo.SelectedIndex,
                     TimerSetIndex = TimerSetCombo.SelectedIndex,
-                    CycleCount = CycleCountBox.Text,
-                    SavePath = SavePathBox.Text
+                    SavePath = SavePathBox.Text,
+                    ModeIndex = ModeCombo.SelectedIndex,
+                    StartStep = _savedStartStep,
+                    CycleCount = _savedCycleCount,
+                    KosaEnabled = _kosaEnabled,
+                    KosaTimerSeconds = _kosaTimerSeconds
                 };
 
                 string json = JsonSerializer.Serialize(s,
@@ -413,11 +595,146 @@ namespace PressureMonitor
             catch { }
         }
 
+        // ─────────────────────────── РЕЖИМ РАБОТЫ ───────────────────────────
+
+        private void ModeCombo_SelectionChanged(object sender,
+            System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            if (ModeCombo == null) return;
+
+            SaveCurrentParamValue();
+
+            _isCalibrationMode = ModeCombo.SelectedIndex == 0;
+
+            UpdateModeUi();
+            SaveSettings();
+        }
+
+        private void SaveCurrentParamValue()
+        {
+            if (ParamBox == null) return;
+
+            string val = ParamBox.Text?.Trim() ?? "";
+            if (_isCalibrationMode) _savedStartStep = val;
+            else _savedCycleCount = val;
+        }
+
+        private void UpdateModeUi()
+        {
+            if (ParamLabel == null || ParamBox == null) return;
+
+            if (_isCalibrationMode)
+            {
+                ParamLabel.Text = "Начать с шага:";
+                ParamBox.Text = string.IsNullOrWhiteSpace(_savedStartStep)
+                    ? "1" : _savedStartStep;
+            }
+            else
+            {
+                ParamLabel.Text = "Циклов:";
+                ParamBox.Text = string.IsNullOrWhiteSpace(_savedCycleCount)
+                    ? "10" : _savedCycleCount;
+            }
+
+            if (TimerSetPanel != null)
+                TimerSetPanel.Visibility = Visibility.Visible;
+
+            if (CalibrationPanel != null && PumpPanel != null)
+            {
+                if (_isCalibrationMode)
+                {
+                    CalibrationPanel.Visibility = Visibility.Visible;
+                    PumpPanel.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    CalibrationPanel.Visibility = Visibility.Collapsed;
+                    PumpPanel.Visibility = Visibility.Visible;
+                }
+            }
+
+            UpdateCyclesLabel();
+        }
+
+        private void ParamBox_TextChanged(object sender,
+            System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            if (ParamBox == null) return;
+
+            string val = ParamBox.Text?.Trim() ?? "";
+
+            if (_isCalibrationMode) _savedStartStep = val;
+            else _savedCycleCount = val;
+
+            if (!_isCalibrationMode)
+                UpdateCyclesLabel();
+
+            SaveSettings();
+        }
+
+        private void UpdateCyclesLabel()
+        {
+            if (CyclesText == null) return;
+
+            int total = 0;
+            if (ParamBox != null &&
+                int.TryParse(ParamBox.Text?.Trim(), out int c) && c > 0)
+            {
+                total = c;
+            }
+
+            CyclesText.Text = $"Цикл: 0/{total}";
+        }
+
+        // ─────────────────────────── KOSA UI ───────────────────────────
+
+        private void KosaCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            _kosaEnabled = KosaCheckBox.IsChecked == true;
+
+            foreach (var item in _stepItems)
+            {
+                if (item.KosaCounterText == "0/3" || item.KosaCounterText == "0/1")
+                {
+                    item.KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
+                }
+            }
+
+            SaveSettings();
+        }
+
+        private void KosaTimerBox_PreviewTextInput(object sender,
+            System.Windows.Input.TextCompositionEventArgs e)
+        {
+            e.Handled = !e.Text.All(char.IsDigit);
+        }
+
+        private void KosaTimerBox_TextChanged(object sender,
+            System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            if (KosaTimerBox == null) return;
+
+            string val = KosaTimerBox.Text?.Trim() ?? "";
+            if (int.TryParse(val, out int v) && v > 0)
+            {
+                _kosaTimerSeconds = v;
+                SaveSettings();
+            }
+        }
+
         // ─────────────────────────── COMBOBOX ───────────────────────────
 
         private void TargetPressureCombo_SelectionChanged(object sender,
             System.Windows.Controls.SelectionChangedEventArgs e)
         {
+            if (!_uiLoaded) return;
+            if (TargetPressureCombo == null) return;
+            if (StepsList == null) return;
+
             if (TargetPressureCombo.SelectedItem == null)
             {
                 _selectedTargetPressure = null;
@@ -429,6 +746,18 @@ namespace PressureMonitor
             _currentStepIndex = 0;
             _completedSteps = 0;
             ShowSteps();
+            UpdateMaxMinFromRange();
+            UpdateModeUi();
+            SaveSettings();
+        }
+
+        private void TimerSetCombo_SelectionChanged(object sender,
+            System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            if (TimerSetCombo == null) return;
+
+            RecalcStepTimers();
             SaveSettings();
         }
 
@@ -437,54 +766,124 @@ namespace PressureMonitor
             if (_selectedTargetPressure == null) return;
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var values))
             {
+                _stepItems.Clear();
                 StepsList.ItemsSource = null;
                 return;
             }
 
+            bool longTimers = TimerSetCombo.SelectedIndex == 1;
             string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
 
-            var items = new List<StepItem>();
+            _stepItems = new ObservableCollection<StepItem>();
+
             for (int i = 0; i < values.Length; i++)
             {
-                items.Add(new StepItem
+                int dur = GetStepDuration(values, i, longTimers);
+                _stepItems.Add(new StepItem
                 {
                     IndexText = (i + 1) + ".",
-                    ValueText = values[i] + " " + unitsLabel,
-                    CheckMark = i < _completedSteps ? "☑" : "☐"
+                    ValueNumber = values[i].ToString(CultureInfo.InvariantCulture),
+                    ValueUnits = unitsLabel,
+                    TimerText = dur.ToString(),
+                    ArrowText = "  ",
+                    StatusMark = "☐",
+                    KosaCounterText = _kosaEnabled ? "0/3" : "0/1",
+                    PlannedDuration = dur
                 });
             }
 
-            StepsList.ItemsSource = items;
+            bool isLong = unitsLabel.Contains("кгс");
+
+            StepsList.ItemTemplate = (DataTemplate)FindResource(
+                isLong ? "LongUnitsTemplate" : "ShortUnitsTemplate");
+
+            StepsHeaderShort.Visibility = isLong ? Visibility.Collapsed : Visibility.Visible;
+            StepsHeaderLong.Visibility = isLong ? Visibility.Visible : Visibility.Collapsed;
+
+            StepsList.ItemsSource = _stepItems;
+            UpdateStepCounter();
         }
 
-        private void ResetStepsCheckmarks()
+        private void RecalcStepTimers()
+        {
+            if (_selectedTargetPressure == null) return;
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var values)) return;
+            if (_stepItems.Count != values.Length) return;
+
+            bool longTimers = TimerSetCombo.SelectedIndex == 1;
+            for (int i = 0; i < _stepItems.Count; i++)
+            {
+                int dur = GetStepDuration(values, i, longTimers);
+                _stepItems[i].TimerText = dur.ToString();
+                _stepItems[i].PlannedDuration = dur;
+            }
+        }
+
+        private void UpdateMaxMinFromRange()
+        {
+            if (_selectedTargetPressure == null) return;
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
+                return;
+
+            string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
+            double maxValue = steps.Max();
+            double minValue = 0;
+
+            MaxValueText.Text = maxValue.ToString(CultureInfo.InvariantCulture);
+            MaxUnitsText.Text = unitsLabel;
+            MinValueText.Text = minValue.ToString(CultureInfo.InvariantCulture);
+            MinUnitsText.Text = unitsLabel;
+        }
+
+        private void ResetStepsToInitial()
         {
             _completedSteps = 0;
             _currentStepIndex = 0;
-            ShowSteps();
-        }
 
-        private void CycleCountBox_TextChanged(object sender,
-            System.Windows.Controls.TextChangedEventArgs e)
-        {
-            if (CyclesText == null) return;
-
-            if (int.TryParse(CycleCountBox.Text.Trim(), out int cycles) && cycles > 0)
+            foreach (var item in _stepItems)
             {
-                string current = CyclesText.Text;
-                string donePart = "0";
-                if (!string.IsNullOrEmpty(current) && current.Contains("/"))
-                    donePart = current.Split('/')[0].Trim();
-
-                CyclesText.Text = $"{donePart} / {cycles}";
+                item.StatusMark = "☐";
+                item.ArrowText = "  ";
+                item.TimerText = item.PlannedDuration.ToString();
+                item.KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
             }
 
-            SaveSettings();
+            UpdateStepCounter();
+        }
+
+        private void UpdateStepCounter()
+        {
+            if (_selectedTargetPressure == null || _stepItems.Count == 0)
+            {
+                StepCounterText.Text = "Шаг: 0/0";
+                return;
+            }
+
+            int currentStep = 0;
+            for (int i = 0; i < _stepItems.Count; i++)
+            {
+                if (_stepItems[i].ArrowText == "←")
+                {
+                    currentStep = i + 1;
+                    break;
+                }
+            }
+
+            if (currentStep == 0)
+            {
+                int completed = _stepItems.Count(x => x.StatusMark == "☑");
+                StepCounterText.Text = $"Шаг: {completed}/{_stepItems.Count}";
+            }
+            else
+            {
+                StepCounterText.Text = $"Шаг: {currentStep}/{_stepItems.Count}";
+            }
         }
 
         private void SavePathBox_TextChanged(object sender,
             System.Windows.Controls.TextChangedEventArgs e)
         {
+            if (!_uiLoaded) return;
             SaveSettings();
         }
 
@@ -496,10 +895,8 @@ namespace PressureMonitor
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine("[Broadcast] Запуск broadcast-сервера...");
-                _broadcastServer = new TcpListener(IPAddress.Loopback, 9990);
+                _broadcastServer = new TcpListener(IPAddress.Loopback, BroadcastPort);
                 _broadcastServer.Start();
-                System.Diagnostics.Debug.WriteLine("[Broadcast] Сервер запущен на 127.0.0.1:9990");
 
                 _ = Task.Run(async () =>
                 {
@@ -508,24 +905,10 @@ namespace PressureMonitor
                         try
                         {
                             var client = await _broadcastServer.AcceptTcpClientAsync();
-                            System.Diagnostics.Debug.WriteLine(
-                                $"[Broadcast] === Принято подключение, поток {System.Threading.Thread.CurrentThread.ManagedThreadId}");
                             _ = Task.Run(() => HandleClientAsync(client));
                         }
-                        catch (ObjectDisposedException)
-                        {
-                            System.Diagnostics.Debug.WriteLine(
-                                "[Broadcast] Слушатель закрыт — выходим из цикла");
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine(
-                                $"[Broadcast] Ошибка в цикле AcceptTcpClientAsync: {ex.Message}");
-                            break;
-                        }
+                        catch { break; }
                     }
-                    System.Diagnostics.Debug.WriteLine("[Broadcast] Цикл AcceptTcpClientAsync завершён");
                 });
 
                 _clientsUiTimer = new DispatcherTimer
@@ -535,17 +918,12 @@ namespace PressureMonitor
                 _clientsUiTimer.Tick += (s, e) => RefreshClientsUi();
                 _clientsUiTimer.Start();
 
-                SetStatus("Broadcast-сервер запущен на 127.0.0.1:9990", false);
+                SetStatus($"Broadcast-сервер запущен на 127.0.0.1:{BroadcastPort}", false);
             }
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
             {
-                MessageBox.Show(
-                    "Порт 9990 уже занят.\n" +
-                    "Возможно, запущен старый экземпляр PressureMonitor.\n" +
-                    "Закройте его (через Диспетчер задач) и запустите снова.",
-                    "Ошибка",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                MessageBox.Show($"Порт {BroadcastPort} уже занят. Закройте старый экземпляр.",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                 Environment.Exit(1);
             }
             catch (Exception ex)
@@ -559,19 +937,16 @@ namespace PressureMonitor
         {
             List<ConnectedClient> snapshot;
             List<ConnectedClient> toRemove = new();
-            List<ConnectedClient> markedDead = new();
 
             lock (_clientsLock)
             {
                 var now = DateTime.Now;
                 foreach (var c in _connectedClients)
                 {
-                    // Используем IsOffline вместо чтения Brush.Color
                     if (!c.IsOffline &&
                         (now - c.LastActivityAt).TotalSeconds >= ClientDeadThresholdSeconds)
                     {
                         c.SetStatusOffline();
-                        markedDead.Add(c);
                     }
 
                     if (c.DisconnectedAt.HasValue &&
@@ -580,20 +955,8 @@ namespace PressureMonitor
                         toRemove.Add(c);
                     }
                 }
-                foreach (var c in toRemove)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Broadcast] Удаляем клиента {c.Sid} (offline > {OfflineRetentionSeconds} сек)");
-                    _connectedClients.Remove(c);
-                }
-
+                foreach (var c in toRemove) _connectedClients.Remove(c);
                 snapshot = _connectedClients.ToList();
-            }
-
-            foreach (var c in markedDead)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] Клиент {c.Sid} помечен offline (нет активности > {ClientDeadThresholdSeconds} сек)");
             }
 
             ClientsList.ItemsSource = null;
@@ -619,36 +982,22 @@ namespace PressureMonitor
             NetworkStream? stream = null;
             string sid = "(неизвестен)";
             ConnectedClient? connectedClient = null;
-            int threadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
 
             try
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] === HandleClientAsync начат, поток {threadId}");
-
                 stream = client.GetStream();
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] Поток {threadId}: клиент подключился, читаем HELLO...");
 
                 var sb = new StringBuilder();
                 byte[] one = new byte[1];
                 while (true)
                 {
                     int n = await stream.ReadAsync(one, 0, 1);
-                    if (n == 0)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Поток {threadId}: ReadAsync вернул 0 при чтении HELLO");
-                        return;
-                    }
+                    if (n == 0) return;
                     if (one[0] == 10) break;
                     sb.Append((char)one[0]);
                 }
 
                 string hello = sb.ToString().Trim();
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] Поток {threadId}: HELLO: [{hello}]");
-
                 if (hello.StartsWith("HELLO "))
                     sid = hello.Substring(6).Trim();
 
@@ -667,8 +1016,6 @@ namespace PressureMonitor
                     var existing = _connectedClients.FirstOrDefault(c => c.Sid == sid);
                     if (existing != null)
                     {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Поток {threadId}: клиент {sid} уже существует — обновляем TcpClient");
                         existing.TcpClient = client;
                         existing.ConnectedAt = DateTime.Now;
                         existing.LastActivityAt = DateTime.Now;
@@ -677,16 +1024,12 @@ namespace PressureMonitor
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Поток {threadId}: добавляем нового клиента {sid}");
                         _connectedClients.Add(connectedClient);
                     }
                 }
 
-                if (Dispatcher.CheckAccess())
-                    RefreshClientsUi();
-                else
-                    Dispatcher.Invoke(() => RefreshClientsUi());
+                if (Dispatcher.CheckAccess()) RefreshClientsUi();
+                else Dispatcher.Invoke(() => RefreshClientsUi());
 
                 var buffer = new StringBuilder();
                 byte[] buf = new byte[512];
@@ -698,25 +1041,9 @@ namespace PressureMonitor
                     {
                         n = await stream.ReadAsync(buf, 0, buf.Length, _cts.Token);
                     }
-                    catch (OperationCanceledException)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Поток {threadId}: чтение отменено для {sid}");
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Поток {threadId}: ошибка чтения {sid}: {ex.Message}");
-                        break;
-                    }
+                    catch { break; }
 
-                    if (n == 0)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Поток {threadId}: клиент {sid} закрыл соединение (Read=0)");
-                        break;
-                    }
+                    if (n == 0) break;
 
                     string chunk = Encoding.UTF8.GetString(buf, 0, n);
                     buffer.Append(chunk);
@@ -731,21 +1058,13 @@ namespace PressureMonitor
                         buffer.Remove(0, idx + 1);
 
                         if (string.IsNullOrEmpty(line)) continue;
-
                         ProcessClientMessage(connectedClient, line);
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] Поток {threadId}: ОШИБКА клиента {sid}: {ex.GetType().Name}: {ex.Message}");
-            }
+            catch { }
             finally
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] === finally для клиента {sid}, поток {threadId}");
-
                 try { stream?.Close(); } catch { }
                 try { client.Close(); } catch { }
 
@@ -753,68 +1072,51 @@ namespace PressureMonitor
                 {
                     bool sameClient;
                     lock (_clientsLock)
-                    {
                         sameClient = connectedClient.TcpClient == client;
-                    }
 
-                    if (sameClient)
-                    {
-                        connectedClient.SetStatusOffline();
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Поток {threadId}: клиент {sid} помечен offline (same TcpClient)");
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Поток {threadId}: клиент {sid} уже переподключился — не помечаем offline");
-                    }
+                    if (sameClient) connectedClient.SetStatusOffline();
 
-                    if (Dispatcher.CheckAccess())
-                        RefreshClientsUi();
-                    else
-                        Dispatcher.Invoke(() => RefreshClientsUi());
+                    if (Dispatcher.CheckAccess()) RefreshClientsUi();
+                    else Dispatcher.Invoke(() => RefreshClientsUi());
                 }
             }
         }
 
         private void ProcessClientMessage(ConnectedClient client, string line)
         {
-            System.Diagnostics.Debug.WriteLine($"[Client {client.Sid}] {line}");
             client.LastActivityAt = DateTime.Now;
 
-            if (line.StartsWith("HELLO "))
-            {
-                client.SetStatusAlive();
-            }
-            else if (line.StartsWith("STATUS_BUSY"))
-            {
-                client.SetStatusWaiting();
-            }
+            if (line.StartsWith("HELLO ")) client.SetStatusAlive();
+            else if (line.StartsWith("STATUS_BUSY")) client.SetStatusWaiting();
             else if (line.StartsWith("DONE_OK"))
             {
-                client.LastDoneOk = true;
-                client.LastDoneFail = false;
+                client.LastDoneOk = true; client.LastDoneFail = false;
                 client.SetStatusDoneSuccess();
             }
             else if (line.StartsWith("DONE_FAIL"))
             {
-                client.LastDoneOk = false;
-                client.LastDoneFail = true;
+                client.LastDoneOk = false; client.LastDoneFail = true;
                 client.SetStatusDoneFail();
             }
             else if (line.StartsWith("SAVED_OK"))
             {
                 lock (_saveLock) { _saveResponses.Add(client.Sid + ":OK"); }
                 client.SetStatusSaved();
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] Клиент {client.Sid} сохранил данные OK");
             }
             else if (line.StartsWith("SAVED_FAIL"))
             {
                 lock (_saveLock) { _saveResponses.Add(client.Sid + ":FAIL"); }
                 client.SetStatusSaveFailed();
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] Клиент {client.Sid} не смог сохранить: {line}");
+            }
+            else if (line.StartsWith("CLEARED_OK"))
+            {
+                lock (_clearLock) { _clearResponses.Add(client.Sid + ":OK"); }
+                client.SetStatusCleared();
+            }
+            else if (line.StartsWith("CLEARED_FAIL"))
+            {
+                lock (_clearLock) { _clearResponses.Add(client.Sid + ":FAIL"); }
+                client.SetStatusClearFailed();
             }
         }
 
@@ -822,23 +1124,15 @@ namespace PressureMonitor
 
         private void RemoveOffline_Click(object sender, RoutedEventArgs e)
         {
-            int removed = 0;
             lock (_clientsLock)
             {
-                var toRemove = _connectedClients
-                    .Where(c => c.IsOffline)
-                    .ToList();
+                var toRemove = _connectedClients.Where(c => c.IsOffline).ToList();
                 foreach (var c in toRemove)
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Broadcast] Вручную удаляем offline-клиента {c.Sid}");
                     try { c.TcpClient.Close(); } catch { }
                     _connectedClients.Remove(c);
-                    removed++;
                 }
             }
-            System.Diagnostics.Debug.WriteLine(
-                $"[Broadcast] Вручную удалено offline-клиентов: {removed}");
             RefreshClientsUi();
         }
 
@@ -847,8 +1141,6 @@ namespace PressureMonitor
             if (sender is System.Windows.Controls.MenuItem mi &&
                 mi.Tag is ConnectedClient client)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Broadcast] Вручную отключаем клиента {client.Sid}");
                 lock (_clientsLock)
                 {
                     try { client.TcpClient.Close(); } catch { }
@@ -856,43 +1148,6 @@ namespace PressureMonitor
                 }
                 RefreshClientsUi();
             }
-        }
-
-        // ─────────────────────────── ОТПРАВКА КОМАНДЫ ───────────────────────────
-
-        private async Task<bool> SendCommandToAllClientsAsync(string command)
-        {
-            List<ConnectedClient> selected;
-            lock (_clientsLock)
-            {
-                selected = _connectedClients
-                    .Where(c => c.IsSelected && !c.IsOffline)
-                    .ToList();
-            }
-
-            if (selected.Count == 0)
-            {
-                SetStatus("Нет отмеченных клиентов");
-                return false;
-            }
-
-            byte[] message = Encoding.ASCII.GetBytes(command);
-            int success = 0;
-
-            foreach (var c in selected)
-            {
-                try
-                {
-                    var stream = c.TcpClient.GetStream();
-                    await stream.WriteAsync(message, 0, message.Length);
-                    await stream.FlushAsync();
-                    success++;
-                }
-                catch { }
-            }
-
-            SetStatus($"Отправлено {success}/{selected.Count}: {command.Trim()}");
-            return success > 0;
         }
 
         // ─────────────────────────── ОЖИДАНИЕ DONE ───────────────────────────
@@ -903,12 +1158,8 @@ namespace PressureMonitor
             lock (_clientsLock)
             {
                 selected = _connectedClients
-                    .Where(c => c.IsSelected && !c.IsOffline)
-                    .ToList();
+                    .Where(c => c.IsSelected && !c.IsOffline).ToList();
             }
-
-            System.Diagnostics.Debug.WriteLine(
-                $"[Broadcast] TakePointAndWaitAllAsync: клиентов выбрано {selected.Count}");
 
             if (selected.Count == 0)
             {
@@ -918,8 +1169,7 @@ namespace PressureMonitor
 
             foreach (var c in selected)
             {
-                c.LastDoneOk = false;
-                c.LastDoneFail = false;
+                c.LastDoneOk = false; c.LastDoneFail = false;
                 c.SetStatusWaiting();
             }
 
@@ -931,28 +1181,25 @@ namespace PressureMonitor
                     var stream = c.TcpClient.GetStream();
                     await stream.WriteAsync(message, 0, message.Length);
                     await stream.FlushAsync();
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Broadcast] Отправлен TAKE_POINT клиенту {c.Sid}");
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Broadcast] Не удалось отправить TAKE_POINT клиенту {c.Sid}: {ex.Message}");
-                }
+                catch { }
             }
 
             foreach (var client in selected)
             {
                 bool done = await WaitForClientDoneAsync(client);
-                if (!done)
-                {
-                    SetStatus($"Клиент {client.Sid} не завершил съём");
-                    return false;
-                }
+                if (!done) { SetStatus($"Клиент {client.Sid} не завершил съём"); return false; }
             }
 
             SetStatus($"Все клиенты ({selected.Count}) ответили DONE_OK. Пауза 3 сек...");
             await SafeDelayAsync(3000);
+
+            foreach (var c in selected)
+            {
+                if (!c.IsOffline)
+                    c.SetStatusReady();
+            }
+
             return true;
         }
 
@@ -960,43 +1207,38 @@ namespace PressureMonitor
         {
             var start = DateTime.Now;
             var timeout = TimeSpan.FromMinutes(15);
+            var pausedTotal = TimeSpan.Zero;
+            var pauseStartedAt = DateTime.MinValue;
 
-            SetStatus($"Ожидание DONE от клиента {client.Sid}...", false);
-
-            while (DateTime.Now - start < timeout)
+            while (true)
             {
                 if (_stopRequested) return false;
 
-                if (client.LastDoneOk)
+                if (_pauseRequested)
                 {
-                    SetStatus($"Клиент {client.Sid}: DONE_OK");
-                    return true;
+                    if (pauseStartedAt == DateTime.MinValue) pauseStartedAt = DateTime.Now;
+                    await Task.Delay(100);
+                    continue;
+                }
+                else if (pauseStartedAt != DateTime.MinValue)
+                {
+                    pausedTotal += DateTime.Now - pauseStartedAt;
+                    pauseStartedAt = DateTime.MinValue;
                 }
 
-                if (client.LastDoneFail)
+                if (DateTime.Now - start - pausedTotal >= timeout) return false;
+                if (client.LastDoneOk) return true;
+                if (client.LastDoneFail) return false;
+
+                if (client.IsWaiting)
                 {
-                    SetStatus($"Клиент {client.Sid}: DONE_FAIL");
-                    return false;
+                    var elapsed = (int)(DateTime.Now - start - pausedTotal).TotalSeconds;
+                    client.SetStatusWaitingWithTime(elapsed);
                 }
 
-                if (client.IsOffline)
-                {
-                    SetStatus($"Клиент {client.Sid} offline — ждём...");
-                }
-                else if (client.IsWaiting)
-                {
-                    var elapsed = (int)(DateTime.Now - start).TotalSeconds;
-                    SetStatus($"Клиент {client.Sid} занят съёмом ({elapsed} сек)...");
-                }
-
-                await Task.Delay(500);
+                await Task.Delay(1000);
             }
-
-            SetStatus($"Клиент {client.Sid}: таймаут ожидания DONE (15 мин)");
-            return false;
         }
-
-        // ─────────────────────────── КНОПКА BROADCAST ───────────────────────────
 
         private async void TakePointBroadcast_Click(object sender, RoutedEventArgs e)
         {
@@ -1005,36 +1247,257 @@ namespace PressureMonitor
                 TakePointBroadcastButton.IsEnabled = false;
                 await TakePointAndWaitAllAsync();
             }
-            finally
-            {
-                TakePointBroadcastButton.IsEnabled = true;
-            }
+            finally { TakePointBroadcastButton.IsEnabled = true; }
         }
 
         // ═══════════════════════════════════════════════════════════════════
+        // KOSA ЛОГИКА
+        // ═══════════════════════════════════════════════════════════════════
 
-        // ─────────────────────────── ГРАДУИРОВКА ───────────────────────────
+        private async Task<bool> TakePointForStepAsync(int stepIndex, bool waitForState)
+        {
+            if (!_kosaEnabled)
+            {
+                if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                    _stepItems[stepIndex].KosaCounterText = "1/1";
+
+                return await TakePointAndWaitAllAsync();
+            }
+
+            SetStatus("КОСА: съём 1/3");
+            if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                _stepItems[stepIndex].KosaCounterText = "1/3";
+            if (!await TakePointKosaAllAsync()) return false;
+
+            for (int i = 0; i < 2; i++)
+            {
+                if (_stopRequested) return false;
+
+                SetStatus($"КОСА: пауза перед съёмом {i + 2}/3 ({_kosaTimerSeconds} сек)");
+                await KosaWaitAsync(_kosaTimerSeconds, waitForState);
+                if (_stopRequested) return false;
+
+                SetStatus($"КОСА: съём {i + 2}/3");
+                if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                    _stepItems[stepIndex].KosaCounterText = $"{i + 2}/3";
+                if (!await TakePointKosaAllAsync()) return false;
+            }
+
+            return true;
+        }
+
+        private async Task<bool> TakePointKosaAllAsync()
+        {
+            List<ConnectedClient> selected;
+            lock (_clientsLock)
+            {
+                selected = _connectedClients
+                    .Where(c => c.IsSelected && !c.IsOffline).ToList();
+            }
+
+            if (selected.Count == 0)
+            {
+                SetStatus("Нет отмеченных клиентов");
+                return false;
+            }
+
+            foreach (var c in selected)
+            {
+                if (_stopRequested) return false;
+                bool ok = await TakePointUntilOkAsync(c);
+                if (!ok) return false;
+            }
+
+            SetStatus($"КОСА: все клиенты ({selected.Count}) ответили DONE_OK. Пауза 3 сек...");
+            await SafeDelayAsync(3000);
+
+            foreach (var c in selected)
+            {
+                if (!c.IsOffline)
+                    c.SetStatusReady();
+            }
+
+            return true;
+        }
+
+        private async Task<bool> TakePointUntilOkAsync(ConnectedClient client)
+        {
+            while (!_stopRequested)
+            {
+                if (!await WaitIfPausedAsync()) return false;
+
+                client.LastDoneOk = false;
+                client.LastDoneFail = false;
+                client.SetStatusWaiting();
+
+                byte[] msg = Encoding.ASCII.GetBytes("TAKE_POINT\n");
+                try
+                {
+                    var s = client.TcpClient.GetStream();
+                    await s.WriteAsync(msg, 0, msg.Length);
+                    await s.FlushAsync();
+                }
+                catch
+                {
+                    await Task.Delay(1000);
+                    continue;
+                }
+
+                bool done = await WaitForClientDoneAsync(client);
+                if (done && client.LastDoneOk) return true;
+
+                if (_stopRequested) return false;
+
+                SetStatus($"КОСА: повторный съём для {client.Sid}...");
+                await Task.Delay(500);
+            }
+            return false;
+        }
+
+        private async Task KosaWaitAsync(int seconds, bool waitForState)
+        {
+            int remaining = seconds;
+            _timerActive = true;
+
+            if (!waitForState)
+            {
+                while (remaining > 0)
+                {
+                    if (_stopRequested) { _timerActive = false; return; }
+                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
+                    SetStatus($"КОСА: пауза {remaining} сек");
+                    await SafeDelayAsync(1000);
+                    remaining--;
+                }
+                _timerActive = false;
+                return;
+            }
+
+            bool firstOkReceived = false;
+
+            while (!firstOkReceived)
+            {
+                if (_stopRequested) { _timerActive = false; return; }
+                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
+
+                await RefreshPressureAndSetPointAsync();
+                string? s = await SendCommandAsync("get_state_in_point;");
+
+                if (s != null && s.Contains("ok;", StringComparison.Ordinal))
+                {
+                    firstOkReceived = true;
+                }
+                else
+                {
+                    SetStatus("КОСА: ожидание стабилизации давления...");
+                    await SafeDelayAsync(1000);
+                }
+            }
+
+            while (remaining > 0)
+            {
+                if (_stopRequested) { _timerActive = false; return; }
+                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
+
+                await RefreshPressureAndSetPointAsync();
+                string? s = await SendCommandAsync("get_state_in_point;");
+
+                if (s != null && s.Contains("ok;", StringComparison.Ordinal))
+                {
+                    remaining--;
+                    SetStatus($"КОСА: пауза {remaining} сек");
+                }
+                else if (s != null && s.Contains("wait;", StringComparison.Ordinal))
+                {
+                    remaining += 30;
+                    SetStatus($"КОСА: срыв! Таймер +30 сек. Осталось: {remaining}");
+
+                    while (true)
+                    {
+                        if (_stopRequested) { _timerActive = false; return; }
+                        if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
+                        await SafeDelayAsync(1000);
+
+                        string? s2 = await SendCommandAsync("get_state_in_point;");
+                        if (s2 != null && s2.Contains("ok;", StringComparison.Ordinal))
+                            break;
+                    }
+                }
+
+                await SafeDelayAsync(1000);
+            }
+
+            _timerActive = false;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // КНОПКИ СТАРТ / ПАУЗА
+        // ═══════════════════════════════════════════════════════════════════
 
         private async void StartButton_Click(object sender, RoutedEventArgs e)
         {
             if (_isRunning) { MessageBox.Show("Программа уже запущена."); return; }
-            if (_selectedTargetPressure == null) { MessageBox.Show("Выберите целевое давление."); return; }
-            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
+            if (_selectedTargetPressure == null) { MessageBox.Show("Выберите диапазон давлений."); return; }
+
+            if (_isCalibrationMode && _kosaEnabled)
+            {
+                if (!int.TryParse(KosaTimerBox.Text?.Trim(), out int kt) || kt <= 0)
+                {
+                    MessageBox.Show("Введите положительное число секунд для КОСА.");
+                    return;
+                }
+                _kosaTimerSeconds = kt;
+            }
+
+            if (_isCalibrationMode)
+                await RunCalibrationModeAsync();
+            else
+                await RunPumpModeAsync();
+        }
+
+        private void PauseButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isRunning) return;
+
+            if (_pauseRequested)
+            {
+                _pauseRequested = false;
+                PauseButton.Content = "ПАУЗА";
+                PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
+                SetStatus("Продолжение работы...");
+            }
+            else
+            {
+                _pauseRequested = true;
+                PauseButton.Content = "ПРОДОЛЖИТЬ";
+                PauseButton.Background = new SolidColorBrush(Color.FromRgb(0x50, 0x90, 0xD0));
+                SetStatusWarning("ПАУЗА");
+            }
+        }
+
+        private async Task<bool> WaitIfPausedAsync()
+        {
+            while (_pauseRequested && !_stopRequested)
+                await Task.Delay(100);
+            return !_stopRequested;
+        }
+
+        // ─────────────────────────── ГРАДУИРОВКА ───────────────────────────
+
+        private async Task RunCalibrationModeAsync()
+        {
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure!, out var steps))
             { MessageBox.Show($"Для «{_selectedTargetPressure}» не заданы шаги."); return; }
 
             bool noConnection;
             lock (_streamLock) { noConnection = (_stream == null); }
             if (noConnection) { MessageBox.Show("Нет соединения с прибором."); return; }
 
-            if (!int.TryParse(StartStepBox.Text.Trim(), out int startStep) ||
+            if (!int.TryParse(ParamBox.Text?.Trim(), out int startStep) ||
                 startStep < 1 || startStep > steps.Length)
             {
-                MessageBox.Show(
-                    $"Некорректный номер шага: {StartStepBox.Text}\n" +
-                    $"Допустимо от 1 до {steps.Length}.",
-                    "Ошибка",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                MessageBox.Show($"Некорректный номер шага: {ParamBox.Text}\n" +
+                    $"Допустимо от 1 до {steps.Length}.");
                 return;
             }
 
@@ -1042,12 +1505,40 @@ namespace PressureMonitor
 
             _isRunning = true;
             _stopRequested = false;
+            _pauseRequested = false;
             _completedSteps = startStep - 1;
             _currentStepIndex = startStep - 1;
-            ShowSteps();
+
+            TargetPressureCombo.IsEnabled = false;
+            TimerSetCombo.IsEnabled = false;
+            ModeCombo.IsEnabled = false;
+            PauseButton.IsEnabled = true;
+            PauseButton.Content = "ПАУЗА";
+            PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
+
+            for (int i = 0; i < _stepItems.Count; i++)
+            {
+                if (i < startStep - 1)
+                {
+                    _stepItems[i].StatusMark = "☑";
+                    _stepItems[i].TimerText = "0";
+                    _stepItems[i].ArrowText = "  ";
+                    _stepItems[i].KosaCounterText = _kosaEnabled ? "3/3" : "1/1";
+                }
+                else
+                {
+                    _stepItems[i].StatusMark = "☐";
+                    _stepItems[i].TimerText = _stepItems[i].PlannedDuration.ToString();
+                    _stepItems[i].ArrowText = "  ";
+                    _stepItems[i].KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
+                }
+            }
+            UpdateStepCounter();
 
             StartButton.IsEnabled = false;
-            PumpButton.IsEnabled = false;
+
+            _totalTimerStart = DateTime.Now;
+            _totalTimerActive = true;
 
             bool programCompleted = false;
 
@@ -1064,12 +1555,33 @@ namespace PressureMonitor
             finally
             {
                 _isRunning = false;
+                _totalTimerActive = false;
+                _pauseRequested = false;
+
                 StartButton.IsEnabled = true;
-                PumpButton.IsEnabled = true;
+                PauseButton.IsEnabled = false;
+                PauseButton.Content = "ПАУЗА";
+                PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
+                TargetPressureCombo.IsEnabled = true;
+                TimerSetCombo.IsEnabled = true;
+                ModeCombo.IsEnabled = true;
+
+                var elapsed = DateTime.Now - _totalTimerStart;
+                await ShowCompletionMessageAsync(elapsed);
 
                 if (programCompleted && !_stopRequested)
                 {
-                    ResetStepsCheckmarks();
+                    await SaveDataCoreAsync(silent: true);
+                }
+
+                ResetStepsToInitial();
+
+                List<ConnectedClient> clientsSnapshot;
+                lock (_clientsLock)
+                    clientsSnapshot = _connectedClients.ToList();
+                foreach (var c in clientsSnapshot)
+                {
+                    if (!c.IsOffline) c.SetStatusReady();
                 }
             }
         }
@@ -1084,15 +1596,21 @@ namespace PressureMonitor
             if (!unitsOk) { SetStatus("Не удалось установить единицы"); return; }
 
             string unitsLabel = GetUnitsLabel(_selectedTargetPressure!);
-            UnitsText.Text = unitsLabel;
-            SetPointUnitsText.Text = unitsLabel;
+            _currentPressureUnitsLabel = unitsLabel;
 
             for (int i = startIndex; i < steps.Length; i++)
             {
                 if (_stopRequested) { SetStatus("Остановлено оператором"); return; }
+                if (!await WaitIfPausedAsync()) { SetStatus("Остановлено оператором"); return; }
 
                 _currentStepIndex = i;
-                ShowSteps();
+
+                for (int k = 0; k < _stepItems.Count; k++)
+                    _stepItems[k].ArrowText = "  ";
+                if (i < _stepItems.Count)
+                    _stepItems[i].ArrowText = "←";
+
+                UpdateStepCounter();
 
                 int human = i + 1;
                 double v = steps[i];
@@ -1102,19 +1620,22 @@ namespace PressureMonitor
                 {
                     SetStatus("Шаг 1: сброс до атмосферы (vent)");
                     bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
-                    if (!ventOk) { SetStatus("Шаг 1: не удалось перевести в vent"); return; }
+                    if (!ventOk) return;
 
-                    SetStatus("Шаг 1: подготовка к съёму");
-                    await SimpleCountdownAsync(10, "До начала съёма данных",
-                        $"   |   Шаг {human}/{steps.Length}");
-                    if (_stopRequested) { SetStatus("Остановлено"); return; }
+                    SetStatus($"Шаг 1: измерение {duration} сек");
+                    await RunTimerWithStepAsync(duration, i, waitForState: false);
 
                     SetStatus("Шаг 1: команда съёма");
-                    bool q1 = await TakePointAndWaitAllAsync();
-                    if (!q1) { SetStatus("Шаг 1: съём не удался"); return; }
+                    bool q1 = await TakePointForStepAsync(i, waitForState: false);
+                    if (!q1) return;
 
+                    if (i < _stepItems.Count)
+                    {
+                        _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].ArrowText = "  ";
+                    }
                     _completedSteps = 1;
-                    ShowSteps();
+                    UpdateStepCounter();
                     continue;
                 }
 
@@ -1126,25 +1647,22 @@ namespace PressureMonitor
 
                     SetStatus($"Шаг {human}: ожидание снижения давления");
                     bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
-                    if (!lowOk) { SetStatus($"Шаг {human}: давление не снизилось"); return; }
+                    if (!lowOk) return;
 
-                    if (v == 0)
-                    {
-                        await SimpleCountdownAsync(duration, "До начала съёма данных",
-                            $"   |   Шаг {human}/{steps.Length}");
-                    }
-                    else
-                    {
-                        SetStatus($"Шаг {human}: измерение {duration} сек");
-                        await RunTimerAsync(duration, $"   |   Шаг {human}/{steps.Length}");
-                    }
+                    SetStatus($"Шаг {human}: измерение {duration} сек");
+                    await RunTimerWithStepAsync(duration, i, waitForState: v != 0);
 
                     SetStatus($"Шаг {human}: команда съёма");
-                    bool qLast = await TakePointAndWaitAllAsync();
-                    if (!qLast) { SetStatus($"Шаг {human}: съём не удался"); return; }
+                    bool qLast = await TakePointForStepAsync(i, waitForState: v != 0);
+                    if (!qLast) return;
 
+                    if (i < _stepItems.Count)
+                    {
+                        _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].ArrowText = "  ";
+                    }
                     _completedSteps = i + 1;
-                    ShowSteps();
+                    UpdateStepCounter();
                     continue;
                 }
 
@@ -1160,23 +1678,26 @@ namespace PressureMonitor
 
                 SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
                 bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
-                if (!setOk) { SetStatus($"Шаг {human}: не удалось установить"); return; }
+                if (!setOk) return;
 
-                SetPointText.Text = v.ToString("F5", CultureInfo.InvariantCulture);
-
-                SetStatus($"Шаг {human}: ожидание стабилизации давления");
+                SetStatus($"Шаг {human}: ожидание стабилизации");
                 bool stable = await WaitForStateInPointAsync();
-                if (!stable) { SetStatus($"Шаг {human}: прервано"); return; }
+                if (!stable) return;
 
                 SetStatus($"Шаг {human}: измерение {duration} сек");
-                await RunTimerAsync(duration, $"   |   Шаг {human}/{steps.Length}");
+                await RunTimerWithStepAsync(duration, i, waitForState: v != 0);
 
                 SetStatus($"Шаг {human}: команда съёма");
-                bool q = await TakePointAndWaitAllAsync();
-                if (!q) { SetStatus($"Шаг {human}: съём не удался"); return; }
+                bool q = await TakePointForStepAsync(i, waitForState: v != 0);
+                if (!q) return;
 
+                if (i < _stepItems.Count)
+                {
+                    _stepItems[i].StatusMark = "☑";
+                    _stepItems[i].ArrowText = "  ";
+                }
                 _completedSteps = i + 1;
-                ShowSteps();
+                UpdateStepCounter();
             }
 
             SetStatus("Программа завершена");
@@ -1184,18 +1705,16 @@ namespace PressureMonitor
 
         // ─────────────────────────── ЖАМКАТЬ ───────────────────────────
 
-        private async void PumpButton_Click(object sender, RoutedEventArgs e)
+        private async Task RunPumpModeAsync()
         {
-            if (_isRunning) { MessageBox.Show("Программа уже запущена."); return; }
-            if (_selectedTargetPressure == null) { MessageBox.Show("Выберите целевое давление."); return; }
-            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
-            { MessageBox.Show($"Шаги для «{_selectedTargetPressure}» не заданы."); return; }
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure!, out var steps))
+            { MessageBox.Show($"Шаги не заданы."); return; }
 
             bool noConnection;
             lock (_streamLock) { noConnection = (_stream == null); }
-            if (noConnection) { MessageBox.Show("Нет соединения с прибором."); return; }
+            if (noConnection) { MessageBox.Show("Нет соединения."); return; }
 
-            if (!int.TryParse(CycleCountBox.Text.Trim(), out int cycles) || cycles <= 0)
+            if (!int.TryParse(ParamBox.Text?.Trim(), out int cycles) || cycles <= 0)
             { MessageBox.Show("Введите корректное количество циклов."); return; }
 
             double maxPressure = steps.Max();
@@ -1205,8 +1724,19 @@ namespace PressureMonitor
 
             _isRunning = true;
             _stopRequested = false;
+            _pauseRequested = false;
+
+            TargetPressureCombo.IsEnabled = false;
+            TimerSetCombo.IsEnabled = false;
+            ModeCombo.IsEnabled = false;
+            PauseButton.IsEnabled = true;
+            PauseButton.Content = "ПАУЗА";
+            PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
+
             StartButton.IsEnabled = false;
-            PumpButton.IsEnabled = false;
+
+            _totalTimerStart = DateTime.Now;
+            _totalTimerActive = true;
 
             try { await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold); }
             catch (Exception ex)
@@ -1217,35 +1747,59 @@ namespace PressureMonitor
             finally
             {
                 _isRunning = false;
+                _totalTimerActive = false;
+                _pauseRequested = false;
+
                 StartButton.IsEnabled = true;
-                PumpButton.IsEnabled = true;
+                PauseButton.IsEnabled = false;
+                PauseButton.Content = "ПАУЗА";
+                PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
+                TargetPressureCombo.IsEnabled = true;
+                TimerSetCombo.IsEnabled = true;
+                ModeCombo.IsEnabled = true;
+
+                var elapsed = DateTime.Now - _totalTimerStart;
+                await ShowCompletionMessageAsync(elapsed);
+
+                MaxArrow.Text = "  ";
+                MinArrow.Text = "  ";
+                MaxTimerText.Text = "";
+                MinTimerText.Text = "";
+
+                List<ConnectedClient> clientsSnapshot;
+                lock (_clientsLock)
+                    clientsSnapshot = _connectedClients.ToList();
+                foreach (var c in clientsSnapshot)
+                {
+                    if (!c.IsOffline) c.SetStatusReady();
+                }
             }
         }
 
         private async Task RunPumpSequenceAsync(double maxPressure, int totalCycles,
             string unitsCode, string unitsLabel, double atmoThreshold)
         {
-            MinValueText.Text = "0";
-            MinUnitsText.Text = unitsLabel;
-            MaxValueText.Text = maxPressure.ToString(CultureInfo.InvariantCulture);
-            MaxUnitsText.Text = unitsLabel;
-            CyclesText.Text = $"0 / {totalCycles}";
+            MaxArrow.Text = "  ";
+            MinArrow.Text = "  ";
 
             SetStatus($"Установка единиц: {unitsCode}");
             bool unitsOk = await SendWithRetryAsync($"set_units={unitsCode};", "ok;");
-            if (!unitsOk) { SetStatus("Не удалось установить единицы"); return; }
+            if (!unitsOk) return;
 
-            UnitsText.Text = unitsLabel;
-            SetPointUnitsText.Text = unitsLabel;
+            _currentPressureUnitsLabel = unitsLabel;
 
             for (int cycle = 1; cycle <= totalCycles; cycle++)
             {
-                if (_stopRequested) { SetStatus("Остановлено оператором"); return; }
+                if (_stopRequested) return;
+                if (!await WaitIfPausedAsync()) return;
 
-                MinCheck.Text = "☐";
-                MaxCheck.Text = "☐";
-                CyclesCheck.Text = "☑";
-                CyclesText.Text = $"{cycle} / {totalCycles}";
+                MaxArrow.Text = "  ";
+                MinArrow.Text = "  ";
+
+                MaxTimerText.Text = "300";
+                MinTimerText.Text = "300";
+
+                CyclesText.Text = $"Цикл: {cycle}/{totalCycles}";
 
                 SetStatus($"[Цикл {cycle}] set_mode=control (1)");
                 bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
@@ -1260,512 +1814,121 @@ namespace PressureMonitor
                 SetStatus($"[Цикл {cycle}] установка {maxPressure}");
                 bool setOk = await SendWithRetryAsync(
                     $"set_point={maxPressure.ToString(CultureInfo.InvariantCulture)};", "ok;");
-                if (!setOk) { SetStatus($"[Цикл {cycle}]: не удалось"); return; }
+                if (!setOk) return;
 
-                SetPointText.Text = maxPressure.ToString("F5", CultureInfo.InvariantCulture);
-                MaxCheck.Text = "☑";
+                MaxArrow.Text = "→";
 
-                SetStatus($"[Цикл {cycle}] ожидание стабилизации давления");
+                SetStatus($"[Цикл {cycle}] ожидание стабилизации");
                 bool stable = await WaitForStateInPointAsync();
-                if (!stable) { SetStatus($"[Цикл {cycle}]: прервано"); return; }
+                if (!stable) return;
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем максимальное давление");
-                await SimpleCountdownAsync(300, "Выдерживаем максимальное давление",
-                    $"   |   Цикл {cycle}/{totalCycles}");
+                await RunTimerWithRightBlockAsync(300, true);
 
                 SetStatus($"[Цикл {cycle}] сброс (vent)");
                 bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
                 if (!ventOk) return;
 
-                SetStatus($"[Цикл {cycle}] ожидание снижения давления < {atmoThreshold}");
-                bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
-                if (!lowOk) { SetStatus($"[Цикл {cycle}]: давление не снизилось"); return; }
+                MaxArrow.Text = "  ";
+                MinArrow.Text = "→";
 
-                MinCheck.Text = "☑";
+                SetStatus($"[Цикл {cycle}] ожидание снижения");
+                bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+                if (!lowOk) return;
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем атмосферное давление");
-                await SimpleCountdownAsync(300, "Выдерживаем атмосферное давление",
-                    $"   |   Цикл {cycle}/{totalCycles}");
+                await RunTimerWithRightBlockAsync(300, false);
             }
+
+            MaxArrow.Text = "  ";
+            MinArrow.Text = "  ";
+            MaxTimerText.Text = "";
+            MinTimerText.Text = "";
 
             SetStatus($"«Жамкать» завершено ({totalCycles} циклов)");
         }
 
-        // ─────────────────────────── ТЕСТ: ПЕЧЬ (Modbus TCP) ───────────────────────────
-
-        private async void TestWriteFurnace_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isRunning)
-            {
-                MessageBox.Show("Программа занята. Дождитесь завершения или нажмите СТОП.");
-                return;
-            }
-
-            string input = InputDialog.Show(
-                "Введите уставку температуры (°C):",
-                "12.3");
-
-            if (string.IsNullOrWhiteSpace(input))
-                return;
-
-            if (!float.TryParse(input.Replace(',', '.'),
-                NumberStyles.Float, CultureInfo.InvariantCulture, out float temp))
-            {
-                MessageBox.Show("Некорректное значение. Введите число, например 12.3");
-                return;
-            }
-
-            TestFurnaceButton.IsEnabled = false;
-            try
-            {
-                SetStatus($"Запись уставки {temp} °C в печь...", false);
-
-                bool ok = await WriteFurnaceSetPointAsync(
-                    temp, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
-
-                if (ok)
-                {
-                    _lastFurnaceSetPoint = temp;
-                    SetStatusSuccess($"Уставка печи изменена на {temp} °C");
-                }
-                else
-                {
-                    SetStatusError($"Ошибка записи уставки печи ({temp} °C)");
-                }
-            }
-            catch (Exception ex)
-            {
-                SetStatusError($"Ошибка: {ex.Message}");
-            }
-            finally
-            {
-                TestFurnaceButton.IsEnabled = true;
-            }
-        }
-
-        private async Task<bool> WriteFurnaceSetPointAsync(
-            float value, string ip, int port, ushort startRegister)
-        {
-            try
-            {
-                byte[] floatBytes = BitConverter.GetBytes(value);
-                if (BitConverter.IsLittleEndian)
-                    Array.Reverse(floatBytes);
-
-                byte[] ordered = new[]
-                {
-                    floatBytes[2], floatBytes[3],
-                    floatBytes[0], floatBytes[1]
-                };
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Furnace] Запись {value} °C (CDAB), байты: {BitConverter.ToString(ordered)}");
-
-                using var client = new TcpClient();
-                var connectTask = client.ConnectAsync(ip, port);
-                var timeoutTask = Task.Delay(3000);
-                var completed = await Task.WhenAny(connectTask, timeoutTask);
-
-                if (completed != connectTask)
-                {
-                    System.Diagnostics.Debug.WriteLine("[Furnace] Таймаут подключения");
-                    return false;
-                }
-                await connectTask;
-
-                using var stream = client.GetStream();
-                stream.ReadTimeout = 2000;
-                stream.WriteTimeout = 2000;
-
-                var buffer = new List<byte>(17);
-
-                buffer.Add(0x00); buffer.Add(0x01);
-                buffer.Add(0x00); buffer.Add(0x00);
-                buffer.Add(0x00); buffer.Add(0x0B);
-                buffer.Add(0x00);
-
-                buffer.Add(0x10);
-                buffer.Add((byte)(startRegister >> 8));
-                buffer.Add((byte)(startRegister & 0xFF));
-                buffer.Add(0x00); buffer.Add(0x02);
-                buffer.Add(0x04);
-                buffer.Add(ordered[0]);
-                buffer.Add(ordered[1]);
-                buffer.Add(ordered[2]);
-                buffer.Add(ordered[3]);
-
-                byte[] requestBytes = buffer.ToArray();
-                await stream.WriteAsync(requestBytes, 0, requestBytes.Length);
-                await stream.FlushAsync();
-
-                byte[] response = new byte[12];
-                int totalRead = 0;
-                var start = DateTime.Now;
-
-                while (totalRead < response.Length &&
-                       (DateTime.Now - start).TotalMilliseconds < 2000)
-                {
-                    if (stream.DataAvailable)
-                    {
-                        int n = await stream.ReadAsync(
-                            response, totalRead, response.Length - totalRead);
-                        if (n == 0) break;
-                        totalRead += n;
-                    }
-                    else
-                    {
-                        await Task.Delay(20);
-                    }
-                }
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Furnace] Получено {totalRead} байт: {BitConverter.ToString(response, 0, totalRead)}");
-
-                if (totalRead >= 12 && response[7] == 0x10)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Furnace] OK: уставка {value} (CDAB) записана");
-                    return true;
-                }
-
-                if (totalRead >= 9 && response[7] == 0x90)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Furnace] Modbus exception: код {response[8]:X2}");
-                }
-
-                return false;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Furnace] Исключение: {ex.Message}");
-                return false;
-            }
-        }
-
-        private string FormatFurnaceSetPointFileName(float setPoint)
-        {
-            if (Math.Abs(setPoint - Math.Round(setPoint)) < 0.001f)
-            {
-                int intVal = (int)Math.Round(setPoint);
-                if (intVal > 0)
-                    return "+" + intVal + ".csv";
-                return intVal + ".csv";
-            }
-
-            string s = setPoint.ToString("0.###", CultureInfo.InvariantCulture);
-            if (setPoint > 0 && !s.StartsWith("+"))
-                s = "+" + s;
-            return s + ".csv";
-        }
-
-        // ─────────────────────────── СОХРАНЕНИЕ ДАННЫХ ───────────────────────────
-
-        private async void SaveData_Click(object sender, RoutedEventArgs e)
-        {
-            string saveDir = SavePathBox.Text?.Trim() ?? "";
-            if (string.IsNullOrWhiteSpace(saveDir))
-            {
-                MessageBox.Show("Укажите путь сохранения в поле выше.",
-                    "Путь не задан", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (!Directory.Exists(saveDir))
-            {
-                var result = MessageBox.Show(
-                    $"Папка не существует:\n{saveDir}\n\nСоздать?",
-                    "Папка не найдена",
-                    MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (result != MessageBoxResult.Yes) return;
-
-                try
-                {
-                    Directory.CreateDirectory(saveDir);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Не удалось создать папку: {ex.Message}",
-                        "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-            }
-
-            List<ConnectedClient> selected;
-            lock (_clientsLock)
-            {
-                selected = _connectedClients
-                    .Where(c => c.IsSelected && !c.IsOffline)
-                    .ToList();
-            }
-
-            if (selected.Count == 0)
-            {
-                MessageBox.Show("Нет отмеченных клиентов.",
-                    "Нет клиентов", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            string fileName = FormatFurnaceSetPointFileName(_lastFurnaceSetPoint);
-            string fullPath = Path.Combine(saveDir, fileName);
-
-            var confirm = MessageBox.Show(
-                $"Сохранить данные в файл:\n{fullPath}\n\nКлиентов: {selected.Count}",
-                "Подтверждение сохранения",
-                MessageBoxButton.OKCancel, MessageBoxImage.Question);
-            if (confirm != MessageBoxResult.OK) return;
-
-            lock (_saveLock)
-            {
-                _saveResponses.Clear();
-            }
-
-            SaveDataButton.IsEnabled = false;
-            try
-            {
-                byte[] message = Encoding.UTF8.GetBytes("SAVE_DATA " + fullPath + "\n");
-                int sent = 0;
-                foreach (var c in selected)
-                {
-                    try
-                    {
-                        c.SetStatusSaving();
-                        var stream = c.TcpClient.GetStream();
-                        await stream.WriteAsync(message, 0, message.Length);
-                        await stream.FlushAsync();
-                        sent++;
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] SAVE_DATA отправлен клиенту {c.Sid}: {fullPath}");
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[Broadcast] Не удалось отправить SAVE_DATA клиенту {c.Sid}: {ex.Message}");
-                    }
-                }
-
-                SetStatus($"Команда сохранения отправлена {sent} клиентам. Ожидание ответа...", false);
-
-                int timeoutMs = 30000;
-                var start = DateTime.Now;
-                int okCount = 0;
-                int failCount = 0;
-
-                while (true)
-                {
-                    if ((DateTime.Now - start).TotalMilliseconds > timeoutMs * selected.Count)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            "[Broadcast] Таймаут ожидания SAVED_OK/SAVED_FAIL");
-                        break;
-                    }
-
-                    lock (_saveLock)
-                    {
-                        okCount = 0;
-                        failCount = 0;
-                        foreach (var c in selected)
-                        {
-                            if (_saveResponses.Contains(c.Sid + ":OK")) okCount++;
-                            if (_saveResponses.Contains(c.Sid + ":FAIL")) failCount++;
-                        }
-
-                        if (okCount + failCount >= selected.Count)
-                            break;
-                    }
-
-                    SetStatus(
-                        $"Сохранение: OK={okCount}, FAIL={failCount} из {selected.Count}...",
-                        false);
-
-                    await Task.Delay(200);
-                }
-
-                if (okCount == selected.Count)
-                    SetStatusSuccess($"Данные сохранены во всех клиентах ({okCount}/{selected.Count}): {fileName}");
-                else if (okCount > 0)
-                    SetStatusWarning($"Сохранено в {okCount} из {selected.Count} клиентов (FAIL={failCount})");
-                else
-                    SetStatusError($"Не удалось сохранить данные (FAIL={failCount})");
-            }
-            catch (Exception ex)
-            {
-                SetStatusError($"Ошибка сохранения: {ex.Message}");
-            }
-            finally
-            {
-                SaveDataButton.IsEnabled = true;
-            }
-        }
-
-        // ─────────────────────────── СТОП / СБРОС ───────────────────────────
-
-        private async void StopButton_Click(object sender, RoutedEventArgs e)
-        {
-            _stopRequested = true;
-            _timerActive = false;
-            TimerText.Text = "00:00:00";
-
-            SetStatus("Отправка команды stop на прибор");
-            await SendCommandNoWaitAsync("set_mode=stop;");
-            SetStatus("АВАРИЙНАЯ ОСТАНОВКА");
-        }
-
-        private async void VentButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isRunning)
-            {
-                var result = MessageBox.Show(
-                    "Идёт выполнение программы. Прервать и сбросить давление?",
-                    "Подтверждение",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-
-                if (result != MessageBoxResult.Yes) return;
-
-                _stopRequested = true;
-                _timerActive = false;
-                TimerText.Text = "00:00:00";
-            }
-
-            SetStatus("Отправка команды сброса (vent)");
-            string? response = await SendCommandAsync("set_mode=vent;");
-            SetStatus($"Команда сброса отправлена, ответ: {response}");
-        }
-
-        // ─────────────────────────── ОТПРАВКА С ПОВТОРАМИ ───────────────────────────
-
-        private async Task<bool> SendWithRetryAsync(string command, string expected)
-        {
-            while (true)
-            {
-                for (int attempt = 1; attempt <= 5; attempt++)
-                {
-                    if (_stopRequested) return false;
-
-                    SetStatus($"{command} — попытка {attempt}/5");
-                    string? response = await SendCommandAsync(command);
-
-                    if (response != null && response.Contains(expected, StringComparison.Ordinal))
-                        return true;
-
-                    await SafeDelayAsync(1000);
-                }
-
-                var result = MessageBox.Show(
-                    $"Команда «{command}» не получила ответ «{expected}» после 5 попыток.\n" +
-                    "Устраните проблему и нажмите ОК для повтора.",
-                    "Ошибка прибора",
-                    MessageBoxButton.OKCancel,
-                    MessageBoxImage.Warning);
-
-                if (result != MessageBoxResult.OK) return false;
-            }
-        }
-
-        // ─────────────────────────── ОЖИДАНИЯ ───────────────────────────
-
-        private async Task<double?> RefreshPressureAndSetPointAsync()
-        {
-            double? pressure = null;
-
-            string? pressResponse = await SendCommandAsync("get_press;");
-            if (pressResponse != null)
-            {
-                string parsed = ParsePressure(pressResponse);
-                PressureText.Text = parsed;
-                if (double.TryParse(parsed, NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out double p))
-                    pressure = p;
-            }
-
-            string? setPointResponse = await SendCommandAsync("get_point;");
-            if (setPointResponse != null)
-                SetPointText.Text = ParsePressure(setPointResponse);
-
-            return pressure;
-        }
-
-        private async Task<bool> WaitForStateInPointAsync()
-        {
-            int okCount = 0;
-            const int requiredOk = 5;
-
-            while (true)
-            {
-                if (_stopRequested) return false;
-
-                string? response = await SendCommandAsync("get_state_in_point;");
-                if (response != null && response.Contains("ok;", StringComparison.Ordinal))
-                {
-                    okCount++;
-                    if (okCount >= requiredOk)
-                        return true;
-                }
-                else
-                {
-                    okCount = 0;
-                }
-
-                await RefreshPressureAndSetPointAsync();
-
-                SetStatus($"Ожидание стабилизации давления: {okCount}/{requiredOk}");
-
-                await SafeDelayAsync(1000);
-            }
-        }
-
-        private async Task<bool> WaitUntilPressureBelowAsync(double threshold, int timeoutMs)
-        {
-            var start = DateTime.Now;
-            while ((DateTime.Now - start).TotalMilliseconds < timeoutMs)
-            {
-                if (_stopRequested) return false;
-
-                double? pressure = await RefreshPressureAndSetPointAsync();
-
-                if (pressure.HasValue && Math.Abs(pressure.Value) < threshold)
-                    return true;
-
-                await SafeDelayAsync(1000);
-            }
-            return false;
-        }
-
-        // ─────────────────────────── ТАЙМЕР ───────────────────────────
-
-        private async Task SimpleCountdownAsync(int seconds, string statusPrefix, string suffix = "")
+        private async Task RunTimerWithRightBlockAsync(int seconds, bool isMax)
         {
             int remaining = seconds;
             _timerActive = true;
-            UpdateTimerDisplay(remaining);
+
+            // Для атмосферы не ждём get_state_in_point — прибор в режиме vent.
+            if (!isMax)
+            {
+                while (remaining > 0)
+                {
+                    if (_stopRequested) { _timerActive = false; return; }
+                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
+
+                    remaining--;
+                    MinTimerText.Text = remaining.ToString();
+
+                    SetStatus($"Атмосфера: {remaining} сек");
+                    await SafeDelayAsync(1000);
+                }
+
+                MinTimerText.Text = "0";
+                _timerActive = false;
+                return;
+            }
 
             while (remaining > 0)
             {
                 if (_stopRequested) { _timerActive = false; return; }
+                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
 
-                SetStatus($"{statusPrefix}: {remaining} сек{suffix}");
+                string? stateResponse = await SendCommandAsync("get_state_in_point;");
+
+                if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
+                {
+                    remaining--;
+                    MaxTimerText.Text = remaining.ToString();
+                }
+
+                SetStatus($"Максимум: {remaining} сек");
                 await SafeDelayAsync(1000);
-                remaining--;
-                UpdateTimerDisplay(remaining);
             }
 
+            MaxTimerText.Text = "0";
             _timerActive = false;
-            UpdateTimerDisplay(0);
         }
 
-        private async Task RunTimerAsync(int seconds, string suffix = "")
+        private async Task RunTimerWithStepAsync(int seconds, int stepIndex, bool waitForState)
         {
             int remaining = seconds;
             _timerActive = true;
-            UpdateTimerDisplay(remaining);
+
+            if (!waitForState)
+            {
+                while (remaining > 0)
+                {
+                    if (_stopRequested) { _timerActive = false; return; }
+                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
+
+                    remaining--;
+                    if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                        _stepItems[stepIndex].TimerText = remaining.ToString();
+
+                    SetStatus($"До начала съёма данных: {remaining} сек");
+                    await SafeDelayAsync(1000);
+                }
+
+                if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                    _stepItems[stepIndex].TimerText = "0";
+
+                _timerActive = false;
+                return;
+            }
+
             bool firstOkReceived = false;
 
             while (remaining > 0)
             {
                 if (_stopRequested) { _timerActive = false; return; }
+                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
 
@@ -1778,15 +1941,17 @@ namespace PressureMonitor
                 {
                     firstOkReceived = true;
                     remaining--;
-                    UpdateTimerDisplay(remaining);
+                    if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                        _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
                 else if (stateResponse != null && stateResponse.Contains("wait;", StringComparison.Ordinal))
                 {
                     if (firstOkReceived)
                     {
                         remaining += 30;
-                        SetStatus($"Срыв! Таймер +30 сек. Осталось: {remaining}{suffix}");
-                        UpdateTimerDisplay(remaining);
+                        SetStatus($"Срыв! Таймер +30 сек. Осталось: {remaining}");
+                        if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                            _stepItems[stepIndex].TimerText = remaining.ToString();
                     }
                     else
                     {
@@ -1796,6 +1961,7 @@ namespace PressureMonitor
                     while (true)
                     {
                         if (_stopRequested) { _timerActive = false; return; }
+                        if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
                         await SafeDelayAsync(1000);
 
                         string? s = await SendCommandAsync("get_state_in_point;");
@@ -1808,47 +1974,1021 @@ namespace PressureMonitor
                     continue;
                 }
 
-                SetStatus($"До начала съёма данных: {remaining} сек{suffix}");
+                SetStatus($"До начала съёма данных: {remaining} сек");
                 await SafeDelayAsync(1000);
             }
 
+            if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                _stepItems[stepIndex].TimerText = "0";
+
             _timerActive = false;
-            UpdateTimerDisplay(0);
         }
 
-        private void UpdateTimerDisplay(int remainingSeconds)
+        // ─────────────────────────── ПОКАЗ СООБЩЕНИЯ ───────────────────────────
+
+        private async Task ShowCompletionMessageAsync(TimeSpan elapsed)
         {
-            int h = remainingSeconds / 3600;
-            int m = (remainingSeconds % 3600) / 60;
-            int s = remainingSeconds % 60;
-            TimerText.Text = $"{h:D2}:{m:D2}:{s:D2}";
+            string timeStr = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+
+            float? temp = await TryReadCurrentTemperatureAsync();
+
+            string msg;
+            if (temp.HasValue)
+            {
+                double rounded = Math.Round((double)temp.Value, 2);
+                string sign = rounded >= 0 ? "+" : "";
+                msg = $"Съём данных на температуре {sign}{rounded.ToString("0.##", CultureInfo.InvariantCulture)} °C длился {timeStr}";
+            }
+            else
+            {
+                msg = $"Съём данных: ошибка чтения температурной уставки из камеры, время работы {timeStr}";
+            }
+
+            SetStatusSuccess(msg);
+
+            _statusResetTimer?.Stop();
+            _statusResetTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(10)
+            };
+            _statusResetTimer.Tick += (s, e) =>
+            {
+                _statusResetTimer.Stop();
+                SetStatusSuccess($"Подключено к {DeviceIp}:{DevicePort}");
+            };
+            _statusResetTimer.Start();
+
+            TimerText.Text = "00:00:00";
+
+            await Task.CompletedTask;
         }
 
-        // ─────────────────────────── ВСПОМОГАТЕЛЬНЫЕ ───────────────────────────
+        // ─────────────────────────── ПЕЧЬ ST-351 ───────────────────────────
 
-        private string GetUnitsCode(string targetPressure)
+        private async Task<float?> TryReadCurrentTemperatureAsync()
         {
-            if (targetPressure.Contains("кгс/см²")) return "kgs";
-            if (targetPressure.Contains("МПа")) return "MPa";
-            if (targetPressure.Contains("кПа")) return "kPa";
-            if (targetPressure.Contains("бар")) return "bar";
-            if (targetPressure.Contains("PSI")) return "psi";
+            return await Task.Run(() =>
+            {
+                System.Net.Sockets.Socket? sock = null;
+                try
+                {
+                    sock = new System.Net.Sockets.Socket(
+                        System.Net.Sockets.AddressFamily.InterNetwork,
+                        System.Net.Sockets.SocketType.Stream,
+                        System.Net.Sockets.ProtocolType.Tcp);
+
+                    sock.ReceiveTimeout = 1000;
+                    sock.SendTimeout = 1000;
+
+                    var endpoint = new IPEndPoint(IPAddress.Parse(FurnaceIp), FurnacePort);
+
+                    var ar = sock.BeginConnect(endpoint, null, null);
+                    if (!ar.AsyncWaitHandle.WaitOne(3000))
+                        return (float?)null;
+                    sock.EndConnect(ar);
+
+                    byte[] request = new byte[]
+                    {
+                        0x00, 0x01,
+                        0x00, 0x00,
+                        0x00, 0x06,
+                        0x00,
+                        0x04,
+                        0x00, 0xCD,
+                        0x00, 0x02
+                    };
+
+                    sock.Send(request);
+
+                    byte[] buf = new byte[20];
+                    int n = sock.Receive(buf);
+
+                    if (n >= 13 && buf[7] == 0x04)
+                    {
+                        byte b1 = buf[9];
+                        byte b2 = buf[10];
+                        byte b3 = buf[11];
+                        byte b4 = buf[12];
+
+                        uint bits = (uint)((b3 << 24) | (b4 << 16) | (b1 << 8) | b2);
+
+                        int sign = (int)((bits >> 31) & 1);
+                        int exponent = (int)((bits >> 23) & 0xFF);
+                        int mantissa = (int)(bits & 0x7FFFFF);
+
+                        double temp;
+                        if (exponent == 0)
+                        {
+                            temp = (mantissa == 0)
+                                ? 0.0
+                                : Math.Pow(2.0, -126) * (mantissa / Math.Pow(2.0, 23));
+                        }
+                        else if (exponent == 255)
+                        {
+                            temp = 0.0;
+                        }
+                        else
+                        {
+                            temp = Math.Pow(2.0, exponent - 127) *
+                                   (1.0 + mantissa / Math.Pow(2.0, 23));
+                        }
+
+                        if (sign == 1) temp = -temp;
+
+                        return (float?)temp;
+                    }
+
+                    return (float?)null;
+                }
+                catch
+                {
+                    return (float?)null;
+                }
+                finally
+                {
+                    try { sock?.Close(); } catch { }
+                }
+            });
+        }
+
+        private async Task RefreshFurnaceCurrentTempAsync()
+        {
+            float? temp = await TryReadCurrentTemperatureAsync();
+
+            if (temp.HasValue && !float.IsNaN(temp.Value) && !float.IsInfinity(temp.Value))
+            {
+                _furnaceTempFailCount = 0;
+
+                double rounded = Math.Round((double)temp.Value, 3);
+                string sign = rounded >= 0 ? "+" : "";
+                FurnaceCurrentTempText.Text =
+                    $"{sign}{rounded.ToString("0.000", CultureInfo.InvariantCulture)} °C";
+                FurnaceCurrentTempText.Foreground = Brushes.White;
+
+                if (FurnaceStatusEllipse != null)
+                    FurnaceStatusEllipse.Fill = Brushes.Green;
+            }
+            else
+            {
+                _furnaceTempFailCount++;
+
+                if (_furnaceTempFailCount >= ConnectionLostThreshold)
+                {
+                    FurnaceCurrentTempText.Text = "— °C";
+                    FurnaceCurrentTempText.Foreground =
+                        new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
+
+                    if (FurnaceStatusEllipse != null)
+                        FurnaceStatusEllipse.Fill = Brushes.Red;
+                }
+            }
+        }
+
+        private async Task<bool> RefreshFurnaceSetPointAsync()
+        {
+            if (FurnaceSetPointBox.IsKeyboardFocused) return false;
+
+            try
+            {
+                string result = await Task.Run(() =>
+                {
+                    System.Net.Sockets.Socket? sock = null;
+                    try
+                    {
+                        sock = new System.Net.Sockets.Socket(
+                            System.Net.Sockets.AddressFamily.InterNetwork,
+                            System.Net.Sockets.SocketType.Stream,
+                            System.Net.Sockets.ProtocolType.Tcp);
+
+                        sock.ReceiveTimeout = 1000;
+                        sock.SendTimeout = 1000;
+
+                        var endpoint = new System.Net.IPEndPoint(
+                            System.Net.IPAddress.Parse(FurnaceIp), FurnacePort);
+
+                        var ar = sock.BeginConnect(endpoint, null, null);
+                        if (!ar.AsyncWaitHandle.WaitOne(3000))
+                            return "CONNECT_TIMEOUT";
+                        sock.EndConnect(ar);
+
+                        byte[] request = new byte[]
+                        {
+                            0x00, 0x01,
+                            0x00, 0x00,
+                            0x00, 0x06,
+                            0x00,
+                            0x03,
+                            0x00, 0xCA,
+                            0x00, 0x02
+                        };
+
+                        sock.Send(request);
+
+                        byte[] buf = new byte[20];
+                        int n = sock.Receive(buf);
+
+                        if (n >= 13 && buf[7] == 0x03)
+                        {
+                            byte b1 = buf[9], b2 = buf[10], b3 = buf[11], b4 = buf[12];
+                            float val = BitConverter.ToSingle(new byte[] { b4, b3, b2, b1 }, 0);
+                            return "OK:" + val.ToString(CultureInfo.InvariantCulture);
+                        }
+                        return "FAIL";
+                    }
+                    catch (Exception ex)
+                    {
+                        return "EXC:" + ex.GetType().Name;
+                    }
+                    finally
+                    {
+                        try { sock?.Close(); } catch { }
+                    }
+                });
+
+                if (result.StartsWith("OK:"))
+                {
+                    string valStr = result.Substring(3);
+                    if (float.TryParse(valStr, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out float v)
+                        && !float.IsNaN(v) && !float.IsInfinity(v))
+                    {
+                        _furnaceSetPointFailCount = 0;
+
+                        double rounded = Math.Round((double)v, 2);
+                        FurnaceSetPointBox.Text =
+                            rounded.ToString("0.##", CultureInfo.InvariantCulture);
+                        _lastValidFurnaceSetPoint = v;
+                        return true;
+                    }
+                }
+
+                _furnaceSetPointFailCount++;
+                if (_furnaceSetPointFailCount >= ConnectionLostThreshold)
+                {
+                    FurnaceSetPointBox.Text = "—";
+                }
+                return false;
+            }
+            catch
+            {
+                _furnaceSetPointFailCount++;
+                if (_furnaceSetPointFailCount >= ConnectionLostThreshold)
+                {
+                    FurnaceSetPointBox.Text = "—";
+                }
+                return false;
+            }
+        }
+
+        // ─────────────────────────── ТАЙМЕР СТАБИЛИЗАЦИИ ───────────────────────────
+
+        private void FurnaceSetPointBox_TextChanged(object sender,
+            System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            if (FurnaceSetPointBox == null) return;
+
+            string txt = FurnaceSetPointBox.Text?.Replace(',', '.') ?? "";
+            if (double.TryParse(txt, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double sp))
+            {
+                if (!double.IsNaN(_lastFurnaceSetPoint) &&
+                    Math.Abs(sp - _lastFurnaceSetPoint) > 0.0001)
+                {
+                    ResetStabilizationTimer();
+                }
+                _lastFurnaceSetPoint = sp;
+            }
+        }
+
+        private void ResetStabilizationTimer()
+        {
+            _stabilizationTimerActive = false;
+            _stabilizationTimerStart = DateTime.MinValue;
+            if (StabilizationTimerText != null)
+                StabilizationTimerText.Text = "00:00:00";
+        }
+
+        private void ResetStabilizationTimer_Click(object sender, RoutedEventArgs e)
+        {
+            ResetStabilizationTimer();
+            SetStatus("Таймер стабилизации сброшен", false);
+        }
+
+        private void UpdateStabilizationTimer()
+        {
+            if (StabilizationTimerText == null) return;
+
+            string spTxt = FurnaceSetPointBox?.Text?.Replace(',', '.') ?? "";
+            if (!double.TryParse(spTxt, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double setPoint))
+            {
+                ResetStabilizationTimer();
+                return;
+            }
+
+            string tTxt = FurnaceCurrentTempText?.Text ?? "";
+            int idx = tTxt.IndexOf(" °C", StringComparison.Ordinal);
+            if (idx >= 0) tTxt = tTxt.Substring(0, idx);
+            tTxt = tTxt.Trim().TrimStart('+').Replace(',', '.');
+
+            if (!double.TryParse(tTxt, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double currentTemp))
+            {
+                ResetStabilizationTimer();
+                return;
+            }
+
+            bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
+
+            if (inRange)
+            {
+                if (!_stabilizationTimerActive)
+                {
+                    _stabilizationTimerStart = DateTime.Now;
+                    _stabilizationTimerActive = true;
+                }
+                var elapsed = DateTime.Now - _stabilizationTimerStart;
+                StabilizationTimerText.Text =
+                    $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+            }
+            else
+            {
+                _stabilizationTimerActive = false;
+            }
+        }
+
+        // ─────────────────────────── СКТБ ЭлПа (ПЛАТИНА) ───────────────────────────
+
+        private async Task<double?> TryReadPlatinaAsync()
+        {
+            return await Task.Run(() =>
+            {
+                HidStream? stream = null;
+                try
+                {
+                    var devices = DeviceList.Local.GetHidDevices(PlatinaVid, PlatinaPid);
+
+                    int deviceCount = 0;
+                    foreach (var d in devices) deviceCount++;
+
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[Platina] Найдено устройств VID=0x{PlatinaVid:X4} PID=0x{PlatinaPid:X4}: {deviceCount}");
+
+                    if (deviceCount == 0)
+                        return (double?)null;
+
+                    foreach (var device in devices)
+                    {
+                        try
+                        {
+                            System.Diagnostics.Debug.WriteLine(
+                                $"[Platina] Пробую открыть: {device.DevicePath}");
+
+                            stream = device.Open();
+                            stream.ReadTimeout = 1000;
+                            stream.WriteTimeout = 1000;
+
+                            System.Diagnostics.Debug.WriteLine("[Platina] Открыто, отправляю запрос");
+
+                            byte[] payload = Encoding.ASCII.GetBytes(PlatinaRequest);
+
+                            for (int off = 0; off < payload.Length; off += 64)
+                            {
+                                byte[] report = new byte[65];
+                                int chunk = Math.Min(64, payload.Length - off);
+                                Array.Copy(payload, off, report, 1, chunk);
+                                stream.Write(report, 0, report.Length);
+                            }
+
+                            System.Diagnostics.Debug.WriteLine("[Platina] Запрос отправлен, читаю ответ");
+
+                            var data = new List<byte>();
+                            var start = DateTime.Now;
+
+                            while ((DateTime.Now - start).TotalMilliseconds < 2000)
+                            {
+                                byte[] buf = new byte[65];
+                                int n = stream.Read(buf, 0, buf.Length);
+                                if (n <= 1) continue;
+
+                                for (int i = 1; i < n; i++) data.Add(buf[i]);
+
+                                for (int i = 0; i < data.Count - 1; i++)
+                                {
+                                    if (data[i] == 0x0A && data[i + 1] == 0x00)
+                                    {
+                                        string s = Encoding.ASCII.GetString(
+                                            data.GetRange(0, i).ToArray());
+                                        System.Diagnostics.Debug.WriteLine(
+                                            $"[Platina] Сырой ответ: '{s}'");
+
+                                        string first = s.Split(new[] { ' ', '\t' },
+                                            StringSplitOptions.RemoveEmptyEntries)
+                                            .FirstOrDefault() ?? "";
+                                        first = first.Replace(',', '.');
+
+                                        if (double.TryParse(first, NumberStyles.Float,
+                                            CultureInfo.InvariantCulture, out double val))
+                                        {
+                                            return (double?)val;
+                                        }
+                                        return (double?)null;
+                                    }
+                                }
+                            }
+
+                            System.Diagnostics.Debug.WriteLine(
+                                "[Platina] Таймаут чтения ответа, маркер 0x0A 0x00 не найден");
+                            return (double?)null;
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine(
+                                $"[Platina] Ошибка при работе с устройством: {ex.GetType().Name}: {ex.Message}");
+                        }
+                        finally
+                        {
+                            try { stream?.Close(); } catch { }
+                            stream = null;
+                        }
+                    }
+                    return (double?)null;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[Platina] Общая ошибка: {ex.GetType().Name}: {ex.Message}");
+                    return (double?)null;
+                }
+            });
+        }
+
+        private async Task RefreshPlatinaAsync()
+        {
+            double? val = await TryReadPlatinaAsync();
+
+            if (val.HasValue && !double.IsNaN(val.Value) && !double.IsInfinity(val.Value))
+            {
+                _platinaFailCount = 0;
+                _platinaLastValue = val.Value;
+                _platinaLastSuccess = DateTime.Now;
+
+                double rounded = Math.Round(val.Value, 3);
+                string sign = rounded >= 0 ? "+" : "";
+                PlatinaTempText.Text =
+                    $"{sign}{rounded.ToString("0.000", CultureInfo.InvariantCulture)} °C";
+                PlatinaTempText.Foreground = Brushes.White;
+
+                if (PlatinaStatusEllipse != null)
+                    PlatinaStatusEllipse.Fill = Brushes.Green;
+            }
+            else
+            {
+                _platinaFailCount++;
+
+                if (_platinaFailCount >= ConnectionLostThreshold)
+                {
+                    PlatinaTempText.Text = "— °C";
+                    PlatinaTempText.Foreground =
+                        new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
+
+                    if (PlatinaStatusEllipse != null)
+                        PlatinaStatusEllipse.Fill = Brushes.Red;
+                }
+            }
+        }
+
+        // ─────────────────────────── ПРОЧЕЕ ───────────────────────────
+
+        private async void ReadFurnaceSetPoint_Click(object sender, RoutedEventArgs e)
+        {
+            ReadFurnaceSetPointButton.IsEnabled = false;
+            try
+            {
+                SetStatus("Чтение уставки из печи ST-351...", false);
+                bool ok = await RefreshFurnaceSetPointAsync();
+                if (ok)
+                    SetStatusSuccess($"Уставка печи: {FurnaceSetPointBox.Text} °C");
+                else
+                    SetStatusError("Не удалось прочитать уставку из печи");
+            }
+            finally
+            {
+                ReadFurnaceSetPointButton.IsEnabled = true;
+            }
+        }
+
+        private async void TestWriteFurnace_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning) { MessageBox.Show("Программа занята."); return; }
+
+            string input = FurnaceSetPointBox.Text?.Trim() ?? "";
+            if (!float.TryParse(input.Replace(',', '.'),
+                NumberStyles.Float, CultureInfo.InvariantCulture, out float temp))
+            {
+                MessageBox.Show("Некорректное значение.");
+                return;
+            }
+
+            TestFurnaceButton.IsEnabled = false;
+            try
+            {
+                SetStatus($"Запись уставки {temp} °C в печь...", false);
+                bool ok = await WriteFurnaceSetPointAsync(
+                    temp, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
+
+                if (ok)
+                {
+                    _lastValidFurnaceSetPoint = temp;
+                    SetStatusSuccess($"Уставка печи изменена на {temp} °C");
+                }
+                else SetStatusError($"Ошибка записи уставки печи");
+            }
+            finally { TestFurnaceButton.IsEnabled = true; }
+        }
+
+        private async Task<bool> WriteFurnaceSetPointAsync(
+            float value, string ip, int port, ushort startRegister)
+        {
+            try
+            {
+                byte[] floatBytes = BitConverter.GetBytes(value);
+                if (BitConverter.IsLittleEndian) Array.Reverse(floatBytes);
+                byte[] ordered = new[] { floatBytes[2], floatBytes[3], floatBytes[0], floatBytes[1] };
+
+                using var client = new TcpClient();
+                var connectTask = client.ConnectAsync(ip, port);
+                var timeoutTask = Task.Delay(3000);
+                if (await Task.WhenAny(connectTask, timeoutTask) != connectTask) return false;
+                await connectTask;
+
+                using var stream = client.GetStream();
+                stream.ReadTimeout = 2000; stream.WriteTimeout = 2000;
+
+                var buffer = new List<byte>(17);
+                buffer.Add(0x00); buffer.Add(0x01);
+                buffer.Add(0x00); buffer.Add(0x00);
+                buffer.Add(0x00); buffer.Add(0x0B);
+                buffer.Add(0x00);
+                buffer.Add(0x10);
+                buffer.Add((byte)(startRegister >> 8));
+                buffer.Add((byte)(startRegister & 0xFF));
+                buffer.Add(0x00); buffer.Add(0x02);
+                buffer.Add(0x04);
+                buffer.Add(ordered[0]); buffer.Add(ordered[1]);
+                buffer.Add(ordered[2]); buffer.Add(ordered[3]);
+
+                byte[] reqBytes = buffer.ToArray();
+                await stream.WriteAsync(reqBytes, 0, reqBytes.Length);
+                await stream.FlushAsync();
+
+                byte[] response = new byte[12];
+                int totalRead = 0;
+                var start = DateTime.Now;
+                while (totalRead < response.Length &&
+                       (DateTime.Now - start).TotalMilliseconds < 2000)
+                {
+                    if (stream.DataAvailable)
+                    {
+                        int n = await stream.ReadAsync(response, totalRead, response.Length - totalRead);
+                        if (n == 0) break;
+                        totalRead += n;
+                    }
+                    else await Task.Delay(20);
+                }
+                return totalRead >= 12 && response[7] == 0x10;
+            }
+            catch { return false; }
+        }
+
+        private async void FurnaceRun_Click(object sender, RoutedEventArgs e)
+        {
+            FurnaceRunButton.IsEnabled = false;
+            try
+            {
+                bool ok = await WriteFurnaceRegisterAsync(
+                    FurnaceModeManual, FurnaceIp, FurnacePort, FurnaceModeRegister);
+                if (ok) SetStatusSuccess("Режим работы печи изменён на «ручной»");
+                else SetStatusError("Ошибка записи режима «ручной»");
+            }
+            finally { FurnaceRunButton.IsEnabled = true; }
+        }
+
+        private async void FurnaceStop_Click(object sender, RoutedEventArgs e)
+        {
+            FurnaceStopButton.IsEnabled = false;
+            try
+            {
+                bool ok = await WriteFurnaceRegisterAsync(
+                    FurnaceModeIdle, FurnaceIp, FurnacePort, FurnaceModeRegister);
+                if (ok) SetStatusSuccess("Режим работы печи изменён на «ждущий»");
+                else SetStatusError("Ошибка записи режима «ждущий»");
+            }
+            finally { FurnaceStopButton.IsEnabled = true; }
+        }
+
+        private async Task<bool> WriteFurnaceRegisterAsync(
+            ushort value, string ip, int port, ushort register)
+        {
+            try
+            {
+                using var client = new TcpClient();
+                var connectTask = client.ConnectAsync(ip, port);
+                var timeoutTask = Task.Delay(3000);
+                if (await Task.WhenAny(connectTask, timeoutTask) != connectTask) return false;
+                await connectTask;
+
+                using var stream = client.GetStream();
+                stream.ReadTimeout = 2000; stream.WriteTimeout = 2000;
+
+                var buffer = new List<byte>(12);
+                buffer.Add(0x00); buffer.Add(0x01);
+                buffer.Add(0x00); buffer.Add(0x00);
+                buffer.Add(0x00); buffer.Add(0x06);
+                buffer.Add(0x00);
+                buffer.Add(0x06);
+                buffer.Add((byte)(register >> 8));
+                buffer.Add((byte)(register & 0xFF));
+                buffer.Add((byte)(value >> 8));
+                buffer.Add((byte)(value & 0xFF));
+
+                byte[] reqBytes = buffer.ToArray();
+                await stream.WriteAsync(reqBytes, 0, reqBytes.Length);
+                await stream.FlushAsync();
+
+                byte[] response = new byte[12];
+                int totalRead = 0;
+                var start = DateTime.Now;
+                while (totalRead < response.Length &&
+                       (DateTime.Now - start).TotalMilliseconds < 2000)
+                {
+                    if (stream.DataAvailable)
+                    {
+                        int n = await stream.ReadAsync(response, totalRead, response.Length - totalRead);
+                        if (n == 0) break;
+                        totalRead += n;
+                    }
+                    else await Task.Delay(20);
+                }
+                return totalRead >= 12 && response[7] == 0x06;
+            }
+            catch { return false; }
+        }
+
+        private string FormatFurnaceSetPointFileName(float setPoint)
+        {
+            if (Math.Abs(setPoint - Math.Round(setPoint)) < 0.001f)
+            {
+                int intVal = (int)Math.Round(setPoint);
+                if (intVal > 0) return "+" + intVal + ".csv";
+                return intVal + ".csv";
+            }
+            string s = setPoint.ToString("0.##", CultureInfo.InvariantCulture);
+            if (setPoint > 0 && !s.StartsWith("+")) s = "+" + s;
+            return s + ".csv";
+        }
+
+        // ─────────────────────────── СОХРАНЕНИЕ ───────────────────────────
+
+        private async Task<bool> SaveDataCoreAsync(bool silent)
+        {
+            string saveDir = SavePathBox.Text?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(saveDir))
+            {
+                if (!silent) MessageBox.Show("Укажите путь сохранения.");
+                else SetStatusWarning("Автосохранение пропущено: не указан путь сохранения");
+                return false;
+            }
+
+            if (!Directory.Exists(saveDir))
+            {
+                if (!silent)
+                {
+                    var r = MessageBox.Show($"Папка не существует:\n{saveDir}\n\nСоздать?",
+                        "Папка не найдена", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    if (r != MessageBoxResult.Yes) return false;
+                }
+                try { Directory.CreateDirectory(saveDir); }
+                catch
+                {
+                    if (silent) SetStatusWarning("Автосохранение: не удалось создать папку");
+                    return false;
+                }
+            }
+
+            List<ConnectedClient> selected;
+            lock (_clientsLock)
+                selected = _connectedClients.Where(c => c.IsSelected && !c.IsOffline).ToList();
+
+            if (selected.Count == 0)
+            {
+                if (!silent) MessageBox.Show("Нет отмеченных клиентов.");
+                else SetStatusWarning("Автосохранение пропущено: нет отмеченных клиентов");
+                return false;
+            }
+
+            float furnaceSetPoint = _lastValidFurnaceSetPoint;
+
+            string fileName = FormatFurnaceSetPointFileName(furnaceSetPoint);
+            string fullPath = Path.Combine(saveDir, fileName);
+
+            if (!silent)
+            {
+                if (MessageBox.Show($"Сохранить в:\n{fullPath}\n\nКлиентов: {selected.Count}",
+                    "Подтверждение", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return false;
+            }
+
+            lock (_saveLock) _saveResponses.Clear();
+            if (!silent) SaveDataButton.IsEnabled = false;
+
+            try
+            {
+                byte[] message = Encoding.UTF8.GetBytes("SAVE_DATA " + fullPath + "\n");
+                foreach (var c in selected)
+                {
+                    try
+                    {
+                        c.SetStatusSaving();
+                        var stream = c.TcpClient.GetStream();
+                        await stream.WriteAsync(message, 0, message.Length);
+                        await stream.FlushAsync();
+                    }
+                    catch { }
+                }
+
+                int timeoutMs = 30000;
+                var start = DateTime.Now;
+                while ((DateTime.Now - start).TotalMilliseconds < timeoutMs * selected.Count)
+                {
+                    int done;
+                    lock (_saveLock)
+                        done = selected.Count(c => _saveResponses.Contains(c.Sid + ":OK")
+                                                || _saveResponses.Contains(c.Sid + ":FAIL"));
+                    if (done >= selected.Count) break;
+                    await Task.Delay(200);
+                }
+
+                int okCount;
+                lock (_saveLock)
+                    okCount = selected.Count(c => _saveResponses.Contains(c.Sid + ":OK"));
+
+                if (okCount == selected.Count)
+                {
+                    SetStatusSuccess($"Данные сохранены во всех клиентах ({okCount}): {fileName}");
+                    return true;
+                }
+                else
+                {
+                    SetStatusWarning($"Сохранено {okCount} из {selected.Count}");
+                    return false;
+                }
+            }
+            finally
+            {
+                if (!silent) SaveDataButton.IsEnabled = true;
+            }
+        }
+
+        private async void SaveData_Click(object sender, RoutedEventArgs e)
+        {
+            await SaveDataCoreAsync(silent: false);
+        }
+
+        // ─────────────────────────── ОЧИСТКА ДАННЫХ ───────────────────────────
+
+        private async Task<bool> ClearDataCoreAsync()
+        {
+            List<ConnectedClient> selected;
+            lock (_clientsLock)
+                selected = _connectedClients.Where(c => c.IsSelected && !c.IsOffline).ToList();
+
+            if (selected.Count == 0)
+            {
+                MessageBox.Show("Нет отмеченных клиентов.");
+                return false;
+            }
+
+            lock (_clearLock) _clearResponses.Clear();
+            ClearDataButton.IsEnabled = false;
+
+            try
+            {
+                byte[] message = Encoding.UTF8.GetBytes("CLEAR_DATA\n");
+                foreach (var c in selected)
+                {
+                    try
+                    {
+                        c.SetStatusClearing();
+                        var stream = c.TcpClient.GetStream();
+                        await stream.WriteAsync(message, 0, message.Length);
+                        await stream.FlushAsync();
+                    }
+                    catch { }
+                }
+
+                SetStatus($"Отправлена команда «Новая калибровка» ({selected.Count} клиент(ов)). " +
+                          $"Ожидание ответа...", false);
+
+                int timeoutPerClientMs = 30_000;
+                var start = DateTime.Now;
+                while ((DateTime.Now - start).TotalMilliseconds < timeoutPerClientMs * selected.Count)
+                {
+                    int done;
+                    lock (_clearLock)
+                        done = selected.Count(c => _clearResponses.Contains(c.Sid + ":OK")
+                                                || _clearResponses.Contains(c.Sid + ":FAIL"));
+                    if (done >= selected.Count) break;
+                    await Task.Delay(200);
+                }
+
+                int okCount;
+                lock (_clearLock)
+                    okCount = selected.Count(c => _clearResponses.Contains(c.Sid + ":OK"));
+
+                if (okCount == selected.Count)
+                {
+                    SetStatusSuccess($"Данные очищены во всех клиентах ({okCount})");
+                    return true;
+                }
+                else
+                {
+                    SetStatusWarning($"Очищено {okCount} из {selected.Count}");
+                    return false;
+                }
+            }
+            finally
+            {
+                ClearDataButton.IsEnabled = true;
+            }
+        }
+
+        private async void ClearData_Click(object sender, RoutedEventArgs e)
+        {
+            await ClearDataCoreAsync();
+        }
+
+        private async void StopButton_Click(object sender, RoutedEventArgs e)
+        {
+            _stopRequested = true;
+            _timerActive = false;
+            _totalTimerActive = false;
+            _pauseRequested = false;
+
+            TimerText.Text = "00:00:00";
+
+            await SendCommandNoWaitAsync("set_mode=stop;");
+            SetStatusError("АВАРИЙНАЯ ОСТАНОВКА");
+        }
+
+        private async void VentButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning)
+            {
+                if (MessageBox.Show("Прервать и сбросить?", "Подтверждение",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+
+                _stopRequested = true;
+                _totalTimerActive = false;
+                _pauseRequested = false;
+
+                TimerText.Text = "00:00:00";
+            }
+            string? resp = await SendCommandAsync("set_mode=vent;");
+            SetStatus($"Сброс отправлен: {resp}");
+        }
+
+        private async Task<bool> SendWithRetryAsync(string command, string expected)
+        {
+            while (true)
+            {
+                for (int attempt = 1; attempt <= 5; attempt++)
+                {
+                    if (_stopRequested) return false;
+                    if (!await WaitIfPausedAsync()) return false;
+
+                    SetStatus($"{command} — попытка {attempt}/5");
+                    string? response = await SendCommandAsync(command);
+                    if (response != null && response.Contains(expected, StringComparison.Ordinal))
+                        return true;
+                    await SafeDelayAsync(1000);
+                }
+                if (MessageBox.Show($"Команда «{command}» не получила ответ после 5 попыток.",
+                    "Ошибка", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return false;
+            }
+        }
+
+        private async Task<double?> RefreshPressureAndSetPointAsync()
+        {
+            double? pressure = null;
+
+            NetworkStream? stream;
+            lock (_streamLock) stream = _stream;
+
+            if (stream == null)
+            {
+                return null;
+            }
+
+            string? p = await SendCommandAsync("get_press;");
+            if (p != null)
+            {
+                string parsed = ParsePressure(p);
+                string units = _currentPressureUnitsLabel;
+                AgkPressureText.Text = string.IsNullOrEmpty(units)
+                    ? parsed
+                    : $"{parsed} {units}";
+                if (double.TryParse(parsed, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double v)) pressure = v;
+            }
+
+            string? sp = await SendCommandAsync("get_point;");
+            if (sp != null)
+            {
+                string parsedSp = ParsePressure(sp);
+                string units = _currentPressureUnitsLabel;
+                AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                    ? parsedSp
+                    : $"{parsedSp} {units}";
+            }
+
+            return pressure;
+        }
+
+        private async Task<bool> WaitForStateInPointAsync()
+        {
+            int okCount = 0;
+            while (true)
+            {
+                if (_stopRequested) return false;
+                if (!await WaitIfPausedAsync()) return false;
+
+                string? resp = await SendCommandAsync("get_state_in_point;");
+                if (resp != null && resp.Contains("ok;", StringComparison.Ordinal))
+                {
+                    okCount++;
+                    if (okCount >= 5) return true;
+                }
+                else okCount = 0;
+                await RefreshPressureAndSetPointAsync();
+                SetStatus($"Ожидание стабилизации: {okCount}/5");
+                await SafeDelayAsync(1000);
+            }
+        }
+
+        private async Task<bool> WaitUntilPressureBelowAsync(double threshold, int timeoutMs)
+        {
+            var start = DateTime.Now;
+            var pausedTotal = TimeSpan.Zero;
+            var pauseStartedAt = DateTime.MinValue;
+
+            while (true)
+            {
+                if (_stopRequested) return false;
+
+                if (_pauseRequested)
+                {
+                    if (pauseStartedAt == DateTime.MinValue) pauseStartedAt = DateTime.Now;
+                    await Task.Delay(100);
+                    continue;
+                }
+                else if (pauseStartedAt != DateTime.MinValue)
+                {
+                    pausedTotal += DateTime.Now - pauseStartedAt;
+                    pauseStartedAt = DateTime.MinValue;
+                }
+
+                if ((DateTime.Now - start - pausedTotal).TotalMilliseconds >= timeoutMs)
+                    return false;
+
+                double? p = await RefreshPressureAndSetPointAsync();
+                if (p.HasValue && Math.Abs(p.Value) < threshold) return true;
+                await SafeDelayAsync(1000);
+            }
+        }
+
+        private string GetUnitsCode(string tp)
+        {
+            if (tp.Contains("кгс/см²")) return "kgs";
+            if (tp.Contains("МПа")) return "MPa";
+            if (tp.Contains("кПа")) return "kPa";
+            if (tp.Contains("бар")) return "bar";
+            if (tp.Contains("PSI")) return "psi";
             return "kgs";
         }
 
-        private string GetUnitsLabel(string targetPressure)
+        private string GetUnitsLabel(string tp)
         {
-            if (targetPressure.Contains("кгс/см²")) return "кгс/см²";
-            if (targetPressure.Contains("МПа")) return "МПа";
-            if (targetPressure.Contains("кПа")) return "кПа";
-            if (targetPressure.Contains("бар")) return "бар";
-            if (targetPressure.Contains("PSI")) return "PSI";
+            if (tp.Contains("кгс/см²")) return "кгс/см²";
+            if (tp.Contains("МПа")) return "МПа";
+            if (tp.Contains("кПа")) return "кПа";
+            if (tp.Contains("бар")) return "бар";
+            if (tp.Contains("PSI")) return "PSI";
             return "";
         }
 
-        private double GetAtmosphereThreshold(string unitsCode)
-        {
-            return unitsCode switch
+        private double GetAtmosphereThreshold(string unitsCode) =>
+            unitsCode switch
             {
                 "kgs" => 1.0,
                 "MPa" => 0.1,
@@ -1857,21 +2997,16 @@ namespace PressureMonitor
                 "psi" => 14.7,
                 _ => 1.0
             };
-        }
 
         private int GetStepDuration(double[] steps, int index, bool longTimers)
         {
-            if (index == 0) return 0;
-
-            double current = steps[index];
-            double previous = steps[index - 1];
-
-            if (current == 0) return longTimers ? 500 : 300;
-            if (current > previous) return longTimers ? 220 : 120;
+            if (index == 0) return 10;
+            double cur = steps[index];
+            double prev = steps[index - 1];
+            if (cur == 0) return longTimers ? 500 : 300;
+            if (cur > prev) return longTimers ? 220 : 120;
             return longTimers ? 330 : 180;
         }
-
-        // ─────────────────────────── БАЗОВЫЕ ОПЕРАЦИИ ───────────────────────────
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
@@ -1879,91 +3014,71 @@ namespace PressureMonitor
 
             _ = Task.Run(ConnectToDeviceLoopAsync);
 
-            _timer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            };
+            _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _timer.Tick += Timer_Tick;
             _timer.Start();
 
-            await Task.CompletedTask;
+            await Task.Delay(500);
+            await RefreshFurnaceSetPointAsync();
+
+            _furnaceTempTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _furnaceTempTimer.Tick += async (s, e) =>
+            {
+                await RefreshFurnaceCurrentTempAsync();
+                await RefreshFurnaceSetPointAsync();
+                UpdateStabilizationTimer();
+            };
+            _furnaceTempTimer.Start();
+
+            await RefreshFurnaceCurrentTempAsync();
+            await RefreshFurnaceSetPointAsync();
+            UpdateStabilizationTimer();
+
+            // СКТБ ЭлПа (платина) — опрос раз в секунду
+            _platinaTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _platinaTimer.Tick += async (s, e) => await RefreshPlatinaAsync();
+            _platinaTimer.Start();
+
+            await RefreshPlatinaAsync();
         }
 
         private async Task ConnectToDeviceLoopAsync()
         {
-            System.Diagnostics.Debug.WriteLine("[Device] Цикл подключения запущен");
-
             while (!_cts.IsCancellationRequested)
             {
                 bool needConnect;
-                lock (_streamLock)
-                {
-                    needConnect = (_stream == null);
-                }
-
-                if (!needConnect)
-                {
-                    await Task.Delay(1000);
-                    continue;
-                }
+                lock (_streamLock) needConnect = (_stream == null);
+                if (!needConnect) { await Task.Delay(1000); continue; }
 
                 try
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Device] Попытка подключения к {DeviceIp}:{DevicePort}...");
-
-                    SetStatusWarning(
-                        $"Пытаемся подключиться к прибору {DeviceIp}:{DevicePort}...");
-
+                    SetStatusWarning($"Подключение к {DeviceIp}:{DevicePort}...");
                     var client = new TcpClient();
-                    var connectTask = client.ConnectAsync(DeviceIp, DevicePort);
-                    var timeoutTask = Task.Delay(3000);
-                    var completed = await Task.WhenAny(connectTask, timeoutTask);
-
-                    if (completed != connectTask)
+                    var ct = client.ConnectAsync(DeviceIp, DevicePort);
+                    var tt = Task.Delay(3000);
+                    if (await Task.WhenAny(ct, tt) != ct)
                     {
-                        System.Diagnostics.Debug.WriteLine(
-                            "[Device] Таймаут подключения");
                         try { client.Close(); } catch { }
-                        SetStatusError(
-                            $"Прибор недоступен ({DeviceIp}:{DevicePort}). Повтор через 5 сек...");
-                        await Task.Delay(5000);
-                        continue;
+                        SetStatusError($"Прибор недоступен. Повтор через 5 сек...");
+                        await Task.Delay(5000); continue;
                     }
-
-                    await connectTask;
-
+                    await ct;
                     var stream = client.GetStream();
-
-                    if (_cts.IsCancellationRequested)
-                    {
-                        try { stream.Close(); } catch { }
-                        try { client.Close(); } catch { }
-                        return;
-                    }
-
-                    lock (_streamLock)
-                    {
-                        _client = client;
-                        _stream = stream;
-                    }
-
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Device] Подключено к {DeviceIp}:{DevicePort}");
+                    lock (_streamLock) { _client = client; _stream = stream; }
                     SetStatusSuccess($"Подключено к {DeviceIp}:{DevicePort}");
                 }
-                catch (Exception ex)
+                catch
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Device] Ошибка подключения: {ex.GetType().Name}: {ex.Message}");
-                    SetStatusError(
-                        $"Прибор недоступен ({DeviceIp}:{DevicePort}). Повтор через 5 сек...");
+                    SetStatusError($"Прибор недоступен. Повтор через 5 сек...");
                 }
-
                 await Task.Delay(5000);
             }
-
-            System.Diagnostics.Debug.WriteLine("[Device] Цикл подключения завершён");
         }
 
         private void ResetDeviceConnection()
@@ -1972,63 +3087,78 @@ namespace PressureMonitor
             {
                 try { _stream?.Close(); } catch { }
                 try { _client?.Close(); } catch { }
-                _stream = null;
-                _client = null;
+                _stream = null; _client = null;
             }
-            System.Diagnostics.Debug.WriteLine(
-                "[Device] Соединение сброшено, ждём переподключения...");
-            SetStatusError("Соединение с прибором потеряно. Переподключение...");
+            SetStatusError("Соединение потеряно. Переподключение...");
         }
 
         private async void Timer_Tick(object? sender, EventArgs e)
         {
+            if (_totalTimerActive && !_pauseRequested)
+            {
+                var elapsed = DateTime.Now - _totalTimerStart;
+                TimerText.Text =
+                    $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+            }
+
             if (_isRunning) return;
 
             NetworkStream? stream;
-            lock (_streamLock)
-            {
-                stream = _stream;
-            }
+            lock (_streamLock) stream = _stream;
 
-            if (stream == null) return;
+            bool agkOk = false;
 
-            try
+            if (stream != null)
             {
-                if (!stream.CanRead || !stream.CanWrite)
+                try
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        "[Device] Соединение потеряно (CanRead/CanWrite = false)");
+                    if (stream.CanRead && stream.CanWrite)
+                    {
+                        string? ur = await SendCommandAsync("get_units;");
+                        if (ur != null)
+                        {
+                            UpdateUnits(ur);
+                            await RefreshPressureAndSetPointAsync();
+                            agkOk = true;
+                        }
+                    }
+                    else
+                    {
+                        ResetDeviceConnection();
+                    }
+                }
+                catch
+                {
                     ResetDeviceConnection();
-                    return;
                 }
             }
-            catch
+
+            if (agkOk)
             {
-                ResetDeviceConnection();
-                return;
+                _agkFailCount = 0;
+                AgkStatusEllipse.Fill = Brushes.Green;
+
+                if (!_totalTimerActive)
+                    SetStatusSuccess($"Подключено к {DeviceIp}:{DevicePort}");
             }
-
-            SetStatusSuccess($"Подключено к {DeviceIp}:{DevicePort}");
-
-            string? unitsResponse = await SendCommandAsync("get_units;");
-            if (unitsResponse != null) UpdateUnits(unitsResponse);
-
-            string? pressResponse = await SendCommandAsync("get_press;");
-            if (pressResponse != null) PressureText.Text = ParsePressure(pressResponse);
-
-            string? setPointResponse = await SendCommandAsync("get_point;");
-            if (setPointResponse != null) SetPointText.Text = ParsePressure(setPointResponse);
+            else
+            {
+                _agkFailCount++;
+                if (_agkFailCount >= ConnectionLostThreshold)
+                {
+                    AgkPressureText.Text = "—";
+                    AgkSetPointText.Text = "—";
+                    AgkStatusEllipse.Fill = Brushes.Red;
+                }
+            }
         }
 
         private void UpdateUnits(string response)
         {
-            char? digit = null;
+            char? d = null;
             foreach (char c in response)
-            {
-                if (c >= '0' && c <= '9') { digit = c; break; }
-            }
-
-            string units = digit switch
+                if (c >= '0' && c <= '9') { d = c; break; }
+            string u = d switch
             {
                 '0' => "кПа",
                 '1' => "МПа",
@@ -2037,19 +3167,13 @@ namespace PressureMonitor
                 '4' => "кгс/см²",
                 _ => "?"
             };
-
-            UnitsText.Text = units;
-            SetPointUnitsText.Text = units;
+            _currentPressureUnitsLabel = u;
         }
 
         private async Task<string?> SendCommandAsync(string command)
         {
             NetworkStream? stream;
-            lock (_streamLock)
-            {
-                stream = _stream;
-            }
-
+            lock (_streamLock) stream = _stream;
             if (stream == null) return null;
 
             try
@@ -2061,270 +3185,129 @@ namespace PressureMonitor
                     await Task.Delay(20);
                 }
 
-                byte[] request = Encoding.ASCII.GetBytes(command);
-                await stream.WriteAsync(request, 0, request.Length);
+                byte[] req = Encoding.ASCII.GetBytes(command);
+                await stream.WriteAsync(req, 0, req.Length);
 
                 var sb = new StringBuilder();
                 byte[] one = new byte[1];
                 var start = DateTime.Now;
-
                 while ((DateTime.Now - start).TotalMilliseconds < 2000)
                 {
                     if (stream.DataAvailable)
                     {
-                        int n = await stream.ReadAsync(one, 0, one.Length);
+                        int n = await stream.ReadAsync(one, 0, 1);
                         if (n == 0) break;
-
                         char c = (char)one[0];
                         sb.Append(c);
-
                         if (c == ';') break;
                     }
-                    else
-                    {
-                        await Task.Delay(10);
-                    }
+                    else await Task.Delay(10);
                 }
-
-                if (sb.Length == 0) return null;
-                return sb.ToString().Trim();
+                return sb.Length > 0 ? sb.ToString().Trim() : null;
             }
-            catch
-            {
-                ResetDeviceConnection();
-                return null;
-            }
+            catch { ResetDeviceConnection(); return null; }
         }
 
         private async Task SendCommandNoWaitAsync(string command)
         {
             NetworkStream? stream;
-            lock (_streamLock)
-            {
-                stream = _stream;
-            }
-
+            lock (_streamLock) stream = _stream;
             if (stream == null) return;
             try
             {
-                byte[] request = Encoding.ASCII.GetBytes(command);
-                await stream.WriteAsync(request, 0, request.Length);
+                byte[] req = Encoding.ASCII.GetBytes(command);
+                await stream.WriteAsync(req, 0, req.Length);
             }
-            catch
-            {
-                ResetDeviceConnection();
-            }
+            catch { ResetDeviceConnection(); }
         }
 
         private string ParsePressure(string raw)
         {
             raw = raw.Trim().Trim('\r', '\n', '\0', ' ', ';');
-
             if (raw.StartsWith("E", StringComparison.OrdinalIgnoreCase) ||
                 raw.StartsWith("e", StringComparison.OrdinalIgnoreCase))
-            {
                 raw = raw.Substring(1);
-            }
-
             raw = raw.Replace(',', '.');
-
-            if (double.TryParse(raw,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out double value))
-            {
-                return Math.Round(value, 5).ToString("F5", CultureInfo.InvariantCulture);
-            }
-
+            if (double.TryParse(raw, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double v))
+                return Math.Round(v, 5).ToString("F5", CultureInfo.InvariantCulture);
             return raw;
         }
 
-        private async Task SafeDelayAsync(int milliseconds)
+        private async Task SafeDelayAsync(int ms)
         {
-            var end = DateTime.Now.AddMilliseconds(milliseconds);
+            var end = DateTime.Now.AddMilliseconds(ms);
             while (DateTime.Now < end)
             {
                 if (_stopRequested) return;
+
+                while (_pauseRequested && !_stopRequested)
+                    await Task.Delay(100);
+
+                if (_stopRequested) return;
+
                 await Task.Delay(100);
             }
         }
 
         private void SetStatus(string text, bool running = true)
         {
-            if (!Dispatcher.CheckAccess())
-            {
-                Dispatcher.Invoke(() => SetStatus(text, running));
-                return;
-            }
+            if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatus(text, running)); return; }
             StatusText.Text = text;
             StatusText.Foreground = running ? Brushes.Green : Brushes.Gray;
         }
 
         private void SetStatusSuccess(string text)
         {
-            if (!Dispatcher.CheckAccess())
-            {
-                Dispatcher.Invoke(() => SetStatusSuccess(text));
-                return;
-            }
-            StatusText.Text = text;
-            StatusText.Foreground = Brushes.Green;
+            if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusSuccess(text)); return; }
+            StatusText.Text = text; StatusText.Foreground = Brushes.Green;
         }
 
         private void SetStatusWarning(string text)
         {
-            if (!Dispatcher.CheckAccess())
-            {
-                Dispatcher.Invoke(() => SetStatusWarning(text));
-                return;
-            }
-            StatusText.Text = text;
-            StatusText.Foreground = Brushes.Goldenrod;
+            if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusWarning(text)); return; }
+            StatusText.Text = text; StatusText.Foreground = Brushes.Goldenrod;
         }
 
         private void SetStatusError(string text)
         {
-            if (!Dispatcher.CheckAccess())
-            {
-                Dispatcher.Invoke(() => SetStatusError(text));
-                return;
-            }
-            StatusText.Text = text;
-            StatusText.Foreground = Brushes.OrangeRed;
+            if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusError(text)); return; }
+            StatusText.Text = text; StatusText.Foreground = Brushes.OrangeRed;
         }
 
         protected override void OnClosed(EventArgs e)
         {
+            try { SaveSettings(); } catch { }
             _stopRequested = true;
+            _pauseRequested = false;
+            _totalTimerActive = false;
             _timer?.Stop();
             _clientsUiTimer?.Stop();
+            _statusResetTimer?.Stop();
+            _furnaceTempTimer?.Stop();
+            _platinaTimer?.Stop();
             _cts.Cancel();
 
             lock (_streamLock)
             {
                 try { _stream?.Close(); } catch { }
                 try { _client?.Close(); } catch { }
-                _stream = null;
-                _client = null;
+                _stream = null; _client = null;
             }
 
             try
             {
                 lock (_clientsLock)
                 {
-                    foreach (var c in _connectedClients)
-                    {
-                        try { c.TcpClient.Close(); } catch { }
-                    }
+                    foreach (var c in _connectedClients) { try { c.TcpClient.Close(); } catch { } }
                     _connectedClients.Clear();
                 }
-
                 try { _broadcastServer?.Stop(); } catch { }
             }
             catch { }
 
             base.OnClosed(e);
-
             Environment.Exit(0);
-        }
-    }
-
-    // ─────────────────────────── ДИАЛОГ ВВОДА ───────────────────────────
-
-    public static class InputDialog
-    {
-        public static string Show(string prompt, string defaultValue = "")
-        {
-            var window = new Window
-            {
-                Title = "Ввод значения",
-                Width = 380,
-                Height = 170,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Owner = Application.Current.MainWindow,
-                ResizeMode = ResizeMode.NoResize
-            };
-
-            var grid = new System.Windows.Controls.Grid
-            {
-                Margin = new Thickness(15)
-            };
-            grid.RowDefinitions.Add(
-                new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(
-                new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(
-                new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
-
-            var label = new System.Windows.Controls.TextBlock
-            {
-                Text = prompt,
-                FontSize = 14,
-                Margin = new Thickness(0, 0, 0, 10)
-            };
-            System.Windows.Controls.Grid.SetRow(label, 0);
-            grid.Children.Add(label);
-
-            var textBox = new System.Windows.Controls.TextBox
-            {
-                Text = defaultValue,
-                Height = 30,
-                FontSize = 14,
-                Padding = new Thickness(6, 4, 6, 4)
-            };
-            System.Windows.Controls.Grid.SetRow(textBox, 1);
-            grid.Children.Add(textBox);
-
-            var buttonPanel = new System.Windows.Controls.StackPanel
-            {
-                Orientation = System.Windows.Controls.Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 12, 0, 0)
-            };
-
-            string result = null;
-
-            var okButton = new System.Windows.Controls.Button
-            {
-                Content = "ОК",
-                Width = 90,
-                Height = 30,
-                Margin = new Thickness(0, 0, 10, 0),
-                IsDefault = true,
-                FontSize = 14
-            };
-            okButton.Click += (s, e) =>
-            {
-                result = textBox.Text;
-                window.Close();
-            };
-            buttonPanel.Children.Add(okButton);
-
-            var cancelButton = new System.Windows.Controls.Button
-            {
-                Content = "Отмена",
-                Width = 90,
-                Height = 30,
-                IsCancel = true,
-                FontSize = 14
-            };
-            cancelButton.Click += (s, e) => { window.Close(); };
-            buttonPanel.Children.Add(cancelButton);
-
-            System.Windows.Controls.Grid.SetRow(buttonPanel, 2);
-            grid.Children.Add(buttonPanel);
-
-            window.Content = grid;
-
-            window.Loaded += (s, e) =>
-            {
-                textBox.Focus();
-                textBox.SelectAll();
-            };
-
-            window.ShowDialog();
-
-            return result;
         }
     }
 }

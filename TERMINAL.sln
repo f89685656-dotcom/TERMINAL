@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.37411.7
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AGK_2", "AGK_2.csproj", "{620F752F-A707-47AF-A8BD-240BE3640549}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "T.E.R.M.I.N.A.L", "T.E.R.M.I.N.A.L.csproj", "{620F752F-A707-47AF-A8BD-240BE3640549}"
 EndProject
-Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "AGK_control", "..\AGK_control\AGK_control.vdproj", "{1C1C14A2-42D2-7715-0F19-FBB36C99613F}"
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Setup1.0.3", "Setup1.0.3\Setup1.0.3.vdproj", "{1199216C-5911-A303-F86F-57E12D21AC79}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,8 +17,8 @@ Global
 		{620F752F-A707-47AF-A8BD-240BE3640549}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{620F752F-A707-47AF-A8BD-240BE3640549}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{620F752F-A707-47AF-A8BD-240BE3640549}.Release|Any CPU.Build.0 = Release|Any CPU
-		{1C1C14A2-42D2-7715-0F19-FBB36C99613F}.Debug|Any CPU.ActiveCfg = Debug
-		{1C1C14A2-42D2-7715-0F19-FBB36C99613F}.Release|Any CPU.ActiveCfg = Release
+		{1199216C-5911-A303-F86F-57E12D21AC79}.Debug|Any CPU.ActiveCfg = Debug
+		{1199216C-5911-A303-F86F-57E12D21AC79}.Release|Any CPU.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

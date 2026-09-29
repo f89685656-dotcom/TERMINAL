@@ -2,7 +2,7 @@
 using System.Data;
 using System.Windows;
 
-namespace AGK_2
+namespace TERMINAL
 {
     /// <summary>
     /// Interaction logic for App.xaml

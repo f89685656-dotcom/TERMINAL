@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>izobrazenie-2026-09-22-103951804.fXmkf.ico</ApplicationIcon>
+    <AssemblyName>T.E.R.M.I.N.A.L ver. 1.0.3</AssemblyName>
+    <Version>1.0.3</Version>
+    <PackageIcon>7.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Images\AGK.png" />
+    <None Remove="Images\ST_351.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Images\AGK.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Images\ST_351.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="izobrazenie-2026-09-22-103951804.fXmkf.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\Users\Serg_Ivanov\Desktop\ТЕСТЫ\агк_иконка\7.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HidSharp" Version="2.6.4" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
+  </ItemGroup>
+
+</Project>

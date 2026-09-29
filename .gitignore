@@ -1,3 +1,15 @@
+# Visual Studio
+.vs/
 bin/
 obj/
 *.user
+*.suo
+
+# Build results
+Debug/
+Release/
+x64/
+x86/
+
+# Setup output (если не хочешь хранить инсталлятор в репо)
+Setup1.0.3/
