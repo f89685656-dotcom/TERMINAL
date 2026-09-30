@@ -375,6 +375,11 @@ namespace TERMINAL
 
         private Settings? _loadedSettings = null;
 
+        // NEW: статус АГК (get_status)
+        private DateTime _lastAgkStatusRequest = DateTime.MinValue;
+        private int _agkStatusFailCount = 0;
+        private const int AgkStatusRequestIntervalMs = 1000;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -1124,6 +1129,9 @@ namespace TERMINAL
 
         private void RemoveOffline_Click(object sender, RoutedEventArgs e)
         {
+            // NEW: не трогаем клиентов во время программы
+            if (_isRunning) return;
+
             lock (_clientsLock)
             {
                 var toRemove = _connectedClients.Where(c => c.IsOffline).ToList();
@@ -1173,8 +1181,10 @@ namespace TERMINAL
                 c.SetStatusWaiting();
             }
 
+            // NEW: рассылаем TAKE_POINT всем клиентам ОДНОВРЕМЕННО
             byte[] message = Encoding.ASCII.GetBytes("TAKE_POINT\n");
-            foreach (var c in selected)
+
+            var sendTasks = selected.Select(async c =>
             {
                 try
                 {
@@ -1183,12 +1193,21 @@ namespace TERMINAL
                     await stream.FlushAsync();
                 }
                 catch { }
-            }
+            }).ToList();
 
-            foreach (var client in selected)
+            await Task.WhenAll(sendTasks);
+
+            // NEW: ждём DONE от всех ОДНОВРЕМЕННО
+            var waitTasks = selected.Select(c => WaitForClientDoneAsync(c)).ToList();
+            bool[] results = await Task.WhenAll(waitTasks);
+
+            for (int i = 0; i < selected.Count; i++)
             {
-                bool done = await WaitForClientDoneAsync(client);
-                if (!done) { SetStatus($"Клиент {client.Sid} не завершил съём"); return false; }
+                if (!results[i])
+                {
+                    SetStatus($"Клиент {selected[i].Sid} не завершил съём");
+                    return false;
+                }
             }
 
             SetStatus($"Все клиенты ({selected.Count}) ответили DONE_OK. Пауза 3 сек...");
@@ -1242,6 +1261,13 @@ namespace TERMINAL
 
         private async void TakePointBroadcast_Click(object sender, RoutedEventArgs e)
         {
+            // NEW: не мешаем программе
+            if (_isRunning)
+            {
+                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                return;
+            }
+
             try
             {
                 TakePointBroadcastButton.IsEnabled = false;
@@ -1301,11 +1327,13 @@ namespace TERMINAL
                 return false;
             }
 
-            foreach (var c in selected)
+            // NEW: все клиенты снимают параллельно
+            var tasks = selected.Select(c => TakePointUntilOkAsync(c)).ToList();
+            bool[] results = await Task.WhenAll(tasks);
+
+            for (int i = 0; i < selected.Count; i++)
             {
-                if (_stopRequested) return false;
-                bool ok = await TakePointUntilOkAsync(c);
-                if (!ok) return false;
+                if (!results[i]) return false;
             }
 
             SetStatus($"КОСА: все клиенты ({selected.Count}) ответили DONE_OK. Пауза 3 сек...");
@@ -1348,7 +1376,6 @@ namespace TERMINAL
 
                 if (_stopRequested) return false;
 
-                SetStatus($"КОСА: повторный съём для {client.Sid}...");
                 await Task.Delay(500);
             }
             return false;
@@ -1516,6 +1543,11 @@ namespace TERMINAL
             PauseButton.Content = "ПАУЗА";
             PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
 
+            StartButton.IsEnabled = false;
+
+            // NEW: блокируем внешние кнопки
+            SetExternalButtonsEnabled(false);
+
             for (int i = 0; i < _stepItems.Count; i++)
             {
                 if (i < startStep - 1)
@@ -1534,8 +1566,6 @@ namespace TERMINAL
                 }
             }
             UpdateStepCounter();
-
-            StartButton.IsEnabled = false;
 
             _totalTimerStart = DateTime.Now;
             _totalTimerActive = true;
@@ -1575,6 +1605,9 @@ namespace TERMINAL
                 }
 
                 ResetStepsToInitial();
+
+                // NEW: разблокируем внешние кнопки ТОЛЬКО здесь
+                SetExternalButtonsEnabled(true);
 
                 List<ConnectedClient> clientsSnapshot;
                 lock (_clientsLock)
@@ -1735,6 +1768,9 @@ namespace TERMINAL
 
             StartButton.IsEnabled = false;
 
+            // NEW: блокируем внешние кнопки
+            SetExternalButtonsEnabled(false);
+
             _totalTimerStart = DateTime.Now;
             _totalTimerActive = true;
 
@@ -1765,6 +1801,9 @@ namespace TERMINAL
                 MinArrow.Text = "  ";
                 MaxTimerText.Text = "";
                 MinTimerText.Text = "";
+
+                // NEW: разблокируем внешние кнопки
+                SetExternalButtonsEnabled(true);
 
                 List<ConnectedClient> clientsSnapshot;
                 lock (_clientsLock)
@@ -1853,7 +1892,6 @@ namespace TERMINAL
             int remaining = seconds;
             _timerActive = true;
 
-            // Для атмосферы не ждём get_state_in_point — прибор в режиме vent.
             if (!isMax)
             {
                 while (remaining > 0)
@@ -2459,6 +2497,42 @@ namespace TERMINAL
             }
         }
 
+        // ─────────────────────────── СТАТУС АГК (get_status) ───────────────────────────
+
+        private async Task RefreshAgkStatusAsync()
+        {
+            if ((DateTime.Now - _lastAgkStatusRequest).TotalMilliseconds < AgkStatusRequestIntervalMs)
+                return;
+            _lastAgkStatusRequest = DateTime.Now;
+
+            string? resp = await SendCommandAsync("get_status;");
+            if (resp == null)
+            {
+                _agkStatusFailCount++;
+                if (_agkStatusFailCount >= ConnectionLostThreshold)
+                {
+                    if (AgkStatusTextBox != null)
+                    {
+                        AgkStatusTextBox.Text = "(нет ответа)";
+                        AgkStatusTextBox.Foreground = Brushes.OrangeRed;
+                    }
+                }
+                return;
+            }
+            _agkStatusFailCount = 0;
+
+            string display = resp.Trim();
+            if (string.IsNullOrEmpty(display)) display = "(пусто)";
+
+            if (AgkStatusTextBox != null)
+            {
+                AgkStatusTextBox.Text = display;
+                AgkStatusTextBox.Foreground = (display == "0;" || display == "0")
+                    ? new SolidColorBrush(Color.FromRgb(0x80, 0xFF, 0x80))
+                    : new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x80));
+            }
+        }
+
         // ─────────────────────────── ПРОЧЕЕ ───────────────────────────
 
         private async void ReadFurnaceSetPoint_Click(object sender, RoutedEventArgs e)
@@ -2752,6 +2826,12 @@ namespace TERMINAL
 
         private async void SaveData_Click(object sender, RoutedEventArgs e)
         {
+            // NEW: не мешаем программе
+            if (_isRunning)
+            {
+                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                return;
+            }
             await SaveDataCoreAsync(silent: false);
         }
 
@@ -2825,6 +2905,12 @@ namespace TERMINAL
 
         private async void ClearData_Click(object sender, RoutedEventArgs e)
         {
+            // NEW: не мешаем программе
+            if (_isRunning)
+            {
+                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                return;
+            }
             await ClearDataCoreAsync();
         }
 
@@ -2857,6 +2943,42 @@ namespace TERMINAL
             string? resp = await SendCommandAsync("set_mode=vent;");
             SetStatus($"Сброс отправлен: {resp}");
         }
+
+        private async void CalibrateStocksButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning)
+            {
+                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                return;
+            }
+
+            if (MessageBox.Show(
+                    "Запустить калибровку штоков АГК?\n\n" +
+                    "Во время калибровки штоки будут двигаться в крайние положения.",
+                    "Калибровка штоков",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return;
+
+            CalibrateStocksButton.IsEnabled = false;
+            try
+            {
+                SetStatus("Отправка команды калибровки штоков...", false);
+                string? resp = await SendCommandAsync("set_cal_stocks=start;");
+
+                if (resp != null && resp.Contains("ok", StringComparison.OrdinalIgnoreCase))
+                    SetStatusSuccess($"Калибровка штоков запущена: {resp}");
+                else if (resp != null)
+                    SetStatusWarning($"Ответ АГК: {resp}");
+                else
+                    SetStatusError("Нет ответа от АГК на set_cal_stocks=start;");
+            }
+            finally
+            {
+                CalibrateStocksButton.IsEnabled = true;
+            }
+        }
+
 
         private async Task<bool> SendWithRetryAsync(string command, string expected)
         {
@@ -3119,6 +3241,10 @@ namespace TERMINAL
                         {
                             UpdateUnits(ur);
                             await RefreshPressureAndSetPointAsync();
+
+                            // NEW: чтение статуса АГК
+                            await RefreshAgkStatusAsync();
+
                             agkOk = true;
                         }
                     }
@@ -3149,6 +3275,13 @@ namespace TERMINAL
                     AgkPressureText.Text = "—";
                     AgkSetPointText.Text = "—";
                     AgkStatusEllipse.Fill = Brushes.Red;
+
+                    if (AgkStatusTextBox != null)
+                    {
+                        AgkStatusTextBox.Text = "—";
+                        AgkStatusTextBox.Foreground =
+                            new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA));
+                    }
                 }
             }
         }
@@ -3273,6 +3406,21 @@ namespace TERMINAL
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusError(text)); return; }
             StatusText.Text = text; StatusText.Foreground = Brushes.OrangeRed;
+        }
+
+        // NEW: блокировка внешних кнопок на время программы
+        private void SetExternalButtonsEnabled(bool enabled)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => SetExternalButtonsEnabled(enabled));
+                return;
+            }
+
+            if (TakePointBroadcastButton != null) TakePointBroadcastButton.IsEnabled = enabled;
+            if (SaveDataButton != null) SaveDataButton.IsEnabled = enabled;
+            if (ClearDataButton != null) ClearDataButton.IsEnabled = enabled;
+            if (RemoveOfflineButton != null) RemoveOfflineButton.IsEnabled = enabled;
         }
 
         protected override void OnClosed(EventArgs e)
