@@ -835,6 +835,7 @@
                         </Grid>
                     </Border>
 
+                    <!-- Кнопки СТОП + СБРОС -->
                     <Grid Margin="0,8,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -854,6 +855,35 @@
                                 Background="#FF5080D0"
                                 Click="VentButton_Click"/>
                     </Grid>
+
+                    <!-- NEW: кнопка калибровки штоков -->
+                    <Button x:Name="CalibrateStocksButton"
+                            Content="Калибровка штоков"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Height="34" FontSize="13"
+                            Padding="6,4" Margin="0,8,0,0"
+                            Background="#FF6A4FA0"
+                            Click="CalibrateStocksButton_Click"/>
+
+                    <!-- NEW: статус АГК (get_status) -->
+                    <Border CornerRadius="4"
+                            Padding="8,5"
+                            Margin="0,8,0,0"
+                            Background="#FF2E2E2E">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Статус АГК:"
+                                       FontSize="11"
+                                       Foreground="#FFAAAAAA"
+                                       Margin="0,0,0,2"/>
+                            <TextBlock x:Name="AgkStatusTextBox"
+                                       Text="—"
+                                       FontSize="12"
+                                       FontFamily="Consolas"
+                                       Foreground="#FF80FF80"
+                                       TextWrapping="Wrap"
+                                       MaxHeight="80"/>
+                        </StackPanel>
+                    </Border>
 
                 </StackPanel>
             </Border>
