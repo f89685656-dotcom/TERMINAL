@@ -258,7 +258,8 @@
                           SelectionChanged="TimerSetCombo_SelectionChanged"/>
             </Grid>
 
-            <!-- Режим + параметр + КОСА -->
+            <!-- Режим + параметр + КОСА + автоСтарт -->
+            <!-- NEW: добавлена вторая строка с галочкой «автоСтарт» -->
             <Grid Grid.Row="2"
                   HorizontalAlignment="Left" VerticalAlignment="Top"
                   Margin="0,0,0,8">
@@ -269,8 +270,12 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                <ComboBox Grid.Column="0" x:Name="ModeCombo"
+                <ComboBox Grid.Row="0" Grid.Column="0" x:Name="ModeCombo"
                           Width="180" Height="30" FontSize="13"
                           Padding="6,4"
                           VerticalContentAlignment="Center"
@@ -279,13 +284,13 @@
                     <ComboBoxItem Content="Жамкать"/>
                 </ComboBox>
 
-                <TextBlock Grid.Column="1" x:Name="ParamLabel"
+                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ParamLabel"
                            Text="Начать с шага:"
                            FontSize="13"
                            VerticalAlignment="Center"
                            Margin="18,0,5,0"/>
 
-                <TextBox Grid.Column="2" x:Name="ParamBox"
+                <TextBox Grid.Row="0" Grid.Column="2" x:Name="ParamBox"
                          Width="55" Height="30" FontSize="13"
                          Text="1"
                          Padding="4,2"
@@ -293,13 +298,13 @@
                          VerticalContentAlignment="Center"
                          TextChanged="ParamBox_TextChanged"/>
 
-                <TextBlock Grid.Column="3"
+                <TextBlock Grid.Row="0" Grid.Column="3"
                            Text="КОСА:"
                            FontSize="13"
                            VerticalAlignment="Center"
                            Margin="25,0,6,0"/>
 
-                <StackPanel Grid.Column="4"
+                <StackPanel Grid.Row="0" Grid.Column="4"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
                     <CheckBox x:Name="KosaCheckBox"
@@ -318,6 +323,25 @@
                     <TextBlock Text="сек"
                                FontSize="13"
                                VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- NEW: строка автоСтарта -->
+                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,8,0,0">
+                    <CheckBox x:Name="AutoStartCheckBox"
+                              Content="автоСтарт"
+                              FontSize="13"
+                              VerticalAlignment="Center"
+                              Checked="AutoStartCheckBox_Changed"
+                              Unchecked="AutoStartCheckBox_Changed"/>
+                    <TextBlock x:Name="AutoStartInfoText"
+                               Text=""
+                               FontSize="11"
+                               Foreground="Gray"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0"/>
                 </StackPanel>
             </Grid>
 

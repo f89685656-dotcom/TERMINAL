@@ -363,6 +363,12 @@ namespace TERMINAL
         private bool _kosaEnabled = false;
         private int _kosaTimerSeconds = 25;
 
+        // NEW: автоСтарт
+        private bool _autoStartEnabled = false;
+        private bool _autoStartTriggered = false;
+        private const int AutoStartCalibrationMinutes = 120; // 2 часа для градуировки
+        private const int AutoStartPumpMinutes = 30;         // 30 минут для жамки
+
         private string _currentPressureUnitsLabel = "";
 
         private static readonly string SettingsDir =
@@ -469,6 +475,8 @@ namespace TERMINAL
             public string CycleCount { get; set; } = "10";
             public bool KosaEnabled { get; set; } = false;
             public int KosaTimerSeconds { get; set; } = 25;
+            // NEW: автоСтарт
+            public bool AutoStartEnabled { get; set; } = false;
         }
 
         private void LoadSettings()
@@ -498,6 +506,8 @@ namespace TERMINAL
                 _kosaEnabled = _loadedSettings.KosaEnabled;
                 _kosaTimerSeconds = _loadedSettings.KosaTimerSeconds > 0
                     ? _loadedSettings.KosaTimerSeconds : 25;
+                // NEW: автоСтарт
+                _autoStartEnabled = _loadedSettings.AutoStartEnabled;
             }
             catch
             {
@@ -506,6 +516,7 @@ namespace TERMINAL
                 _savedCycleCount = "10";
                 _kosaEnabled = false;
                 _kosaTimerSeconds = 25;
+                _autoStartEnabled = false; // NEW
 
                 string docs = Environment.GetFolderPath(
                     Environment.SpecialFolder.MyDocuments);
@@ -555,6 +566,10 @@ namespace TERMINAL
             if (KosaTimerBox != null)
                 KosaTimerBox.Text = _kosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
 
+            // NEW: автоСтарт
+            if (AutoStartCheckBox != null)
+                AutoStartCheckBox.IsChecked = _autoStartEnabled;
+
             UpdateModeUi();
 
             if (TargetPressureCombo.SelectedItem != null)
@@ -589,7 +604,8 @@ namespace TERMINAL
                     StartStep = _savedStartStep,
                     CycleCount = _savedCycleCount,
                     KosaEnabled = _kosaEnabled,
-                    KosaTimerSeconds = _kosaTimerSeconds
+                    KosaTimerSeconds = _kosaTimerSeconds,
+                    AutoStartEnabled = _autoStartEnabled // NEW
                 };
 
                 string json = JsonSerializer.Serialize(s,
@@ -660,6 +676,7 @@ namespace TERMINAL
             }
 
             UpdateCyclesLabel();
+            UpdateAutoStartInfo(); // NEW
         }
 
         private void ParamBox_TextChanged(object sender,
@@ -729,6 +746,36 @@ namespace TERMINAL
                 _kosaTimerSeconds = v;
                 SaveSettings();
             }
+        }
+
+        // ─────────────────────────── АВТОСТАРТ ───────────────────────────
+
+        private void AutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            _autoStartEnabled = AutoStartCheckBox.IsChecked == true;
+            _autoStartTriggered = false;
+            UpdateAutoStartInfo();
+            SaveSettings();
+        }
+
+        private void UpdateAutoStartInfo()
+        {
+            if (AutoStartInfoText == null) return;
+
+            if (!_autoStartEnabled)
+            {
+                AutoStartInfoText.Text = "";
+                return;
+            }
+
+            int minutes = _isCalibrationMode
+                ? AutoStartCalibrationMinutes
+                : AutoStartPumpMinutes;
+
+            AutoStartInfoText.Text =
+                $"Запуск «{(_isCalibrationMode ? "Градуировка" : "Жамкать")}» " +
+                $"после {minutes} мин стабилизации";
         }
 
         // ─────────────────────────── COMBOBOX ───────────────────────────
@@ -853,6 +900,18 @@ namespace TERMINAL
                 item.KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
             }
 
+            UpdateStepCounter();
+        }
+
+        // NEW: сброс только таймеров шагов (для STOP/VENT)
+        private void ResetStepTimers()
+        {
+            foreach (var item in _stepItems)
+            {
+                item.TimerText = item.PlannedDuration.ToString();
+                item.ArrowText = "  ";
+                item.KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
+            }
             UpdateStepCounter();
         }
 
@@ -1129,7 +1188,6 @@ namespace TERMINAL
 
         private void RemoveOffline_Click(object sender, RoutedEventArgs e)
         {
-            // NEW: не трогаем клиентов во время программы
             if (_isRunning) return;
 
             lock (_clientsLock)
@@ -1181,7 +1239,6 @@ namespace TERMINAL
                 c.SetStatusWaiting();
             }
 
-            // NEW: рассылаем TAKE_POINT всем клиентам ОДНОВРЕМЕННО
             byte[] message = Encoding.ASCII.GetBytes("TAKE_POINT\n");
 
             var sendTasks = selected.Select(async c =>
@@ -1197,7 +1254,6 @@ namespace TERMINAL
 
             await Task.WhenAll(sendTasks);
 
-            // NEW: ждём DONE от всех ОДНОВРЕМЕННО
             var waitTasks = selected.Select(c => WaitForClientDoneAsync(c)).ToList();
             bool[] results = await Task.WhenAll(waitTasks);
 
@@ -1261,7 +1317,6 @@ namespace TERMINAL
 
         private async void TakePointBroadcast_Click(object sender, RoutedEventArgs e)
         {
-            // NEW: не мешаем программе
             if (_isRunning)
             {
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
@@ -1300,7 +1355,7 @@ namespace TERMINAL
                 if (_stopRequested) return false;
 
                 SetStatus($"КОСА: пауза перед съёмом {i + 2}/3 ({_kosaTimerSeconds} сек)");
-                await KosaWaitAsync(_kosaTimerSeconds, waitForState);
+                await KosaWaitAsync(_kosaTimerSeconds, waitForState, stepIndex); // NEW: stepIndex
                 if (_stopRequested) return false;
 
                 SetStatus($"КОСА: съём {i + 2}/3");
@@ -1327,7 +1382,6 @@ namespace TERMINAL
                 return false;
             }
 
-            // NEW: все клиенты снимают параллельно
             var tasks = selected.Select(c => TakePointUntilOkAsync(c)).ToList();
             bool[] results = await Task.WhenAll(tasks);
 
@@ -1381,7 +1435,8 @@ namespace TERMINAL
             return false;
         }
 
-        private async Task KosaWaitAsync(int seconds, bool waitForState)
+        // NEW: добавлен параметр stepIndex — для отображения таймера в текущем шаге
+        private async Task KosaWaitAsync(int seconds, bool waitForState, int stepIndex)
         {
             int remaining = seconds;
             _timerActive = true;
@@ -1393,9 +1448,13 @@ namespace TERMINAL
                     if (_stopRequested) { _timerActive = false; return; }
                     if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
                     SetStatus($"КОСА: пауза {remaining} сек");
+                    if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                        _stepItems[stepIndex].TimerText = remaining.ToString();
                     await SafeDelayAsync(1000);
                     remaining--;
                 }
+                if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                    _stepItems[stepIndex].TimerText = "0";
                 _timerActive = false;
                 return;
             }
@@ -1433,11 +1492,15 @@ namespace TERMINAL
                 {
                     remaining--;
                     SetStatus($"КОСА: пауза {remaining} сек");
+                    if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                        _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
                 else if (s != null && s.Contains("wait;", StringComparison.Ordinal))
                 {
                     remaining += 30;
                     SetStatus($"КОСА: срыв! Таймер +30 сек. Осталось: {remaining}");
+                    if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                        _stepItems[stepIndex].TimerText = remaining.ToString();
 
                     while (true)
                     {
@@ -1454,6 +1517,9 @@ namespace TERMINAL
                 await SafeDelayAsync(1000);
             }
 
+            if (stepIndex >= 0 && stepIndex < _stepItems.Count)
+                _stepItems[stepIndex].TimerText = "0";
+
             _timerActive = false;
         }
 
@@ -1465,6 +1531,8 @@ namespace TERMINAL
         {
             if (_isRunning) { MessageBox.Show("Программа уже запущена."); return; }
             if (_selectedTargetPressure == null) { MessageBox.Show("Выберите диапазон давлений."); return; }
+
+            _autoStartTriggered = false; // NEW: ручной пуск сбрасывает флаг
 
             if (_isCalibrationMode && _kosaEnabled)
             {
@@ -1545,7 +1613,6 @@ namespace TERMINAL
 
             StartButton.IsEnabled = false;
 
-            // NEW: блокируем внешние кнопки
             SetExternalButtonsEnabled(false);
 
             for (int i = 0; i < _stepItems.Count; i++)
@@ -1606,7 +1673,6 @@ namespace TERMINAL
 
                 ResetStepsToInitial();
 
-                // NEW: разблокируем внешние кнопки ТОЛЬКО здесь
                 SetExternalButtonsEnabled(true);
 
                 List<ConnectedClient> clientsSnapshot;
@@ -1768,7 +1834,6 @@ namespace TERMINAL
 
             StartButton.IsEnabled = false;
 
-            // NEW: блокируем внешние кнопки
             SetExternalButtonsEnabled(false);
 
             _totalTimerStart = DateTime.Now;
@@ -1802,7 +1867,6 @@ namespace TERMINAL
                 MaxTimerText.Text = "";
                 MinTimerText.Text = "";
 
-                // NEW: разблокируем внешние кнопки
                 SetExternalButtonsEnabled(true);
 
                 List<ConnectedClient> clientsSnapshot;
@@ -2349,11 +2413,49 @@ namespace TERMINAL
                 var elapsed = DateTime.Now - _stabilizationTimerStart;
                 StabilizationTimerText.Text =
                     $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+
+                // NEW: проверка автоСтарта
+                TryTriggerAutoStart(elapsed);
             }
             else
             {
                 _stabilizationTimerActive = false;
             }
+        }
+
+        // NEW: логика автоСтарта
+        private void TryTriggerAutoStart(TimeSpan elapsed)
+        {
+            if (!_autoStartEnabled) return;
+            if (_autoStartTriggered) return;
+            if (_isRunning) return;
+
+            int requiredMinutes = _isCalibrationMode
+                ? AutoStartCalibrationMinutes
+                : AutoStartPumpMinutes;
+
+            if (elapsed.TotalMinutes < requiredMinutes) return;
+
+            _autoStartTriggered = true;
+
+            Dispatcher.InvokeAsync(async () =>
+            {
+                SetStatusSuccess(
+                    $"автоСтарт: стабилизация {requiredMinutes} мин — " +
+                    $"запуск «{(_isCalibrationMode ? "Градуировка" : "Жамкать")}»");
+
+                try
+                {
+                    if (_isCalibrationMode)
+                        await RunCalibrationModeAsync();
+                    else
+                        await RunPumpModeAsync();
+                }
+                catch (Exception ex)
+                {
+                    SetStatusError($"автоСтарт ошибка: {ex.Message}");
+                }
+            });
         }
 
         // ─────────────────────────── СКТБ ЭлПа (ПЛАТИНА) ───────────────────────────
@@ -2826,7 +2928,6 @@ namespace TERMINAL
 
         private async void SaveData_Click(object sender, RoutedEventArgs e)
         {
-            // NEW: не мешаем программе
             if (_isRunning)
             {
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
@@ -2905,7 +3006,6 @@ namespace TERMINAL
 
         private async void ClearData_Click(object sender, RoutedEventArgs e)
         {
-            // NEW: не мешаем программе
             if (_isRunning)
             {
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
@@ -2920,8 +3020,11 @@ namespace TERMINAL
             _timerActive = false;
             _totalTimerActive = false;
             _pauseRequested = false;
+            _autoStartTriggered = false; // NEW: разрешаем автоСтарт снова
 
             TimerText.Text = "00:00:00";
+
+            ResetStepTimers(); // NEW: сбрасываем таймеры шагов
 
             await SendCommandNoWaitAsync("set_mode=stop;");
             SetStatusError("АВАРИЙНАЯ ОСТАНОВКА");
@@ -2937,8 +3040,10 @@ namespace TERMINAL
                 _stopRequested = true;
                 _totalTimerActive = false;
                 _pauseRequested = false;
+                _autoStartTriggered = false; // NEW
 
                 TimerText.Text = "00:00:00";
+                ResetStepTimers(); // NEW
             }
             string? resp = await SendCommandAsync("set_mode=vent;");
             SetStatus($"Сброс отправлен: {resp}");
@@ -2978,7 +3083,6 @@ namespace TERMINAL
                 CalibrateStocksButton.IsEnabled = true;
             }
         }
-
 
         private async Task<bool> SendWithRetryAsync(string command, string expected)
         {
@@ -3168,6 +3272,8 @@ namespace TERMINAL
             _platinaTimer.Start();
 
             await RefreshPlatinaAsync();
+
+            UpdateAutoStartInfo(); // NEW
         }
 
         private async Task ConnectToDeviceLoopAsync()
@@ -3242,7 +3348,6 @@ namespace TERMINAL
                             UpdateUnits(ur);
                             await RefreshPressureAndSetPointAsync();
 
-                            // NEW: чтение статуса АГК
                             await RefreshAgkStatusAsync();
 
                             agkOk = true;
