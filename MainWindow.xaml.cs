@@ -332,6 +332,10 @@ namespace TERMINAL
         private bool _stabilizationTimerActive = false;
         private const double FurnaceStabilizationTolerance = 0.1;
 
+        // NEW: отслеживание выхода температуры за допуск (льготная минута)
+        private DateTime _stabilizationOutOfRangeSince = DateTime.MinValue;
+        private const int StabilizationOutOfRangeGraceSeconds = 60; // 1 минута
+
         // Последнее известное значение уставки (для отслеживания смены)
         private double _lastFurnaceSetPoint = double.NaN;
 
@@ -2344,11 +2348,16 @@ namespace TERMINAL
 
         // ─────────────────────────── ТАЙМЕР СТАБИЛИЗАЦИИ ───────────────────────────
 
+        // ИЗМЕНЕНО: сброс только если пользователь сам редактирует поле
         private void FurnaceSetPointBox_TextChanged(object sender,
             System.Windows.Controls.TextChangedEventArgs e)
         {
             if (!_uiLoaded) return;
             if (FurnaceSetPointBox == null) return;
+
+            // ИЗМЕНЕНО: игнорируем программные обновления (из печи),
+            // сбрасываем таймер только когда пользователь сам редактирует поле
+            if (!FurnaceSetPointBox.IsKeyboardFocused) return;
 
             string txt = FurnaceSetPointBox.Text?.Replace(',', '.') ?? "";
             if (double.TryParse(txt, NumberStyles.Float,
@@ -2367,6 +2376,7 @@ namespace TERMINAL
         {
             _stabilizationTimerActive = false;
             _stabilizationTimerStart = DateTime.MinValue;
+            _stabilizationOutOfRangeSince = DateTime.MinValue; // NEW
             if (StabilizationTimerText != null)
                 StabilizationTimerText.Text = "00:00:00";
         }
@@ -2377,6 +2387,7 @@ namespace TERMINAL
             SetStatus("Таймер стабилизации сброшен", false);
         }
 
+        // ИЗМЕНЕНО: логика с льготной минутой при выходе из допуска
         private void UpdateStabilizationTimer()
         {
             if (StabilizationTimerText == null) return;
@@ -2385,7 +2396,6 @@ namespace TERMINAL
             if (!double.TryParse(spTxt, NumberStyles.Float,
                 CultureInfo.InvariantCulture, out double setPoint))
             {
-                ResetStabilizationTimer();
                 return;
             }
 
@@ -2397,7 +2407,6 @@ namespace TERMINAL
             if (!double.TryParse(tTxt, NumberStyles.Float,
                 CultureInfo.InvariantCulture, out double currentTemp))
             {
-                ResetStabilizationTimer();
                 return;
             }
 
@@ -2405,6 +2414,9 @@ namespace TERMINAL
 
             if (inRange)
             {
+                // Вернулись в допуск — сбрасываем счётчик выхода
+                _stabilizationOutOfRangeSince = DateTime.MinValue;
+
                 if (!_stabilizationTimerActive)
                 {
                     _stabilizationTimerStart = DateTime.Now;
@@ -2419,7 +2431,33 @@ namespace TERMINAL
             }
             else
             {
-                _stabilizationTimerActive = false;
+                // Вышли из допуска — запускаем отсчёт "льготной" минуты
+                if (_stabilizationOutOfRangeSince == DateTime.MinValue)
+                {
+                    _stabilizationOutOfRangeSince = DateTime.Now;
+                    // Таймер пока НЕ сбрасываем — ждём 1 минуту
+                }
+
+                var outOfRange = DateTime.Now - _stabilizationOutOfRangeSince;
+
+                if (outOfRange.TotalSeconds >= StabilizationOutOfRangeGraceSeconds)
+                {
+                    // Прошла минута, а температура так и не вернулась — сбрасываем
+                    ResetStabilizationTimer();
+                    _stabilizationOutOfRangeSince = DateTime.MinValue;
+                }
+                else
+                {
+                    // Ещё в пределах льготной минуты — таймер продолжает идти
+                    if (_stabilizationTimerActive)
+                    {
+                        var elapsed = DateTime.Now - _stabilizationTimerStart;
+                        StabilizationTimerText.Text =
+                            $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+
+                        TryTriggerAutoStart(elapsed);
+                    }
+                }
             }
         }
 
