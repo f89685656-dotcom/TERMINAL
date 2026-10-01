@@ -479,7 +479,6 @@ namespace TERMINAL
             public string CycleCount { get; set; } = "10";
             public bool KosaEnabled { get; set; } = false;
             public int KosaTimerSeconds { get; set; } = 25;
-            // NEW: автоСтарт
             public bool AutoStartEnabled { get; set; } = false;
         }
 
@@ -510,7 +509,6 @@ namespace TERMINAL
                 _kosaEnabled = _loadedSettings.KosaEnabled;
                 _kosaTimerSeconds = _loadedSettings.KosaTimerSeconds > 0
                     ? _loadedSettings.KosaTimerSeconds : 25;
-                // NEW: автоСтарт
                 _autoStartEnabled = _loadedSettings.AutoStartEnabled;
             }
             catch
@@ -520,7 +518,7 @@ namespace TERMINAL
                 _savedCycleCount = "10";
                 _kosaEnabled = false;
                 _kosaTimerSeconds = 25;
-                _autoStartEnabled = false; // NEW
+                _autoStartEnabled = false;
 
                 string docs = Environment.GetFolderPath(
                     Environment.SpecialFolder.MyDocuments);
@@ -570,7 +568,6 @@ namespace TERMINAL
             if (KosaTimerBox != null)
                 KosaTimerBox.Text = _kosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
 
-            // NEW: автоСтарт
             if (AutoStartCheckBox != null)
                 AutoStartCheckBox.IsChecked = _autoStartEnabled;
 
@@ -609,7 +606,7 @@ namespace TERMINAL
                     CycleCount = _savedCycleCount,
                     KosaEnabled = _kosaEnabled,
                     KosaTimerSeconds = _kosaTimerSeconds,
-                    AutoStartEnabled = _autoStartEnabled // NEW
+                    AutoStartEnabled = _autoStartEnabled
                 };
 
                 string json = JsonSerializer.Serialize(s,
@@ -680,7 +677,7 @@ namespace TERMINAL
             }
 
             UpdateCyclesLabel();
-            UpdateAutoStartInfo(); // NEW
+            UpdateAutoStartInfo();
         }
 
         private void ParamBox_TextChanged(object sender,
@@ -770,6 +767,15 @@ namespace TERMINAL
             if (!_autoStartEnabled)
             {
                 AutoStartInfoText.Text = "";
+                return;
+            }
+
+            // NEW (C): отображаем состояние автоСтарта
+            if (_autoStartTriggered)
+            {
+                AutoStartInfoText.Text =
+                    "автоСтарт уже сработал/заблокирован. " +
+                    "Смените уставку или сбросьте таймер стабилизации для повтора.";
                 return;
             }
 
@@ -907,7 +913,6 @@ namespace TERMINAL
             UpdateStepCounter();
         }
 
-        // NEW: сброс только таймеров шагов (для STOP/VENT)
         private void ResetStepTimers()
         {
             foreach (var item in _stepItems)
@@ -1359,7 +1364,7 @@ namespace TERMINAL
                 if (_stopRequested) return false;
 
                 SetStatus($"КОСА: пауза перед съёмом {i + 2}/3 ({_kosaTimerSeconds} сек)");
-                await KosaWaitAsync(_kosaTimerSeconds, waitForState, stepIndex); // NEW: stepIndex
+                await KosaWaitAsync(_kosaTimerSeconds, waitForState, stepIndex);
                 if (_stopRequested) return false;
 
                 SetStatus($"КОСА: съём {i + 2}/3");
@@ -1439,7 +1444,6 @@ namespace TERMINAL
             return false;
         }
 
-        // NEW: добавлен параметр stepIndex — для отображения таймера в текущем шаге
         private async Task KosaWaitAsync(int seconds, bool waitForState, int stepIndex)
         {
             int remaining = seconds;
@@ -1536,7 +1540,17 @@ namespace TERMINAL
             if (_isRunning) { MessageBox.Show("Программа уже запущена."); return; }
             if (_selectedTargetPressure == null) { MessageBox.Show("Выберите диапазон давлений."); return; }
 
-            _autoStartTriggered = false; // NEW: ручной пуск сбрасывает флаг
+            _autoStartTriggered = false;
+
+            // NEW (C): если таймер стабилизации уже превысил порог —
+            // блокируем автоСтарт, чтобы он не сработал после завершения ручного пуска.
+            if (_autoStartEnabled && IsStabilizationThresholdReached())
+            {
+                _autoStartTriggered = true;
+                SetStatusWarning(
+                    "автоСтарт: ручной пуск — автозапуск отменён для текущего цикла стабилизации");
+                UpdateAutoStartInfo();
+            }
 
             if (_isCalibrationMode && _kosaEnabled)
             {
@@ -1552,6 +1566,36 @@ namespace TERMINAL
                 await RunCalibrationModeAsync();
             else
                 await RunPumpModeAsync();
+        }
+
+        // NEW (C): проверка — достиг ли таймер стабилизации порога автоСтарта
+        private bool IsStabilizationThresholdReached()
+        {
+            if (!_stabilizationTimerActive) return false;
+
+            string spTxt = FurnaceSetPointBox?.Text?.Replace(',', '.') ?? "";
+            if (!double.TryParse(spTxt, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double sp))
+                return false;
+
+            string tTxt = FurnaceCurrentTempText?.Text ?? "";
+            int idx = tTxt.IndexOf(" °C", StringComparison.Ordinal);
+            if (idx >= 0) tTxt = tTxt.Substring(0, idx);
+            tTxt = tTxt.Trim().TrimStart('+').Replace(',', '.');
+
+            if (!double.TryParse(tTxt, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double ct))
+                return false;
+
+            if (Math.Abs(ct - sp) > FurnaceStabilizationTolerance) return false;
+
+            var elapsed = DateTime.Now - _stabilizationTimerStart;
+
+            int requiredMinutes = _isCalibrationMode
+                ? AutoStartCalibrationMinutes
+                : AutoStartPumpMinutes;
+
+            return elapsed.TotalMinutes >= requiredMinutes;
         }
 
         private void PauseButton_Click(object sender, RoutedEventArgs e)
@@ -1686,6 +1730,8 @@ namespace TERMINAL
                 {
                     if (!c.IsOffline) c.SetStatusReady();
                 }
+
+                UpdateAutoStartInfo(); // NEW (C): обновляем подсказку после завершения
             }
         }
 
@@ -1880,6 +1926,8 @@ namespace TERMINAL
                 {
                     if (!c.IsOffline) c.SetStatusReady();
                 }
+
+                UpdateAutoStartInfo(); // NEW (C)
             }
         }
 
@@ -2348,15 +2396,13 @@ namespace TERMINAL
 
         // ─────────────────────────── ТАЙМЕР СТАБИЛИЗАЦИИ ───────────────────────────
 
-        // ИЗМЕНЕНО: сброс только если пользователь сам редактирует поле
         private void FurnaceSetPointBox_TextChanged(object sender,
             System.Windows.Controls.TextChangedEventArgs e)
         {
             if (!_uiLoaded) return;
             if (FurnaceSetPointBox == null) return;
 
-            // ИЗМЕНЕНО: игнорируем программные обновления (из печи),
-            // сбрасываем таймер только когда пользователь сам редактирует поле
+            // Сбрасываем таймер только когда пользователь сам редактирует поле
             if (!FurnaceSetPointBox.IsKeyboardFocused) return;
 
             string txt = FurnaceSetPointBox.Text?.Replace(',', '.') ?? "";
@@ -2367,6 +2413,9 @@ namespace TERMINAL
                     Math.Abs(sp - _lastFurnaceSetPoint) > 0.0001)
                 {
                     ResetStabilizationTimer();
+                    // NEW (C): при смене уставки разрешаем автоСтарт снова
+                    _autoStartTriggered = false;
+                    UpdateAutoStartInfo();
                 }
                 _lastFurnaceSetPoint = sp;
             }
@@ -2376,7 +2425,7 @@ namespace TERMINAL
         {
             _stabilizationTimerActive = false;
             _stabilizationTimerStart = DateTime.MinValue;
-            _stabilizationOutOfRangeSince = DateTime.MinValue; // NEW
+            _stabilizationOutOfRangeSince = DateTime.MinValue;
             if (StabilizationTimerText != null)
                 StabilizationTimerText.Text = "00:00:00";
         }
@@ -2384,10 +2433,12 @@ namespace TERMINAL
         private void ResetStabilizationTimer_Click(object sender, RoutedEventArgs e)
         {
             ResetStabilizationTimer();
-            SetStatus("Таймер стабилизации сброшен", false);
+            // NEW (C): сброс таймера вручную разрешает автоСтарт снова
+            _autoStartTriggered = false;
+            UpdateAutoStartInfo();
+            SetStatus("Таймер стабилизации сброшен, автоСтарт разрешён", false);
         }
 
-        // ИЗМЕНЕНО: логика с льготной минутой при выходе из допуска
         private void UpdateStabilizationTimer()
         {
             if (StabilizationTimerText == null) return;
@@ -2414,7 +2465,6 @@ namespace TERMINAL
 
             if (inRange)
             {
-                // Вернулись в допуск — сбрасываем счётчик выхода
                 _stabilizationOutOfRangeSince = DateTime.MinValue;
 
                 if (!_stabilizationTimerActive)
@@ -2426,29 +2476,24 @@ namespace TERMINAL
                 StabilizationTimerText.Text =
                     $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
 
-                // NEW: проверка автоСтарта
                 TryTriggerAutoStart(elapsed);
             }
             else
             {
-                // Вышли из допуска — запускаем отсчёт "льготной" минуты
                 if (_stabilizationOutOfRangeSince == DateTime.MinValue)
                 {
                     _stabilizationOutOfRangeSince = DateTime.Now;
-                    // Таймер пока НЕ сбрасываем — ждём 1 минуту
                 }
 
                 var outOfRange = DateTime.Now - _stabilizationOutOfRangeSince;
 
                 if (outOfRange.TotalSeconds >= StabilizationOutOfRangeGraceSeconds)
                 {
-                    // Прошла минута, а температура так и не вернулась — сбрасываем
                     ResetStabilizationTimer();
                     _stabilizationOutOfRangeSince = DateTime.MinValue;
                 }
                 else
                 {
-                    // Ещё в пределах льготной минуты — таймер продолжает идти
                     if (_stabilizationTimerActive)
                     {
                         var elapsed = DateTime.Now - _stabilizationTimerStart;
@@ -2461,12 +2506,11 @@ namespace TERMINAL
             }
         }
 
-        // NEW: логика автоСтарта
+        // NEW (C): автоСтарт с защитой от повторного срабатывания
         private void TryTriggerAutoStart(TimeSpan elapsed)
         {
             if (!_autoStartEnabled) return;
             if (_autoStartTriggered) return;
-            if (_isRunning) return;
 
             int requiredMinutes = _isCalibrationMode
                 ? AutoStartCalibrationMinutes
@@ -2474,7 +2518,17 @@ namespace TERMINAL
 
             if (elapsed.TotalMinutes < requiredMinutes) return;
 
+            // NEW (C): если программа уже идёт — помечаем автоСтарт как сработавший,
+            // чтобы он не выстрелил после завершения текущей программы.
+            if (_isRunning)
+            {
+                _autoStartTriggered = true;
+                UpdateAutoStartInfo();
+                return;
+            }
+
             _autoStartTriggered = true;
+            UpdateAutoStartInfo();
 
             Dispatcher.InvokeAsync(async () =>
             {
@@ -3058,14 +3112,15 @@ namespace TERMINAL
             _timerActive = false;
             _totalTimerActive = false;
             _pauseRequested = false;
-            _autoStartTriggered = false; // NEW: разрешаем автоСтарт снова
+            _autoStartTriggered = false;
 
             TimerText.Text = "00:00:00";
 
-            ResetStepTimers(); // NEW: сбрасываем таймеры шагов
+            ResetStepTimers();
 
             await SendCommandNoWaitAsync("set_mode=stop;");
             SetStatusError("АВАРИЙНАЯ ОСТАНОВКА");
+            UpdateAutoStartInfo(); // NEW (C)
         }
 
         private async void VentButton_Click(object sender, RoutedEventArgs e)
@@ -3078,10 +3133,11 @@ namespace TERMINAL
                 _stopRequested = true;
                 _totalTimerActive = false;
                 _pauseRequested = false;
-                _autoStartTriggered = false; // NEW
+                _autoStartTriggered = false;
 
                 TimerText.Text = "00:00:00";
-                ResetStepTimers(); // NEW
+                ResetStepTimers();
+                UpdateAutoStartInfo(); // NEW (C)
             }
             string? resp = await SendCommandAsync("set_mode=vent;");
             SetStatus($"Сброс отправлен: {resp}");
@@ -3301,7 +3357,6 @@ namespace TERMINAL
             await RefreshFurnaceSetPointAsync();
             UpdateStabilizationTimer();
 
-            // СКТБ ЭлПа (платина) — опрос раз в секунду
             _platinaTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(1)
@@ -3311,7 +3366,7 @@ namespace TERMINAL
 
             await RefreshPlatinaAsync();
 
-            UpdateAutoStartInfo(); // NEW
+            UpdateAutoStartInfo();
         }
 
         private async Task ConnectToDeviceLoopAsync()
@@ -3551,7 +3606,6 @@ namespace TERMINAL
             StatusText.Text = text; StatusText.Foreground = Brushes.OrangeRed;
         }
 
-        // NEW: блокировка внешних кнопок на время программы
         private void SetExternalButtonsEnabled(bool enabled)
         {
             if (!Dispatcher.CheckAccess())
