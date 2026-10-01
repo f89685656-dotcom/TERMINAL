@@ -1,4 +1,5 @@
-﻿using System;
+﻿using HidSharp;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -7,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -14,7 +16,6 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
-using HidSharp;
 
 namespace TERMINAL
 {
@@ -1005,8 +1006,8 @@ namespace TERMINAL
                 Environment.Exit(1);
             }
         }
-
-        private void RefreshClientsUi()
+        
+            private void RefreshClientsUi()
         {
             List<ConnectedClient> snapshot;
             List<ConnectedClient> toRemove = new();
@@ -1034,20 +1035,6 @@ namespace TERMINAL
 
             ClientsList.ItemsSource = null;
             ClientsList.ItemsSource = snapshot;
-
-            int onlineCount = snapshot.Count(c => !c.IsOffline);
-            int totalCount = snapshot.Count;
-
-            if (totalCount == onlineCount)
-                BroadcastStatusText.Text = $"Клиентов подключено: {onlineCount}";
-            else
-                BroadcastStatusText.Text =
-                    $"Клиентов подключено: {onlineCount} (offline: {totalCount - onlineCount})";
-
-            BroadcastStatusIcon.Text = onlineCount > 0 ? "✔" : "⛔";
-            BroadcastStatusIcon.Foreground = onlineCount > 0
-                ? Brushes.Green
-                : Brushes.Red;
         }
 
         private async Task HandleClientAsync(TcpClient client)
@@ -2172,8 +2159,6 @@ namespace TERMINAL
             };
             _statusResetTimer.Start();
 
-            TimerText.Text = "00:00:00";
-
             await Task.CompletedTask;
         }
 
@@ -3114,8 +3099,6 @@ namespace TERMINAL
             _pauseRequested = false;
             _autoStartTriggered = false;
 
-            TimerText.Text = "00:00:00";
-
             ResetStepTimers();
 
             await SendCommandNoWaitAsync("set_mode=stop;");
@@ -3135,7 +3118,6 @@ namespace TERMINAL
                 _pauseRequested = false;
                 _autoStartTriggered = false;
 
-                TimerText.Text = "00:00:00";
                 ResetStepTimers();
                 UpdateAutoStartInfo(); // NEW (C)
             }
@@ -3330,6 +3312,9 @@ namespace TERMINAL
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            if (VersionText != null)
+                VersionText.Text = GetAppVersion();
+
             StartBroadcastServer();
 
             _ = Task.Run(ConnectToDeviceLoopAsync);
@@ -3415,12 +3400,6 @@ namespace TERMINAL
 
         private async void Timer_Tick(object? sender, EventArgs e)
         {
-            if (_totalTimerActive && !_pauseRequested)
-            {
-                var elapsed = DateTime.Now - _totalTimerStart;
-                TimerText.Text =
-                    $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
-            }
 
             if (_isRunning) return;
 
@@ -3604,6 +3583,17 @@ namespace TERMINAL
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusError(text)); return; }
             StatusText.Text = text; StatusText.Foreground = Brushes.OrangeRed;
+        }
+        private static string GetAppVersion()
+        {
+            var asm = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+            var v = asm.GetName().Version;
+            if (v == null) return "v0.0.0";
+
+            // 1.0.73.0 -> v1.0.73 ; 1.0.73.5 -> v1.0.73.5
+            return (v.Revision == 0 && v.Build >= 0)
+                ? $"v{v.Major}.{v.Minor}.{v.Build}"
+                : $"v{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
         }
 
         private void SetExternalButtonsEnabled(bool enabled)

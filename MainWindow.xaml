@@ -182,37 +182,13 @@
 
     <Grid Margin="15">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ROW 0: только время работы + клиенты (справа) -->
-        <Grid Grid.Row="0" Margin="0,0,0,10">
-            <StackPanel Orientation="Vertical"
-                        HorizontalAlignment="Right" VerticalAlignment="Top">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <TextBlock Text="Время работы:" FontSize="13" Foreground="Gray"
-                               VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock x:Name="TimerText" Text="00:00:00"
-                               FontSize="28" FontWeight="Bold"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
-                            Margin="0,3,0,0">
-                    <TextBlock x:Name="BroadcastStatusIcon" Text="⛔"
-                               FontSize="14" Foreground="Red"
-                               VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <TextBlock x:Name="BroadcastStatusText"
-                               Text="Клиентов подключено: 0"
-                               FontSize="11" Foreground="Gray"
-                               VerticalAlignment="Center"/>
-                </StackPanel>
-            </StackPanel>
-        </Grid>
-
-        <!-- ROW 1: основная рабочая область -->
-        <Grid Grid.Row="1">
+        <!-- ROW 0: основная рабочая область -->
+        <Grid Grid.Row="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -259,7 +235,6 @@
             </Grid>
 
             <!-- Режим + параметр + КОСА + автоСтарт -->
-            <!-- NEW: добавлена вторая строка с галочкой «автоСтарт» -->
             <Grid Grid.Row="2"
                   HorizontalAlignment="Left" VerticalAlignment="Top"
                   Margin="0,0,0,8">
@@ -325,7 +300,7 @@
                                VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <!-- NEW: строка автоСтарта -->
+                <!-- строка автоСтарта -->
                 <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5"
                             Orientation="Horizontal"
                             VerticalAlignment="Center"
@@ -601,8 +576,8 @@
             </Grid>
         </Grid>
 
-        <!-- Правая колонка: печь ST-351 + АГК -->
-        <StackPanel Grid.Row="1"
+        <!-- Правая колонка: печь ST-351 + АГК + СКТБ ЭлПа -->
+        <StackPanel Grid.Row="0"
                     Orientation="Vertical"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="300">
@@ -880,7 +855,7 @@
                                 Click="VentButton_Click"/>
                     </Grid>
 
-                    <!-- NEW: кнопка калибровки штоков -->
+                    <!-- кнопка калибровки штоков -->
                     <Button x:Name="CalibrateStocksButton"
                             Content="Калибровка штоков"
                             Style="{StaticResource ActionButtonStyle}"
@@ -889,7 +864,7 @@
                             Background="#FF6A4FA0"
                             Click="CalibrateStocksButton_Click"/>
 
-                    <!-- NEW: статус АГК (get_status) -->
+                    <!-- статус АГК (get_status) -->
                     <Border CornerRadius="4"
                             Padding="8,5"
                             Margin="0,8,0,0"
@@ -962,8 +937,8 @@
 
         </StackPanel>
 
-        <!-- ROW 2: Сохранение + Клиенты -->
-        <Grid Grid.Row="2" Margin="0,10,0,0">
+        <!-- ROW 1: Сохранение + Клиенты -->
+        <Grid Grid.Row="1" Margin="0,10,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -1078,11 +1053,23 @@
             </Border>
         </Grid>
 
-        <!-- ROW 3: статус -->
-        <TextBlock x:Name="StatusText" Grid.Row="3"
-                   Text="Готов" Foreground="Gray"
-                   FontSize="12"
-                   VerticalAlignment="Bottom"
-                   Margin="0,8,0,0"/>
+        <!-- ROW 2: статус + версия -->
+        <Grid Grid.Row="2" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusText" Grid.Column="0"
+                       Text="Готов" Foreground="Gray"
+                       FontSize="12"
+                       VerticalAlignment="Bottom"/>
+            <TextBlock x:Name="VersionText" Grid.Column="1"
+                       Text="v0.0.0"
+                       Foreground="Gray"
+                       FontSize="12"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Bottom"
+                       Margin="10,0,0,0"/>
+        </Grid>
     </Grid>
 </Window>
