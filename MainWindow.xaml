@@ -750,6 +750,163 @@
                             Background="#FF808080"
                             Click="ResetStabilizationTimer_Click"/>
 
+                    <!-- Следующая уставка ST-351 -->
+                    <TextBlock Text="Следующая уставка ST-351:"
+                               FontSize="12"
+                               Foreground="#FF505050"
+                               Margin="0,8,0,2"/>
+
+                    <Border CornerRadius="4"
+                            Padding="8,3"
+                            Margin="0,0,0,5"
+                            Background="#FF4A3A6B">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="След.:"
+                                       FontSize="12"
+                                       Foreground="#FFDDCCEE"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,6,0"/>
+                            <TextBox Grid.Column="1"
+                                     x:Name="NextFurnaceSetPointBox"
+                                     Width="75" Height="24" FontSize="15"
+                                     FontWeight="Bold"
+                                     Text=""
+                                     Padding="4,1"
+                                     Background="Transparent"
+                                     BorderBrush="#FF9A7FCE"
+                                     BorderThickness="1"
+                                     Foreground="White"
+                                     CaretBrush="White"
+                                     HorizontalAlignment="Right"
+                                     HorizontalContentAlignment="Center"
+                                     VerticalContentAlignment="Center"
+                                     TextChanged="NextFurnaceSetPointBox_TextChanged"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="°C"
+                                       FontSize="12"
+                                       Foreground="#FFDDCCEE"
+                                       VerticalAlignment="Center"
+                                       Margin="5,0,0,0"/>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock x:Name="NextFurnaceSetPointInfo"
+                               Text=""
+                               FontSize="11"
+                               Foreground="Gray"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,4"/>
+
+                    <Button x:Name="ApplyNextSetPointButton"
+                            Content="Применить следующую уставку"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Height="28" FontSize="11"
+                            Padding="4,2" Margin="0,0,0,0"
+                            Background="#FF6A4FA0"
+                            Click="ApplyNextSetPoint_Click"/>
+
+                    <!-- Пакетный режим по температурам -->
+                    <CheckBox x:Name="BatchModeCheckBox"
+                              Content="Пакетный режим"
+                              FontSize="12" FontWeight="Bold"
+                              Foreground="#FF505050"
+                              Margin="0,8,0,4"
+                              Checked="BatchModeCheckBox_Changed"
+                              Unchecked="BatchModeCheckBox_Changed"/>
+
+                    <Border x:Name="BatchPanel"
+                            BorderBrush="LightGray" BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="6"
+                            Background="White">
+                        <StackPanel>
+                            <ScrollViewer MaxHeight="150"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl x:Name="BatchList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding IndexText}"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,5,0"/>
+
+                                                <TextBox Grid.Column="1"
+                                                         Text="{Binding SetPointText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         FontSize="12"
+                                                         Padding="3,1"
+                                                         VerticalContentAlignment="Center"
+                                                         Margin="0,0,5,0"/>
+
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding StatusText}"
+                                                           FontSize="10"
+                                                           Foreground="{Binding StatusColor}"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,5,0"/>
+
+                                                <Button Grid.Column="3"
+                                                        Content="✕"
+                                                        FontSize="10"
+                                                        Width="20" Height="20"
+                                                        Padding="0"
+                                                        Background="#FFD08080"
+                                                        Foreground="White"
+                                                        BorderThickness="0"
+                                                        Click="RemoveBatchJob_Click"
+                                                        Tag="{Binding}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <Grid Margin="0,5,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        x:Name="AddBatchJobButton"
+                                        Content="+ Добавить"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Height="24" FontSize="10"
+                                        Padding="3,1"
+                                        Background="#FF80B080"
+                                        Click="AddBatchJob_Click"/>
+                                <Button Grid.Column="1"
+                                        x:Name="ClearBatchButton"
+                                        Content="Очистить"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Height="24" FontSize="10"
+                                        Padding="3,1" Margin="5,0,0,0"
+                                        Background="#FFB0A050"
+                                        Click="ClearBatch_Click"/>
+                            </Grid>
+
+                            <TextBlock x:Name="BatchProgressText"
+                                       Text=""
+                                       FontSize="10"
+                                       Foreground="#FF5050A0"
+                                       TextWrapping="Wrap"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+
                 </StackPanel>
             </Border>
 
