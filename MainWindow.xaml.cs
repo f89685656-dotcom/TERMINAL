@@ -333,15 +333,24 @@ namespace TERMINAL
         private bool _stabilizationTimerActive = false;
         private const double FurnaceStabilizationTolerance = 0.1;
 
-        // NEW: отслеживание выхода температуры за допуск (льготная минута)
+        // отслеживание выхода температуры за допуск (льготная минута)
         private DateTime _stabilizationOutOfRangeSince = DateTime.MinValue;
-        private const int StabilizationOutOfRangeGraceSeconds = 60; // 1 минута
+        private const int StabilizationOutOfRangeGraceSeconds = 60;
 
-        // Последнее известное значение уставки (для отслеживания смены)
+        // Последнее известное значение уставки
         private double _lastFurnaceSetPoint = double.NaN;
 
-        // Последнее валидное значение уставки печи (для имени CSV-файла)
+        // Последнее валидное значение уставки печи (для имени CSV)
         private float _lastValidFurnaceSetPoint = 0f;
+
+        // NEW: следующая уставка ST-351
+        private float? _nextFurnaceSetPoint = null;
+
+        // NEW: путь последнего сохранённого файла
+        private string? _lastSavedFilePath = null;
+
+        // NEW: флаг — применялась ли уже следующая уставка
+        private bool _nextSetPointApplied = false;
 
         // Гистерезис связи
         private const int ConnectionLostThreshold = 5;
@@ -368,11 +377,11 @@ namespace TERMINAL
         private bool _kosaEnabled = false;
         private int _kosaTimerSeconds = 25;
 
-        // NEW: автоСтарт
+        // автоСтарт
         private bool _autoStartEnabled = false;
         private bool _autoStartTriggered = false;
-        private const int AutoStartCalibrationMinutes = 120; // 2 часа для градуировки
-        private const int AutoStartPumpMinutes = 30;         // 30 минут для жамки
+        private const int AutoStartCalibrationMinutes = 120;
+        private const int AutoStartPumpMinutes = 30;
 
         private string _currentPressureUnitsLabel = "";
 
@@ -386,7 +395,7 @@ namespace TERMINAL
 
         private Settings? _loadedSettings = null;
 
-        // NEW: статус АГК (get_status)
+        // статус АГК (get_status)
         private DateTime _lastAgkStatusRequest = DateTime.MinValue;
         private int _agkStatusFailCount = 0;
         private const int AgkStatusRequestIntervalMs = 1000;
@@ -481,6 +490,7 @@ namespace TERMINAL
             public bool KosaEnabled { get; set; } = false;
             public int KosaTimerSeconds { get; set; } = 25;
             public bool AutoStartEnabled { get; set; } = false;
+            public string NextFurnaceSetPoint { get; set; } = "";
         }
 
         private void LoadSettings()
@@ -511,6 +521,13 @@ namespace TERMINAL
                 _kosaTimerSeconds = _loadedSettings.KosaTimerSeconds > 0
                     ? _loadedSettings.KosaTimerSeconds : 25;
                 _autoStartEnabled = _loadedSettings.AutoStartEnabled;
+
+                if (!string.IsNullOrWhiteSpace(_loadedSettings.NextFurnaceSetPoint) &&
+                    float.TryParse(_loadedSettings.NextFurnaceSetPoint.Replace(',', '.'),
+                        NumberStyles.Float, CultureInfo.InvariantCulture, out float nsp))
+                {
+                    _nextFurnaceSetPoint = nsp;
+                }
             }
             catch
             {
@@ -520,6 +537,7 @@ namespace TERMINAL
                 _kosaEnabled = false;
                 _kosaTimerSeconds = 25;
                 _autoStartEnabled = false;
+                _nextFurnaceSetPoint = null;
 
                 string docs = Environment.GetFolderPath(
                     Environment.SpecialFolder.MyDocuments);
@@ -572,6 +590,11 @@ namespace TERMINAL
             if (AutoStartCheckBox != null)
                 AutoStartCheckBox.IsChecked = _autoStartEnabled;
 
+            if (NextFurnaceSetPointBox != null && _nextFurnaceSetPoint.HasValue)
+                NextFurnaceSetPointBox.Text =
+                    _nextFurnaceSetPoint.Value.ToString("0.##", CultureInfo.InvariantCulture);
+
+            UpdateNextSetPointInfo();
             UpdateModeUi();
 
             if (TargetPressureCombo.SelectedItem != null)
@@ -607,7 +630,8 @@ namespace TERMINAL
                     CycleCount = _savedCycleCount,
                     KosaEnabled = _kosaEnabled,
                     KosaTimerSeconds = _kosaTimerSeconds,
-                    AutoStartEnabled = _autoStartEnabled
+                    AutoStartEnabled = _autoStartEnabled,
+                    NextFurnaceSetPoint = NextFurnaceSetPointBox?.Text ?? ""
                 };
 
                 string json = JsonSerializer.Serialize(s,
@@ -771,7 +795,6 @@ namespace TERMINAL
                 return;
             }
 
-            // NEW (C): отображаем состояние автоСтарта
             if (_autoStartTriggered)
             {
                 AutoStartInfoText.Text =
@@ -1006,8 +1029,8 @@ namespace TERMINAL
                 Environment.Exit(1);
             }
         }
-        
-            private void RefreshClientsUi()
+
+        private void RefreshClientsUi()
         {
             List<ConnectedClient> snapshot;
             List<ConnectedClient> toRemove = new();
@@ -1528,9 +1551,8 @@ namespace TERMINAL
             if (_selectedTargetPressure == null) { MessageBox.Show("Выберите диапазон давлений."); return; }
 
             _autoStartTriggered = false;
+            _nextSetPointApplied = false;
 
-            // NEW (C): если таймер стабилизации уже превысил порог —
-            // блокируем автоСтарт, чтобы он не сработал после завершения ручного пуска.
             if (_autoStartEnabled && IsStabilizationThresholdReached())
             {
                 _autoStartTriggered = true;
@@ -1555,7 +1577,6 @@ namespace TERMINAL
                 await RunPumpModeAsync();
         }
 
-        // NEW (C): проверка — достиг ли таймер стабилизации порога автоСтарта
         private bool IsStabilizationThresholdReached()
         {
             if (!_stabilizationTimerActive) return false;
@@ -1703,7 +1724,27 @@ namespace TERMINAL
 
                 if (programCompleted && !_stopRequested)
                 {
-                    await SaveDataCoreAsync(silent: true);
+                    bool saved = await SaveDataCoreAsync(silent: true);
+
+                    if (saved)
+                    {
+                        bool fileExists = await WaitForSavedFileAsync(_lastSavedFilePath, 15000);
+
+                        if (fileExists)
+                        {
+                            SetStatusSuccess(
+                                $"Файл подтверждён на диске: {Path.GetFileName(_lastSavedFilePath)}");
+
+                            await ClearDataCoreAsync(silent: true);
+                        }
+                        else
+                        {
+                            SetStatusWarning(
+                                $"Файл не найден на диске: {_lastSavedFilePath} — очистка данных отменена");
+                        }
+                    }
+
+                    await TryApplyNextFurnaceSetPointAsync();
                 }
 
                 ResetStepsToInitial();
@@ -1718,7 +1759,7 @@ namespace TERMINAL
                     if (!c.IsOffline) c.SetStatusReady();
                 }
 
-                UpdateAutoStartInfo(); // NEW (C): обновляем подсказку после завершения
+                UpdateAutoStartInfo();
             }
         }
 
@@ -1914,7 +1955,7 @@ namespace TERMINAL
                     if (!c.IsOffline) c.SetStatusReady();
                 }
 
-                UpdateAutoStartInfo(); // NEW (C)
+                UpdateAutoStartInfo();
             }
         }
 
@@ -2387,7 +2428,6 @@ namespace TERMINAL
             if (!_uiLoaded) return;
             if (FurnaceSetPointBox == null) return;
 
-            // Сбрасываем таймер только когда пользователь сам редактирует поле
             if (!FurnaceSetPointBox.IsKeyboardFocused) return;
 
             string txt = FurnaceSetPointBox.Text?.Replace(',', '.') ?? "";
@@ -2398,7 +2438,6 @@ namespace TERMINAL
                     Math.Abs(sp - _lastFurnaceSetPoint) > 0.0001)
                 {
                     ResetStabilizationTimer();
-                    // NEW (C): при смене уставки разрешаем автоСтарт снова
                     _autoStartTriggered = false;
                     UpdateAutoStartInfo();
                 }
@@ -2418,7 +2457,6 @@ namespace TERMINAL
         private void ResetStabilizationTimer_Click(object sender, RoutedEventArgs e)
         {
             ResetStabilizationTimer();
-            // NEW (C): сброс таймера вручную разрешает автоСтарт снова
             _autoStartTriggered = false;
             UpdateAutoStartInfo();
             SetStatus("Таймер стабилизации сброшен, автоСтарт разрешён", false);
@@ -2491,7 +2529,6 @@ namespace TERMINAL
             }
         }
 
-        // NEW (C): автоСтарт с защитой от повторного срабатывания
         private void TryTriggerAutoStart(TimeSpan elapsed)
         {
             if (!_autoStartEnabled) return;
@@ -2503,8 +2540,6 @@ namespace TERMINAL
 
             if (elapsed.TotalMinutes < requiredMinutes) return;
 
-            // NEW (C): если программа уже идёт — помечаем автоСтарт как сработавший,
-            // чтобы он не выстрелил после завершения текущей программы.
             if (_isRunning)
             {
                 _autoStartTriggered = true;
@@ -2523,6 +2558,7 @@ namespace TERMINAL
 
                 try
                 {
+                    _nextSetPointApplied = false;
                     if (_isCalibrationMode)
                         await RunCalibrationModeAsync();
                     else
@@ -2533,6 +2569,146 @@ namespace TERMINAL
                     SetStatusError($"автоСтарт ошибка: {ex.Message}");
                 }
             });
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // СЛЕДУЮЩАЯ УСТАВКА ST-351
+        // ═══════════════════════════════════════════════════════════════════
+
+        private void NextFurnaceSetPointBox_TextChanged(object sender,
+            System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            if (NextFurnaceSetPointBox == null) return;
+
+            string txt = NextFurnaceSetPointBox.Text?.Trim().Replace(',', '.') ?? "";
+
+            if (string.IsNullOrWhiteSpace(txt))
+            {
+                _nextFurnaceSetPoint = null;
+            }
+            else if (float.TryParse(txt, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out float v))
+            {
+                _nextFurnaceSetPoint = v;
+            }
+            else
+            {
+                _nextFurnaceSetPoint = null;
+            }
+
+            UpdateNextSetPointInfo();
+            SaveSettings();
+        }
+
+        private void UpdateNextSetPointInfo()
+        {
+            if (NextFurnaceSetPointInfo == null) return;
+
+            if (!_nextFurnaceSetPoint.HasValue)
+            {
+                NextFurnaceSetPointInfo.Text =
+                    "не задана — уставка печи меняться не будет";
+                NextFurnaceSetPointInfo.Foreground = Brushes.Gray;
+                return;
+            }
+
+            NextFurnaceSetPointInfo.Text =
+                $"после градуировки печь будет переведена на " +
+                $"{_nextFurnaceSetPoint.Value.ToString("0.##", CultureInfo.InvariantCulture)} °C";
+            NextFurnaceSetPointInfo.Foreground =
+                new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0xA0));
+        }
+
+        private async void ApplyNextSetPoint_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning)
+            {
+                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                return;
+            }
+            if (!_nextFurnaceSetPoint.HasValue)
+            {
+                MessageBox.Show("Сначала введите значение следующей уставки.");
+                return;
+            }
+
+            ApplyNextSetPointButton.IsEnabled = false;
+            try
+            {
+                bool ok = await WriteFurnaceSetPointAsync(
+                    _nextFurnaceSetPoint.Value, FurnaceIp, FurnacePort,
+                    FurnaceSetPointRegister);
+
+                if (ok)
+                {
+                    _lastValidFurnaceSetPoint = _nextFurnaceSetPoint.Value;
+                    await RefreshFurnaceSetPointAsync();
+                    ResetStabilizationTimer();
+                    _autoStartTriggered = false;
+                    UpdateAutoStartInfo();
+
+                    SetStatusSuccess(
+                        $"Уставка печи изменена на " +
+                        $"{_nextFurnaceSetPoint.Value.ToString("0.##", CultureInfo.InvariantCulture)} °C");
+                }
+                else
+                {
+                    SetStatusError("Не удалось записать следующую уставку в печь");
+                }
+            }
+            finally
+            {
+                ApplyNextSetPointButton.IsEnabled = true;
+            }
+        }
+
+        private async Task<bool> WaitForSavedFileAsync(string? path, int timeoutMs)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+
+            var start = DateTime.Now;
+            while ((DateTime.Now - start).TotalMilliseconds < timeoutMs)
+            {
+                if (File.Exists(path)) return true;
+                await Task.Delay(250);
+            }
+            return File.Exists(path);
+        }
+
+        private async Task TryApplyNextFurnaceSetPointAsync()
+        {
+            if (!_nextFurnaceSetPoint.HasValue) return;
+            if (_nextSetPointApplied) return;
+
+            _nextSetPointApplied = true;
+
+            float target = _nextFurnaceSetPoint.Value;
+
+            SetStatus($"Применение следующей уставки ST-351: {target} °C...");
+
+            bool ok = await WriteFurnaceSetPointAsync(
+                target, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
+
+            if (ok)
+            {
+                _lastValidFurnaceSetPoint = target;
+                await RefreshFurnaceSetPointAsync();
+
+                ResetStabilizationTimer();
+                _autoStartTriggered = false;
+                UpdateAutoStartInfo();
+
+                SetStatusSuccess(
+                    $"Следующая уставка ST-351 применена: " +
+                    $"{target.ToString("0.##", CultureInfo.InvariantCulture)} °C");
+            }
+            else
+            {
+                SetStatusError(
+                    $"Не удалось применить следующую уставку ST-351 " +
+                    $"({target.ToString("0.##", CultureInfo.InvariantCulture)} °C)");
+            }
         }
 
         // ─────────────────────────── СКТБ ЭлПа (ПЛАТИНА) ───────────────────────────
@@ -2559,14 +2735,9 @@ namespace TERMINAL
                     {
                         try
                         {
-                            System.Diagnostics.Debug.WriteLine(
-                                $"[Platina] Пробую открыть: {device.DevicePath}");
-
                             stream = device.Open();
                             stream.ReadTimeout = 1000;
                             stream.WriteTimeout = 1000;
-
-                            System.Diagnostics.Debug.WriteLine("[Platina] Открыто, отправляю запрос");
 
                             byte[] payload = Encoding.ASCII.GetBytes(PlatinaRequest);
 
@@ -2577,8 +2748,6 @@ namespace TERMINAL
                                 Array.Copy(payload, off, report, 1, chunk);
                                 stream.Write(report, 0, report.Length);
                             }
-
-                            System.Diagnostics.Debug.WriteLine("[Platina] Запрос отправлен, читаю ответ");
 
                             var data = new List<byte>();
                             var start = DateTime.Now;
@@ -2597,8 +2766,6 @@ namespace TERMINAL
                                     {
                                         string s = Encoding.ASCII.GetString(
                                             data.GetRange(0, i).ToArray());
-                                        System.Diagnostics.Debug.WriteLine(
-                                            $"[Platina] Сырой ответ: '{s}'");
 
                                         string first = s.Split(new[] { ' ', '\t' },
                                             StringSplitOptions.RemoveEmptyEntries)
@@ -2615,14 +2782,11 @@ namespace TERMINAL
                                 }
                             }
 
-                            System.Diagnostics.Debug.WriteLine(
-                                "[Platina] Таймаут чтения ответа, маркер 0x0A 0x00 не найден");
                             return (double?)null;
                         }
-                        catch (Exception ex)
+                        catch
                         {
-                            System.Diagnostics.Debug.WriteLine(
-                                $"[Platina] Ошибка при работе с устройством: {ex.GetType().Name}: {ex.Message}");
+                            // ignore, try next device
                         }
                         finally
                         {
@@ -2632,10 +2796,8 @@ namespace TERMINAL
                     }
                     return (double?)null;
                 }
-                catch (Exception ex)
+                catch
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Platina] Общая ошибка: {ex.GetType().Name}: {ex.Message}");
                     return (double?)null;
                 }
             });
@@ -2676,7 +2838,7 @@ namespace TERMINAL
             }
         }
 
-        // ─────────────────────────── СТАТУС АГК (get_status) ───────────────────────────
+        // ─────────────────────────── СТАТУС АГК ───────────────────────────
 
         private async Task RefreshAgkStatusAsync()
         {
@@ -2946,6 +3108,8 @@ namespace TERMINAL
             string fileName = FormatFurnaceSetPointFileName(furnaceSetPoint);
             string fullPath = Path.Combine(saveDir, fileName);
 
+            _lastSavedFilePath = fullPath;
+
             if (!silent)
             {
                 if (MessageBox.Show($"Сохранить в:\n{fullPath}\n\nКлиентов: {selected.Count}",
@@ -3015,7 +3179,7 @@ namespace TERMINAL
 
         // ─────────────────────────── ОЧИСТКА ДАННЫХ ───────────────────────────
 
-        private async Task<bool> ClearDataCoreAsync()
+        private async Task<bool> ClearDataCoreAsync(bool silent = false)
         {
             List<ConnectedClient> selected;
             lock (_clientsLock)
@@ -3023,12 +3187,13 @@ namespace TERMINAL
 
             if (selected.Count == 0)
             {
-                MessageBox.Show("Нет отмеченных клиентов.");
+                if (!silent) MessageBox.Show("Нет отмеченных клиентов.");
+                else SetStatusWarning("Автоочистка пропущена: нет отмеченных клиентов");
                 return false;
             }
 
             lock (_clearLock) _clearResponses.Clear();
-            ClearDataButton.IsEnabled = false;
+            if (!silent) ClearDataButton.IsEnabled = false;
 
             try
             {
@@ -3077,7 +3242,7 @@ namespace TERMINAL
             }
             finally
             {
-                ClearDataButton.IsEnabled = true;
+                if (!silent) ClearDataButton.IsEnabled = true;
             }
         }
 
@@ -3088,7 +3253,7 @@ namespace TERMINAL
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
                 return;
             }
-            await ClearDataCoreAsync();
+            await ClearDataCoreAsync(silent: false);
         }
 
         private async void StopButton_Click(object sender, RoutedEventArgs e)
@@ -3103,7 +3268,7 @@ namespace TERMINAL
 
             await SendCommandNoWaitAsync("set_mode=stop;");
             SetStatusError("АВАРИЙНАЯ ОСТАНОВКА");
-            UpdateAutoStartInfo(); // NEW (C)
+            UpdateAutoStartInfo();
         }
 
         private async void VentButton_Click(object sender, RoutedEventArgs e)
@@ -3119,7 +3284,7 @@ namespace TERMINAL
                 _autoStartTriggered = false;
 
                 ResetStepTimers();
-                UpdateAutoStartInfo(); // NEW (C)
+                UpdateAutoStartInfo();
             }
             string? resp = await SendCommandAsync("set_mode=vent;");
             SetStatus($"Сброс отправлен: {resp}");
@@ -3352,6 +3517,7 @@ namespace TERMINAL
             await RefreshPlatinaAsync();
 
             UpdateAutoStartInfo();
+            UpdateNextSetPointInfo();
         }
 
         private async Task ConnectToDeviceLoopAsync()
@@ -3400,7 +3566,6 @@ namespace TERMINAL
 
         private async void Timer_Tick(object? sender, EventArgs e)
         {
-
             if (_isRunning) return;
 
             NetworkStream? stream;
@@ -3584,13 +3749,13 @@ namespace TERMINAL
             if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusError(text)); return; }
             StatusText.Text = text; StatusText.Foreground = Brushes.OrangeRed;
         }
+
         private static string GetAppVersion()
         {
             var asm = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
             var v = asm.GetName().Version;
             if (v == null) return "v0.0.0";
 
-            // 1.0.73.0 -> v1.0.73 ; 1.0.73.5 -> v1.0.73.5
             return (v.Revision == 0 && v.Build >= 0)
                 ? $"v{v.Major}.{v.Minor}.{v.Build}"
                 : $"v{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
