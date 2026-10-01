@@ -269,6 +269,40 @@ namespace TERMINAL
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    // NEW: задание пакетного режима по температуре
+    public class TemperatureJob : INotifyPropertyChanged
+    {
+        private string _setPointText = "";
+        private string _statusText = "ожидает";
+        private Brush _statusColor = Brushes.Gray;
+
+        public string IndexText { get; set; } = "";
+
+        public string SetPointText
+        {
+            get => _setPointText;
+            set { _setPointText = value; OnPropertyChanged(nameof(SetPointText)); }
+        }
+
+        public string StatusText
+        {
+            get => _statusText;
+            set { _statusText = value; OnPropertyChanged(nameof(StatusText)); }
+        }
+
+        public Brush StatusColor
+        {
+            get => _statusColor;
+            set { _statusColor = value; OnPropertyChanged(nameof(StatusColor)); }
+        }
+
+        public float SetPoint { get; set; }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged(string name) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
     public partial class MainWindow : Window
     {
         private TcpClient? _client;
@@ -333,26 +367,17 @@ namespace TERMINAL
         private bool _stabilizationTimerActive = false;
         private const double FurnaceStabilizationTolerance = 0.1;
 
-        // отслеживание выхода температуры за допуск (льготная минута)
         private DateTime _stabilizationOutOfRangeSince = DateTime.MinValue;
         private const int StabilizationOutOfRangeGraceSeconds = 60;
 
-        // Последнее известное значение уставки
         private double _lastFurnaceSetPoint = double.NaN;
-
-        // Последнее валидное значение уставки печи (для имени CSV)
         private float _lastValidFurnaceSetPoint = 0f;
 
-        // NEW: следующая уставка ST-351
+        // Следующая уставка ST-351 (ручной режим)
         private float? _nextFurnaceSetPoint = null;
-
-        // NEW: путь последнего сохранённого файла
         private string? _lastSavedFilePath = null;
-
-        // NEW: флаг — применялась ли уже следующая уставка
         private bool _nextSetPointApplied = false;
 
-        // Гистерезис связи
         private const int ConnectionLostThreshold = 5;
 
         private int _agkFailCount = 0;
@@ -380,10 +405,17 @@ namespace TERMINAL
         // автоСтарт
         private bool _autoStartEnabled = false;
         private bool _autoStartTriggered = false;
-        private const int AutoStartCalibrationMinutes = 120;
+        private const int AutoStartCalibrationMinutes = 120; // 2 часа
         private const int AutoStartPumpMinutes = 30;
 
         private string _currentPressureUnitsLabel = "";
+
+        // NEW: пакетный режим по температурам (только для «Градуировка»)
+        private readonly ObservableCollection<TemperatureJob> _batchJobs = new();
+        private bool _batchModeEnabled = false;
+        private bool _batchRunning = false;
+        private bool _batchStopRequested = false;
+        private TaskCompletionSource<bool>? _batchRunDoneSignal;
 
         private static readonly string SettingsDir =
             Path.Combine(Environment.GetFolderPath(
@@ -395,7 +427,6 @@ namespace TERMINAL
 
         private Settings? _loadedSettings = null;
 
-        // статус АГК (get_status)
         private DateTime _lastAgkStatusRequest = DateTime.MinValue;
         private int _agkStatusFailCount = 0;
         private const int AgkStatusRequestIntervalMs = 1000;
@@ -413,6 +444,10 @@ namespace TERMINAL
             _uiLoaded = true;
 
             ApplyLoadedSettingsToUi();
+
+            // NEW: список заданий пакетного режима
+            if (BatchList != null)
+                BatchList.ItemsSource = _batchJobs;
         }
 
         // ─────────────────────────── ЗАПОЛНЕНИЕ ───────────────────────────
@@ -701,6 +736,22 @@ namespace TERMINAL
                 }
             }
 
+            // NEW: пакетный режим — только для «Градуировка»
+            if (BatchModeCheckBox != null)
+            {
+                if (!_isCalibrationMode)
+                {
+                    if (BatchModeCheckBox.IsChecked == true)
+                        BatchModeCheckBox.IsChecked = false;
+                    BatchModeCheckBox.IsEnabled = false;
+                    _batchModeEnabled = false;
+                }
+                else
+                {
+                    BatchModeCheckBox.IsEnabled = !_batchRunning;
+                }
+            }
+
             UpdateCyclesLabel();
             UpdateAutoStartInfo();
         }
@@ -810,6 +861,290 @@ namespace TERMINAL
             AutoStartInfoText.Text =
                 $"Запуск «{(_isCalibrationMode ? "Градуировка" : "Жамкать")}» " +
                 $"после {minutes} мин стабилизации";
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // ПАКЕТНЫЙ РЕЖИМ ПО ТЕМПЕРАТУРАМ (только «Градуировка»)
+        // ═══════════════════════════════════════════════════════════════════
+
+        private void BatchModeCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+
+            if (!_isCalibrationMode && BatchModeCheckBox.IsChecked == true)
+            {
+                BatchModeCheckBox.IsChecked = false;
+                SetStatusWarning("Пакетный режим доступен только в режиме «Градуировка»");
+                return;
+            }
+
+            _batchModeEnabled = BatchModeCheckBox.IsChecked == true;
+
+            if (_batchModeEnabled && _autoStartEnabled)
+            {
+                AutoStartCheckBox.IsChecked = false;
+            }
+
+            if (AutoStartCheckBox != null)
+                AutoStartCheckBox.IsEnabled = !_batchModeEnabled;
+
+            SaveSettings();
+        }
+
+        private void AddBatchJob_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning || _batchRunning) return;
+
+            var job = new TemperatureJob
+            {
+                SetPointText = "25"
+            };
+            _batchJobs.Add(job);
+            RenumberBatchJobs();
+        }
+
+        private void RemoveBatchJob_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning || _batchRunning) return;
+
+            if (sender is System.Windows.Controls.Button btn &&
+                btn.Tag is TemperatureJob job)
+            {
+                _batchJobs.Remove(job);
+                RenumberBatchJobs();
+            }
+        }
+
+        private void ClearBatch_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning || _batchRunning) return;
+            _batchJobs.Clear();
+            RenumberBatchJobs();
+        }
+
+        private void RenumberBatchJobs()
+        {
+            for (int i = 0; i < _batchJobs.Count; i++)
+                _batchJobs[i].IndexText = (i + 1) + ".";
+
+            BatchList.ItemsSource = null;
+            BatchList.ItemsSource = _batchJobs;
+        }
+
+        private async Task RunBatchAsync()
+        {
+            if (_batchJobs.Count == 0)
+            {
+                MessageBox.Show("Список температур пуст. Добавьте хотя бы одну.");
+                return;
+            }
+
+            if (!_isCalibrationMode)
+            {
+                MessageBox.Show("Пакетный режим работает только в режиме «Градуировка».");
+                return;
+            }
+
+            for (int i = 0; i < _batchJobs.Count; i++)
+            {
+                if (!float.TryParse(_batchJobs[i].SetPointText?.Replace(',', '.'),
+                    NumberStyles.Float, CultureInfo.InvariantCulture, out float sp))
+                {
+                    MessageBox.Show($"Задание #{i + 1}: некорректная уставка «{_batchJobs[i].SetPointText}»");
+                    return;
+                }
+                _batchJobs[i].SetPoint = sp;
+            }
+
+            _batchRunning = true;
+            _batchStopRequested = false;
+
+            SetExternalButtonsEnabled(false);
+            StartButton.IsEnabled = false;
+            BatchModeCheckBox.IsEnabled = false;
+            AddBatchJobButton.IsEnabled = false;
+            ClearBatchButton.IsEnabled = false;
+
+            int requiredMinutes = AutoStartCalibrationMinutes;
+
+            try
+            {
+                for (int i = 0; i < _batchJobs.Count; i++)
+                {
+                    if (_batchStopRequested || _stopRequested)
+                    {
+                        SetStatusWarning("Пакетный режим остановлен оператором");
+                        return;
+                    }
+
+                    var job = _batchJobs[i];
+
+                    // 1) Запись уставки
+                    job.StatusText = "запись уставки";
+                    job.StatusColor = Brushes.Orange;
+
+                    SetStatus($"[Пакет {i + 1}/{_batchJobs.Count}] запись уставки " +
+                              $"{job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C в ST-351...");
+
+                    bool writeOk = await WriteFurnaceSetPointAsync(
+                        job.SetPoint, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
+
+                    if (!writeOk)
+                    {
+                        job.StatusText = "ошибка записи";
+                        job.StatusColor = Brushes.Red;
+                        SetStatusError($"[Пакет {i + 1}] не удалось записать уставку");
+                        return;
+                    }
+
+                    _lastValidFurnaceSetPoint = job.SetPoint;
+                    await RefreshFurnaceSetPointAsync();
+
+                    ResetStabilizationTimer();
+                    _autoStartTriggered = true;
+                    UpdateAutoStartInfo();
+
+                    // 2) Стабилизация
+                    job.StatusText = $"стабилизация {requiredMinutes} мин";
+                    job.StatusColor = Brushes.Orange;
+
+                    bool stable = await WaitForBatchStabilizationAsync(
+                        requiredMinutes, i, _batchJobs.Count);
+
+                    if (!stable)
+                    {
+                        job.StatusText = "стабилизация прервана";
+                        job.StatusColor = Brushes.Red;
+                        SetStatusWarning($"[Пакет {i + 1}] стабилизация прервана");
+                        return;
+                    }
+
+                    // 3) Запуск «Градуировка» и ожидание завершения
+                    job.StatusText = "работа";
+                    job.StatusColor = Brushes.Blue;
+
+                    SetStatus($"[Пакет {i + 1}/{_batchJobs.Count}] запуск «Градуировка» " +
+                              $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
+
+                    _batchRunDoneSignal = new TaskCompletionSource<bool>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await Dispatcher.InvokeAsync(RunCalibrationModeAsync);
+                        }
+                        finally
+                        {
+                            _batchRunDoneSignal?.TrySetResult(true);
+                        }
+                    });
+
+                    await _batchRunDoneSignal.Task;
+                    _batchRunDoneSignal = null;
+
+                    if (_batchStopRequested || _stopRequested)
+                    {
+                        SetStatusWarning("Пакетный режим остановлен оператором");
+                        return;
+                    }
+
+                    job.StatusText = "завершено";
+                    job.StatusColor = Brushes.Green;
+
+                    SetStatus($"[Пакет {i + 1}/{_batchJobs.Count}] завершён");
+                }
+
+                SetStatusSuccess($"Пакетный режим завершён: обработано {_batchJobs.Count} температур");
+            }
+            finally
+            {
+                _batchRunning = false;
+                _batchRunDoneSignal = null;
+                _batchStopRequested = false;
+
+                StartButton.IsEnabled = true;
+                BatchModeCheckBox.IsEnabled = _isCalibrationMode;
+                AddBatchJobButton.IsEnabled = true;
+                ClearBatchButton.IsEnabled = true;
+                SetExternalButtonsEnabled(true);
+
+                BatchProgressText.Text = "";
+            }
+        }
+
+        private async Task<bool> WaitForBatchStabilizationAsync(
+            int requiredMinutes, int jobIndex, int totalJobs)
+        {
+            var start = DateTime.Now;
+            var outOfRangeSince = DateTime.MinValue;
+
+            while (true)
+            {
+                if (_batchStopRequested || _stopRequested) return false;
+
+                await RefreshFurnaceCurrentTempAsync();
+                await RefreshFurnaceSetPointAsync();
+
+                string spTxt = FurnaceSetPointBox?.Text?.Replace(',', '.') ?? "";
+                string tTxt = FurnaceCurrentTempText?.Text ?? "";
+
+                int idx = tTxt.IndexOf(" °C", StringComparison.Ordinal);
+                if (idx >= 0) tTxt = tTxt.Substring(0, idx);
+                tTxt = tTxt.Trim().TrimStart('+').Replace(',', '.');
+
+                if (!double.TryParse(spTxt, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double setPoint) ||
+                    !double.TryParse(tTxt, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double currentTemp))
+                {
+                    await Task.Delay(1000);
+                    continue;
+                }
+
+                bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
+
+                if (inRange)
+                {
+                    outOfRangeSince = DateTime.MinValue;
+                    var elapsed = DateTime.Now - start;
+                    var remaining = TimeSpan.FromMinutes(requiredMinutes) - elapsed;
+                    if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+
+                    BatchProgressText.Text =
+                        $"Задание {jobIndex + 1}/{totalJobs}: стабилизация " +
+                        $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C, " +
+                        $"осталось {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
+
+                    if (elapsed.TotalMinutes >= requiredMinutes)
+                        return true;
+                }
+                else
+                {
+                    if (outOfRangeSince == DateTime.MinValue)
+                        outOfRangeSince = DateTime.Now;
+
+                    var outOfRange = DateTime.Now - outOfRangeSince;
+                    if (outOfRange.TotalSeconds >= StabilizationOutOfRangeGraceSeconds)
+                    {
+                        start = DateTime.Now;
+                        outOfRangeSince = DateTime.MinValue;
+                        BatchProgressText.Text =
+                            $"Задание {jobIndex + 1}/{totalJobs}: " +
+                            $"температура вне диапазона — таймер стабилизации сброшен";
+                    }
+                    else
+                    {
+                        BatchProgressText.Text =
+                            $"Задание {jobIndex + 1}/{totalJobs}: " +
+                            $"температура вне диапазона " +
+                            $"({outOfRange.TotalSeconds:F0} сек из {StabilizationOutOfRangeGraceSeconds})";
+                    }
+                }
+
+                await Task.Delay(1000);
+            }
         }
 
         // ─────────────────────────── COMBOBOX ───────────────────────────
@@ -1207,7 +1542,7 @@ namespace TERMINAL
 
         private void RemoveOffline_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRunning) return;
+            if (_isRunning || _batchRunning) return;
 
             lock (_clientsLock)
             {
@@ -1336,7 +1671,7 @@ namespace TERMINAL
 
         private async void TakePointBroadcast_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRunning)
+            if (_isRunning || _batchRunning)
             {
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
                 return;
@@ -1548,10 +1883,18 @@ namespace TERMINAL
         private async void StartButton_Click(object sender, RoutedEventArgs e)
         {
             if (_isRunning) { MessageBox.Show("Программа уже запущена."); return; }
+            if (_batchRunning) { MessageBox.Show("Пакетный режим уже идёт."); return; }
             if (_selectedTargetPressure == null) { MessageBox.Show("Выберите диапазон давлений."); return; }
 
             _autoStartTriggered = false;
             _nextSetPointApplied = false;
+
+            // NEW: пакетный режим — только для «Градуировка»
+            if (_batchModeEnabled && _isCalibrationMode && _batchJobs.Count > 0)
+            {
+                await RunBatchAsync();
+                return;
+            }
 
             if (_autoStartEnabled && IsStabilizationThresholdReached())
             {
@@ -1760,6 +2103,9 @@ namespace TERMINAL
                 }
 
                 UpdateAutoStartInfo();
+
+                // NEW: сигнал оркестратору пакетного режима
+                _batchRunDoneSignal?.TrySetResult(true);
             }
         }
 
@@ -1956,6 +2302,9 @@ namespace TERMINAL
                 }
 
                 UpdateAutoStartInfo();
+
+                // NEW: сигнал оркестратору (на всякий случай, если понадобится)
+                _batchRunDoneSignal?.TrySetResult(true);
             }
         }
 
@@ -2533,6 +2882,7 @@ namespace TERMINAL
         {
             if (!_autoStartEnabled) return;
             if (_autoStartTriggered) return;
+            if (_batchModeEnabled) return; // в пакетном режиме автоСтарт не работает
 
             int requiredMinutes = _isCalibrationMode
                 ? AutoStartCalibrationMinutes
@@ -2605,6 +2955,14 @@ namespace TERMINAL
         {
             if (NextFurnaceSetPointInfo == null) return;
 
+            if (_batchModeEnabled)
+            {
+                NextFurnaceSetPointInfo.Text =
+                    "в пакетном режиме игнорируется — уставками управляет оркестратор";
+                NextFurnaceSetPointInfo.Foreground = Brushes.Gray;
+                return;
+            }
+
             if (!_nextFurnaceSetPoint.HasValue)
             {
                 NextFurnaceSetPointInfo.Text =
@@ -2622,7 +2980,7 @@ namespace TERMINAL
 
         private async void ApplyNextSetPoint_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRunning)
+            if (_isRunning || _batchRunning)
             {
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
                 return;
@@ -2678,6 +3036,7 @@ namespace TERMINAL
 
         private async Task TryApplyNextFurnaceSetPointAsync()
         {
+            if (_batchModeEnabled) return; // в пакетном режиме уставку пишет оркестратор
             if (!_nextFurnaceSetPoint.HasValue) return;
             if (_nextSetPointApplied) return;
 
@@ -2724,9 +3083,6 @@ namespace TERMINAL
 
                     int deviceCount = 0;
                     foreach (var d in devices) deviceCount++;
-
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Platina] Найдено устройств VID=0x{PlatinaVid:X4} PID=0x{PlatinaPid:X4}: {deviceCount}");
 
                     if (deviceCount == 0)
                         return (double?)null;
@@ -2896,7 +3252,7 @@ namespace TERMINAL
 
         private async void TestWriteFurnace_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRunning) { MessageBox.Show("Программа занята."); return; }
+            if (_isRunning || _batchRunning) { MessageBox.Show("Программа занята."); return; }
 
             string input = FurnaceSetPointBox.Text?.Trim() ?? "";
             if (!float.TryParse(input.Replace(',', '.'),
@@ -3169,7 +3525,7 @@ namespace TERMINAL
 
         private async void SaveData_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRunning)
+            if (_isRunning || _batchRunning)
             {
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
                 return;
@@ -3248,7 +3604,7 @@ namespace TERMINAL
 
         private async void ClearData_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRunning)
+            if (_isRunning || _batchRunning)
             {
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
                 return;
@@ -3258,6 +3614,14 @@ namespace TERMINAL
 
         private async void StopButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_batchRunning)
+            {
+                _batchStopRequested = true;
+                _stopRequested = true;
+                SetStatusWarning("Пакетный режим прерывается...");
+                return;
+            }
+
             _stopRequested = true;
             _timerActive = false;
             _totalTimerActive = false;
@@ -3273,6 +3637,18 @@ namespace TERMINAL
 
         private async void VentButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_batchRunning)
+            {
+                if (MessageBox.Show("Прервать пакетный режим и сбросить?",
+                    "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Warning)
+                    != MessageBoxResult.Yes) return;
+
+                _batchStopRequested = true;
+                _stopRequested = true;
+                SetStatusWarning("Пакетный режим прерывается...");
+                return;
+            }
+
             if (_isRunning)
             {
                 if (MessageBox.Show("Прервать и сбросить?", "Подтверждение",
@@ -3292,7 +3668,7 @@ namespace TERMINAL
 
         private async void CalibrateStocksButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRunning)
+            if (_isRunning || _batchRunning)
             {
                 MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
                 return;
@@ -3781,6 +4157,7 @@ namespace TERMINAL
             _stopRequested = true;
             _pauseRequested = false;
             _totalTimerActive = false;
+            _batchStopRequested = true;
             _timer?.Stop();
             _clientsUiTimer?.Stop();
             _statusResetTimer?.Stop();
