@@ -1,10 +1,11 @@
 ﻿<Window x:Class="TERMINAL.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="T.E.R.M.I.N.A.L." Height="900" Width="950"
+        Title="T.E.R.M.I.N.A.L."
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        MinWidth="800" MinHeight="700"
+        MinWidth="900" MinHeight="700"
+        WindowStartupLocation="Manual"
         Loaded="Window_Loaded">
 
     <Window.Resources>
@@ -182,412 +183,365 @@
 
     <Grid Margin="15">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ROW 0: основная рабочая область -->
-        <Grid Grid.Row="0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+        <!-- ROW 0: панель настроек -->
+        <Border Grid.Row="0"
+                BorderBrush="LightGray" BorderThickness="1"
+                CornerRadius="6" Padding="10,6"
+                Background="#FFF8F8F8"
+                Margin="0,0,0,8">
+            <WrapPanel Orientation="Horizontal">
 
-            <!-- Диапазон давлений -->
-            <Grid Grid.Row="0"
-                  HorizontalAlignment="Left" VerticalAlignment="Top"
-                  Margin="0,0,0,6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="160"/>
-                    <ColumnDefinition Width="Auto" MinWidth="220"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0"
-                           Text="Диапазон давлений:"
-                           FontSize="13" VerticalAlignment="Center"/>
-                <ComboBox Grid.Column="1" x:Name="TargetPressureCombo"
-                          Width="220" Height="30" FontSize="13"
-                          Padding="6,4" VerticalAlignment="Top"
-                          VerticalContentAlignment="Center"
-                          SelectionChanged="TargetPressureCombo_SelectionChanged"/>
-            </Grid>
+                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
+                    <TextBlock Text="Диапазон:" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ComboBox x:Name="TargetPressureCombo"
+                              Width="150" Height="26" FontSize="12"
+                              Padding="4,2" VerticalContentAlignment="Center"
+                              SelectionChanged="TargetPressureCombo_SelectionChanged"/>
+                </StackPanel>
 
-            <!-- Набор таймеров -->
-            <Grid Grid.Row="1"
-                  x:Name="TimerSetPanel"
-                  HorizontalAlignment="Left" VerticalAlignment="Top"
-                  Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="160"/>
-                    <ColumnDefinition Width="Auto" MinWidth="220"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0"
-                           Text="Набор таймеров:"
-                           FontSize="13" VerticalAlignment="Center"/>
-                <ComboBox Grid.Column="1" x:Name="TimerSetCombo"
-                          Width="220" Height="30" FontSize="13"
-                          Padding="6,4" VerticalAlignment="Top"
-                          VerticalContentAlignment="Center"
-                          SelectionChanged="TimerSetCombo_SelectionChanged"/>
-            </Grid>
+                <StackPanel x:Name="TimerSetPanel" Orientation="Horizontal"
+                            Margin="0,3,14,3" VerticalAlignment="Center">
+                    <TextBlock Text="Таймеры:" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ComboBox x:Name="TimerSetCombo"
+                              Width="130" Height="26" FontSize="12"
+                              Padding="4,2" VerticalContentAlignment="Center"
+                              SelectionChanged="TimerSetCombo_SelectionChanged"/>
+                </StackPanel>
 
-            <!-- Режим + параметр + КОСА + автоСтарт -->
-            <Grid Grid.Row="2"
-                  HorizontalAlignment="Left" VerticalAlignment="Top"
-                  Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
+                    <TextBlock Text="Режим:" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ComboBox x:Name="ModeCombo"
+                              Width="120" Height="26" FontSize="12"
+                              Padding="4,2" VerticalContentAlignment="Center"
+                              SelectionChanged="ModeCombo_SelectionChanged">
+                        <ComboBoxItem Content="Градуировка" IsSelected="True"/>
+                        <ComboBoxItem Content="Жамкать"/>
+                    </ComboBox>
+                </StackPanel>
 
-                <ComboBox Grid.Row="0" Grid.Column="0" x:Name="ModeCombo"
-                          Width="180" Height="30" FontSize="13"
-                          Padding="6,4"
-                          VerticalContentAlignment="Center"
-                          SelectionChanged="ModeCombo_SelectionChanged">
-                    <ComboBoxItem Content="Градуировка" IsSelected="True"/>
-                    <ComboBoxItem Content="Жамкать"/>
-                </ComboBox>
+                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
+                    <TextBlock x:Name="ParamLabel" Text="Начать с шага:"
+                               FontSize="12" VerticalAlignment="Center"
+                               Margin="0,0,5,0"/>
+                    <TextBox x:Name="ParamBox"
+                             Width="48" Height="26" FontSize="12"
+                             Text="1" Padding="4,2"
+                             HorizontalContentAlignment="Center"
+                             VerticalContentAlignment="Center"
+                             TextChanged="ParamBox_TextChanged"/>
+                </StackPanel>
 
-                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ParamLabel"
-                           Text="Начать с шага:"
-                           FontSize="13"
-                           VerticalAlignment="Center"
-                           Margin="18,0,5,0"/>
-
-                <TextBox Grid.Row="0" Grid.Column="2" x:Name="ParamBox"
-                         Width="55" Height="30" FontSize="13"
-                         Text="1"
-                         Padding="4,2"
-                         HorizontalContentAlignment="Center"
-                         VerticalContentAlignment="Center"
-                         TextChanged="ParamBox_TextChanged"/>
-
-                <TextBlock Grid.Row="0" Grid.Column="3"
-                           Text="КОСА:"
-                           FontSize="13"
-                           VerticalAlignment="Center"
-                           Margin="25,0,6,0"/>
-
-                <StackPanel Grid.Row="0" Grid.Column="4"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
                     <CheckBox x:Name="KosaCheckBox"
-                              VerticalAlignment="Center"
+                              Content="КОСА:"
+                              FontSize="12" VerticalAlignment="Center"
+                              Margin="0,0,5,0"
                               Checked="KosaCheckBox_Changed"
                               Unchecked="KosaCheckBox_Changed"/>
                     <TextBox x:Name="KosaTimerBox"
-                             Width="55" Height="26" FontSize="13"
-                             Text="25"
-                             Padding="4,2"
-                             Margin="10,0,4,0"
+                             Width="48" Height="26" FontSize="12"
+                             Text="25" Padding="4,2"
                              HorizontalContentAlignment="Center"
                              VerticalContentAlignment="Center"
                              PreviewTextInput="KosaTimerBox_PreviewTextInput"
                              TextChanged="KosaTimerBox_TextChanged"/>
-                    <TextBlock Text="сек"
-                               FontSize="13"
-                               VerticalAlignment="Center"/>
+                    <TextBlock Text="сек" FontSize="12"
+                               VerticalAlignment="Center" Margin="4,0,0,0"/>
                 </StackPanel>
 
-                <!-- строка автоСтарта -->
-                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            Margin="0,8,0,0">
+                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
                     <CheckBox x:Name="AutoStartCheckBox"
                               Content="автоСтарт"
-                              FontSize="13"
-                              VerticalAlignment="Center"
+                              FontSize="12" VerticalAlignment="Center"
                               Checked="AutoStartCheckBox_Changed"
                               Unchecked="AutoStartCheckBox_Changed"/>
                     <TextBlock x:Name="AutoStartInfoText"
-                               Text=""
-                               FontSize="11"
+                               Text="" FontSize="11"
                                Foreground="Gray"
                                VerticalAlignment="Center"
-                               Margin="12,0,0,0"/>
+                               Margin="8,0,0,0"
+                               MaxWidth="360"
+                               TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-            </Grid>
 
-            <!-- Кнопки СТАРТ + ПАУЗА -->
-            <StackPanel Grid.Row="3"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Left"
-                        Margin="0,0,0,10">
-                <Button x:Name="StartButton"
-                        Content="СТАРТ"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="36" Width="140" FontSize="14"
-                        Padding="6,4"
-                        Background="#FF5090D0"
-                        Click="StartButton_Click"/>
-                <Button x:Name="PauseButton"
-                        Content="ПАУЗА"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="36" Width="120" FontSize="14"
-                        Padding="6,4" Margin="8,0,0,0"
-                        Background="#FFB0A050"
-                        IsEnabled="False"
-                        Click="PauseButton_Click"/>
-            </StackPanel>
+            </WrapPanel>
+        </Border>
 
-            <!-- Таблица давлений / Максимум-Минимум -->
-            <Grid Grid.Row="4"
-                  HorizontalAlignment="Left" VerticalAlignment="Top">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <!-- ROW 1: три колонки -->
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Top">
+            <!-- Колонка 0: СТАРТ/ПАУЗА + Таблица давлений -->
+            <StackPanel Grid.Column="0"
+                        HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Margin="0,0,10,0">
 
-                    <!-- Список шагов -->
-                    <StackPanel x:Name="CalibrationPanel"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Top">
-                        <Border BorderBrush="LightGray" BorderThickness="1"
-                                Padding="8"
-                                HorizontalAlignment="Left" VerticalAlignment="Top">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          MaxHeight="500">
-                                <StackPanel>
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0"
+                            x:Name="StartButton"
+                            Content="СТАРТ (обычный)"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Height="36" FontSize="13"
+                            Padding="4,4"
+                            Background="#FF5090D0"
+                            Click="StartButton_Click"/>
+                    <Button Grid.Column="1"
+                            x:Name="PauseButton"
+                            Content="ПАУЗА"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Height="36" FontSize="14"
+                            Padding="6,4" Margin="8,0,0,0"
+                            Background="#FFB0A050"
+                            IsEnabled="False"
+                            Click="PauseButton_Click"/>
+                </Grid>
 
-                                    <!-- Шапка: короткие единицы -->
-                                    <Grid x:Name="StepsHeaderShort" Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="32"/>
-                                            <ColumnDefinition Width="60"/>
-                                            <ColumnDefinition Width="45"/>
-                                            <ColumnDefinition Width="27"/>
-                                            <ColumnDefinition Width="40"/>
-                                            <ColumnDefinition Width="62"/>
-                                            <ColumnDefinition Width="27"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="№" Style="{StaticResource TableHeaderTextStyle}"/>
-                                        </Border>
-                                        <Border Grid.Column="1" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}"
-                                                       HorizontalAlignment="Right"/>
-                                        </Border>
-                                        <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="Ед.изм." Style="{StaticResource TableHeaderTextStyle}"/>
-                                        </Border>
-                                        <Border Grid.Column="3" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="←" Style="{StaticResource TableHeaderTextStyle}"/>
-                                        </Border>
-                                        <Border Grid.Column="4" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="Изм." Style="{StaticResource TableHeaderTextStyle}"
-                                                       HorizontalAlignment="Center"/>
-                                        </Border>
-                                        <Border Grid.Column="5" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}"
-                                                       HorizontalAlignment="Right"/>
-                                        </Border>
-                                        <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
-                                            <TextBlock Text="✓" Style="{StaticResource TableHeaderTextStyle}"
-                                                       HorizontalAlignment="Center"/>
-                                        </Border>
-                                    </Grid>
-
-                                    <!-- Шапка: длинные единицы -->
-                                    <Grid x:Name="StepsHeaderLong" Margin="0,0,0,4"
-                                          Visibility="Collapsed">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="32"/>
-                                            <ColumnDefinition Width="60"/>
-                                            <ColumnDefinition Width="60"/>
-                                            <ColumnDefinition Width="27"/>
-                                            <ColumnDefinition Width="40"/>
-                                            <ColumnDefinition Width="62"/>
-                                            <ColumnDefinition Width="27"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="№" Style="{StaticResource TableHeaderTextStyle}"/>
-                                        </Border>
-                                        <Border Grid.Column="1" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}"
-                                                       HorizontalAlignment="Right"/>
-                                        </Border>
-                                        <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="Ед.изм." Style="{StaticResource TableHeaderTextStyle}"/>
-                                        </Border>
-                                        <Border Grid.Column="3" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="←" Style="{StaticResource TableHeaderTextStyle}"/>
-                                        </Border>
-                                        <Border Grid.Column="4" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="Изм." Style="{StaticResource TableHeaderTextStyle}"
-                                                       HorizontalAlignment="Center"/>
-                                        </Border>
-                                        <Border Grid.Column="5" Style="{StaticResource TableHeaderBorderStyle}">
-                                            <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}"
-                                                       HorizontalAlignment="Right"/>
-                                        </Border>
-                                        <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
-                                            <TextBlock Text="✓" Style="{StaticResource TableHeaderTextStyle}"
-                                                       HorizontalAlignment="Center"/>
-                                        </Border>
-                                    </Grid>
-
-                                    <ItemsControl x:Name="StepsList"
-                                                  HorizontalAlignment="Left">
-                                        <ItemsControl.ItemContainerStyle>
-                                            <Style TargetType="ContentPresenter">
-                                                <Setter Property="HorizontalAlignment" Value="Left"/>
-                                            </Style>
-                                        </ItemsControl.ItemContainerStyle>
-                                    </ItemsControl>
-
-                                </StackPanel>
-                            </ScrollViewer>
-                        </Border>
-
-                        <TextBlock x:Name="StepCounterText"
-                                   Text="Шаг: 0/0"
-                                   FontSize="13"
-                                   Margin="8,5,0,0"/>
-                    </StackPanel>
-
-                    <!-- Максимум/Минимум -->
-                    <StackPanel x:Name="PumpPanel"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Top"
-                                Visibility="Collapsed">
-
-                        <Border BorderBrush="LightGray" BorderThickness="1"
-                                Padding="8"
-                                HorizontalAlignment="Left" VerticalAlignment="Top">
+                <!-- Таблица шагов -->
+                <StackPanel x:Name="CalibrationPanel"
+                            HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Border BorderBrush="LightGray" BorderThickness="1"
+                            Padding="8"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Background="#FFF8F8F8"
+                            CornerRadius="6">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      MaxHeight="480">
                             <StackPanel>
 
-                                <!-- Шапка -->
-                                <Grid Margin="0,0,0,4">
+                                <Grid x:Name="StepsHeaderShort" Margin="0,0,0,4">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="32"/>
+                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="45"/>
                                         <ColumnDefinition Width="27"/>
-                                        <ColumnDefinition Width="80"/>
-                                        <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="40"/>
                                         <ColumnDefinition Width="62"/>
+                                        <ColumnDefinition Width="27"/>
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Style="{StaticResource TableHeaderBorderStyle}">
-                                        <TextBlock Text="→" Style="{StaticResource TableHeaderTextStyle}"/>
+                                        <TextBlock Text="№" Style="{StaticResource TableHeaderTextStyle}"/>
                                     </Border>
                                     <Border Grid.Column="1" Style="{StaticResource TableHeaderBorderStyle}">
-                                        <TextBlock Text="Режим" Style="{StaticResource TableHeaderTextStyle}"/>
-                                    </Border>
-                                    <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
                                         <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}"
                                                    HorizontalAlignment="Right"/>
                                     </Border>
-                                    <Border Grid.Column="3" Style="{StaticResource TableHeaderBorderStyle}">
+                                    <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
                                         <TextBlock Text="Ед.изм." Style="{StaticResource TableHeaderTextStyle}"/>
                                     </Border>
-                                    <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
+                                    <Border Grid.Column="3" Style="{StaticResource TableHeaderBorderStyle}">
+                                        <TextBlock Text="←" Style="{StaticResource TableHeaderTextStyle}"/>
+                                    </Border>
+                                    <Border Grid.Column="4" Style="{StaticResource TableHeaderBorderStyle}">
+                                        <TextBlock Text="Изм." Style="{StaticResource TableHeaderTextStyle}"
+                                                   HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <Border Grid.Column="5" Style="{StaticResource TableHeaderBorderStyle}">
                                         <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}"
                                                    HorizontalAlignment="Right"/>
                                     </Border>
-                                </Grid>
-
-                                <!-- Максимум -->
-                                <Grid Margin="0,2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="27"/>
-                                        <ColumnDefinition Width="80"/>
-                                        <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="62"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                                        <TextBlock x:Name="MaxArrow" Text="  " FontSize="15"
-                                                   Foreground="Black" HorizontalAlignment="Left"/>
-                                    </Border>
-                                    <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
-                                        <TextBlock Text="Максимум:" Style="{StaticResource TableCellTextStyle}"/>
-                                    </Border>
-                                    <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
-                                        <TextBlock x:Name="MaxValueText" Text="0"
-                                                   Style="{StaticResource TableCellTextStyle}"
-                                                   HorizontalAlignment="Right"/>
-                                    </Border>
-                                    <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
-                                        <TextBlock x:Name="MaxUnitsText" Text=""
-                                                   Style="{StaticResource TableCellTextStyle}"/>
-                                    </Border>
-                                    <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
-                                        <TextBlock x:Name="MaxTimerText" Text=""
-                                                   Style="{StaticResource TableCellTextStyle}"
-                                                   HorizontalAlignment="Right"/>
+                                    <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
+                                        <TextBlock Text="✓" Style="{StaticResource TableHeaderTextStyle}"
+                                                   HorizontalAlignment="Center"/>
                                     </Border>
                                 </Grid>
 
-                                <!-- Минимум -->
-                                <Grid Margin="0,2">
+                                <Grid x:Name="StepsHeaderLong" Margin="0,0,0,4"
+                                      Visibility="Collapsed">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="32"/>
+                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="60"/>
                                         <ColumnDefinition Width="27"/>
-                                        <ColumnDefinition Width="80"/>
-                                        <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="40"/>
                                         <ColumnDefinition Width="62"/>
+                                        <ColumnDefinition Width="27"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                                        <TextBlock x:Name="MinArrow" Text="  " FontSize="15"
-                                                   Foreground="Black" HorizontalAlignment="Left"/>
+                                    <Border Grid.Column="0" Style="{StaticResource TableHeaderBorderStyle}">
+                                        <TextBlock Text="№" Style="{StaticResource TableHeaderTextStyle}"/>
                                     </Border>
-                                    <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
-                                        <TextBlock Text="Минимум:" Style="{StaticResource TableCellTextStyle}"/>
-                                    </Border>
-                                    <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
-                                        <TextBlock x:Name="MinValueText" Text="0"
-                                                   Style="{StaticResource TableCellTextStyle}"
+                                    <Border Grid.Column="1" Style="{StaticResource TableHeaderBorderStyle}">
+                                        <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}"
                                                    HorizontalAlignment="Right"/>
                                     </Border>
-                                    <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
-                                        <TextBlock x:Name="MinUnitsText" Text=""
-                                                   Style="{StaticResource TableCellTextStyle}"/>
+                                    <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
+                                        <TextBlock Text="Ед.изм." Style="{StaticResource TableHeaderTextStyle}"/>
                                     </Border>
-                                    <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
-                                        <TextBlock x:Name="MinTimerText" Text=""
-                                                   Style="{StaticResource TableCellTextStyle}"
+                                    <Border Grid.Column="3" Style="{StaticResource TableHeaderBorderStyle}">
+                                        <TextBlock Text="←" Style="{StaticResource TableHeaderTextStyle}"/>
+                                    </Border>
+                                    <Border Grid.Column="4" Style="{StaticResource TableHeaderBorderStyle}">
+                                        <TextBlock Text="Изм." Style="{StaticResource TableHeaderTextStyle}"
+                                                   HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <Border Grid.Column="5" Style="{StaticResource TableHeaderBorderStyle}">
+                                        <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}"
                                                    HorizontalAlignment="Right"/>
+                                    </Border>
+                                    <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
+                                        <TextBlock Text="✓" Style="{StaticResource TableHeaderTextStyle}"
+                                                   HorizontalAlignment="Center"/>
                                     </Border>
                                 </Grid>
+
+                                <ItemsControl x:Name="StepsList"
+                                              HorizontalAlignment="Left">
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="HorizontalAlignment" Value="Left"/>
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                </ItemsControl>
 
                             </StackPanel>
-                        </Border>
+                        </ScrollViewer>
+                    </Border>
 
-                        <TextBlock x:Name="CyclesText"
-                                   Text="Цикл: 0/0"
-                                   FontSize="13"
-                                   Margin="8,5,0,0"/>
-                    </StackPanel>
+                    <TextBlock x:Name="StepCounterText"
+                               Text="Шаг: 0/0"
+                               FontSize="13"
+                               Margin="8,5,0,0"/>
                 </StackPanel>
-            </Grid>
-        </Grid>
 
-        <!-- Правая колонка: печь ST-351 + АГК + СКТБ ЭлПа -->
-        <StackPanel Grid.Row="0"
-                    Orientation="Vertical"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Width="300">
+                <!-- Максимум/Минимум -->
+                <StackPanel x:Name="PumpPanel"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Visibility="Collapsed">
 
-            <!-- Карточка печи ST-351 -->
-            <Border BorderBrush="LightGray" BorderThickness="1"
+                    <Border BorderBrush="LightGray" BorderThickness="1"
+                            Padding="8"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Background="#FFF8F8F8"
+                            CornerRadius="6">
+                        <StackPanel>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="27"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="62"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource TableHeaderBorderStyle}">
+                                    <TextBlock Text="→" Style="{StaticResource TableHeaderTextStyle}"/>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource TableHeaderBorderStyle}">
+                                    <TextBlock Text="Режим" Style="{StaticResource TableHeaderTextStyle}"/>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
+                                    <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}"
+                                               HorizontalAlignment="Right"/>
+                                </Border>
+                                <Border Grid.Column="3" Style="{StaticResource TableHeaderBorderStyle}">
+                                    <TextBlock Text="Ед.изм." Style="{StaticResource TableHeaderTextStyle}"/>
+                                </Border>
+                                <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
+                                    <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}"
+                                               HorizontalAlignment="Right"/>
+                                </Border>
+                            </Grid>
+
+                            <Grid Margin="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="27"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="62"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
+                                    <TextBlock x:Name="MaxArrow" Text="  " FontSize="15"
+                                               Foreground="Black" HorizontalAlignment="Left"/>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
+                                    <TextBlock Text="Максимум:" Style="{StaticResource TableCellTextStyle}"/>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
+                                    <TextBlock x:Name="MaxValueText" Text="0"
+                                               Style="{StaticResource TableCellTextStyle}"
+                                               HorizontalAlignment="Right"/>
+                                </Border>
+                                <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
+                                    <TextBlock x:Name="MaxUnitsText" Text=""
+                                               Style="{StaticResource TableCellTextStyle}"/>
+                                </Border>
+                                <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
+                                    <TextBlock x:Name="MaxTimerText" Text=""
+                                               Style="{StaticResource TableCellTextStyle}"
+                                               HorizontalAlignment="Right"/>
+                                </Border>
+                            </Grid>
+
+                            <Grid Margin="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="27"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="62"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
+                                    <TextBlock x:Name="MinArrow" Text="  " FontSize="15"
+                                               Foreground="Black" HorizontalAlignment="Left"/>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
+                                    <TextBlock Text="Минимум:" Style="{StaticResource TableCellTextStyle}"/>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
+                                    <TextBlock x:Name="MinValueText" Text="0"
+                                               Style="{StaticResource TableCellTextStyle}"
+                                               HorizontalAlignment="Right"/>
+                                </Border>
+                                <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
+                                    <TextBlock x:Name="MinUnitsText" Text=""
+                                               Style="{StaticResource TableCellTextStyle}"/>
+                                </Border>
+                                <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
+                                    <TextBlock x:Name="MinTimerText" Text=""
+                                               Style="{StaticResource TableCellTextStyle}"
+                                               HorizontalAlignment="Right"/>
+                                </Border>
+                            </Grid>
+
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock x:Name="CyclesText"
+                               Text="Цикл: 0/0"
+                               FontSize="13"
+                               Margin="8,5,0,0"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Колонка 1: Карточка ST-351 -->
+            <Border Grid.Column="1"
+                    BorderBrush="LightGray" BorderThickness="1"
                     CornerRadius="6"
                     Padding="10,8"
                     Background="#FFF8F8F8"
-                    Margin="0,0,0,10">
+                    Width="320"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Margin="0,0,10,0">
                 <StackPanel Orientation="Vertical">
 
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
@@ -631,7 +585,7 @@
                                        Margin="0,0,6,0"/>
                             <TextBox Grid.Column="1"
                                      x:Name="FurnaceSetPointBox"
-                                     Width="75" Height="24" FontSize="15"
+                                     Width="70" Height="24" FontSize="15"
                                      FontWeight="Bold"
                                      Text="25"
                                      Padding="4,1"
@@ -750,75 +704,17 @@
                             Background="#FF808080"
                             Click="ResetStabilizationTimer_Click"/>
 
-                    <!-- Следующая уставка ST-351 -->
-                    <TextBlock Text="Следующая уставка ST-351:"
-                               FontSize="12"
+                    <!-- Пакетный режим -->
+                    <TextBlock Text="Пакетный режим"
+                               FontSize="12" FontWeight="Bold"
                                Foreground="#FF505050"
                                Margin="0,8,0,2"/>
 
-                    <Border CornerRadius="4"
-                            Padding="8,3"
-                            Margin="0,0,0,5"
-                            Background="#FF4A3A6B">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Text="След.:"
-                                       FontSize="12"
-                                       Foreground="#FFDDCCEE"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"/>
-                            <TextBox Grid.Column="1"
-                                     x:Name="NextFurnaceSetPointBox"
-                                     Width="75" Height="24" FontSize="15"
-                                     FontWeight="Bold"
-                                     Text=""
-                                     Padding="4,1"
-                                     Background="Transparent"
-                                     BorderBrush="#FF9A7FCE"
-                                     BorderThickness="1"
-                                     Foreground="White"
-                                     CaretBrush="White"
-                                     HorizontalAlignment="Right"
-                                     HorizontalContentAlignment="Center"
-                                     VerticalContentAlignment="Center"
-                                     TextChanged="NextFurnaceSetPointBox_TextChanged"/>
-                            <TextBlock Grid.Column="2"
-                                       Text="°C"
-                                       FontSize="12"
-                                       Foreground="#FFDDCCEE"
-                                       VerticalAlignment="Center"
-                                       Margin="5,0,0,0"/>
-                        </Grid>
-                    </Border>
-
-                    <TextBlock x:Name="NextFurnaceSetPointInfo"
-                               Text=""
-                               FontSize="11"
+                    <TextBlock Text="если есть активные задания — СТАРТ запустит пакет"
+                               FontSize="10"
                                Foreground="Gray"
                                TextWrapping="Wrap"
                                Margin="0,0,0,4"/>
-
-                    <Button x:Name="ApplyNextSetPointButton"
-                            Content="Применить следующую уставку"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Height="28" FontSize="11"
-                            Padding="4,2" Margin="0,0,0,0"
-                            Background="#FF6A4FA0"
-                            Click="ApplyNextSetPoint_Click"/>
-
-                    <!-- Пакетный режим по температурам -->
-                    <CheckBox x:Name="BatchModeCheckBox"
-                              Content="Пакетный режим"
-                              FontSize="12" FontWeight="Bold"
-                              Foreground="#FF505050"
-                              Margin="0,8,0,4"
-                              Checked="BatchModeCheckBox_Changed"
-                              Unchecked="BatchModeCheckBox_Changed"/>
 
                     <Border x:Name="BatchPanel"
                             BorderBrush="LightGray" BorderThickness="1"
@@ -826,40 +722,84 @@
                             Padding="6"
                             Background="White">
                         <StackPanel>
-                            <ScrollViewer MaxHeight="150"
+                            <ScrollViewer MaxHeight="180"
                                           VerticalScrollBarVisibility="Auto">
                                 <ItemsControl x:Name="BatchList">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Grid Margin="0,2">
+                                                <Grid.Style>
+                                                    <Style TargetType="Grid">
+                                                        <Setter Property="Opacity" Value="1.0"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                                <Setter Property="Opacity" Value="0.45"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Grid.Style>
                                                 <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="38"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="38"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
-                                                <TextBlock Grid.Column="0"
+                                                <CheckBox Grid.Column="0"
+                                                          IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                          VerticalAlignment="Center"
+                                                          Margin="0,0,5,0"
+                                                          ToolTip="Снять галочку, чтобы пропустить задание"/>
+
+                                                <TextBlock Grid.Column="1"
                                                            Text="{Binding IndexText}"
                                                            FontSize="11"
                                                            VerticalAlignment="Center"
                                                            Margin="0,0,5,0"/>
 
-                                                <TextBox Grid.Column="1"
+                                                <TextBox Grid.Column="2"
                                                          Text="{Binding SetPointText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          FontSize="12"
                                                          Padding="3,1"
+                                                         HorizontalContentAlignment="Center"
                                                          VerticalContentAlignment="Center"
-                                                         Margin="0,0,5,0"/>
+                                                         ToolTip="Температура уставки, °C"/>
 
-                                                <TextBlock Grid.Column="2"
+                                                <TextBlock Grid.Column="3"
+                                                           Text="°C"
+                                                           FontSize="10"
+                                                           Foreground="#FF505050"
+                                                           VerticalAlignment="Center"
+                                                           Margin="3,0,5,0"/>
+
+                                                <TextBox Grid.Column="4"
+                                                         Text="{Binding StabilizationMinutesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         FontSize="12"
+                                                         Padding="3,1"
+                                                         HorizontalContentAlignment="Center"
+                                                         VerticalContentAlignment="Center"
+                                                         ToolTip="Время стабилизации, мин"/>
+
+                                                <TextBlock Grid.Column="5"
+                                                           Text="мин"
+                                                           FontSize="10"
+                                                           Foreground="#FF505050"
+                                                           VerticalAlignment="Center"
+                                                           Margin="3,0,5,0"/>
+
+                                                <TextBlock Grid.Column="6"
                                                            Text="{Binding StatusText}"
                                                            FontSize="10"
                                                            Foreground="{Binding StatusColor}"
                                                            VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"
                                                            Margin="0,0,5,0"/>
 
-                                                <Button Grid.Column="3"
+                                                <Button Grid.Column="7"
                                                         Content="✕"
                                                         FontSize="10"
                                                         Width="20" Height="20"
@@ -910,200 +850,206 @@
                 </StackPanel>
             </Border>
 
-            <!-- Карточка АГК -->
-            <Border BorderBrush="LightGray" BorderThickness="1"
-                    CornerRadius="6"
-                    Padding="10,8"
-                    Background="#FFF8F8F8">
-                <StackPanel Orientation="Vertical">
+            <!-- Колонка 2: АГК + СКТБ ЭлПА -->
+            <StackPanel Grid.Column="2"
+                        Orientation="Vertical"
+                        HorizontalAlignment="Left" VerticalAlignment="Top">
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <Ellipse x:Name="AgkStatusEllipse"
-                                 Width="10" Height="10"
-                                 Fill="Red"
-                                 VerticalAlignment="Center"
-                                 Margin="0,0,6,0"/>
-                        <Border Width="40" Height="40"
-                                CornerRadius="4"
-                                Background="White"
-                                BorderBrush="#FFDDDDDD"
-                                BorderThickness="1"
-                                Margin="0,0,8,0"
-                                VerticalAlignment="Center">
-                            <Image Source="Images/AGK.png"
-                                   Stretch="Uniform"
-                                   Margin="2"/>
-                        </Border>
-                        <TextBlock Text="АГК"
-                                   FontSize="13" FontWeight="Bold"
-                                   Foreground="#FF505050"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
+                <!-- Карточка АГК -->
+                <Border BorderBrush="LightGray" BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,8"
+                        Background="#FFF8F8F8"
+                        Width="260"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,10">
+                    <StackPanel Orientation="Vertical">
 
-                    <Border CornerRadius="4"
-                            Padding="8,5"
-                            Margin="0,0,0,5"
-                            Background="#FF2E4A6B">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Text="Давление:"
-                                       FontSize="12"
-                                       Foreground="#FFCCDDEE"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"/>
-                            <TextBlock Grid.Column="1"
-                                       x:Name="AgkPressureText"
-                                       Text="—"
-                                       FontSize="16"
-                                       FontWeight="Bold"
-                                       Foreground="White"
-                                       HorizontalAlignment="Right"
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Ellipse x:Name="AgkStatusEllipse"
+                                     Width="10" Height="10"
+                                     Fill="Red"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,6,0"/>
+                            <Border Width="40" Height="40"
+                                    CornerRadius="4"
+                                    Background="White"
+                                    BorderBrush="#FFDDDDDD"
+                                    BorderThickness="1"
+                                    Margin="0,0,8,0"
+                                    VerticalAlignment="Center">
+                                <Image Source="Images/AGK.png"
+                                       Stretch="Uniform"
+                                       Margin="2"/>
+                            </Border>
+                            <TextBlock Text="АГК"
+                                       FontSize="13" FontWeight="Bold"
+                                       Foreground="#FF505050"
                                        VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
-
-                    <Border CornerRadius="4"
-                            Padding="8,5"
-                            Background="#FF2E6B4A">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Text="Уставка:"
-                                       FontSize="12"
-                                       Foreground="#FFCCEEDD"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"/>
-                            <TextBlock Grid.Column="1"
-                                       x:Name="AgkSetPointText"
-                                       Text="—"
-                                       FontSize="16"
-                                       FontWeight="Bold"
-                                       Foreground="White"
-                                       HorizontalAlignment="Right"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Кнопки СТОП + СБРОС -->
-                    <Grid Margin="0,8,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0"
-                                x:Name="StopButton" Content="СТОП"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="34" FontSize="13"
-                                Padding="6,4" Background="#FFD05050"
-                                Click="StopButton_Click"/>
-                        <Button Grid.Column="1"
-                                x:Name="VentButton" Content="СБРОС"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="34" FontSize="13"
-                                Padding="6,4" Margin="8,0,0,0"
-                                Background="#FF5080D0"
-                                Click="VentButton_Click"/>
-                    </Grid>
-
-                    <!-- кнопка калибровки штоков -->
-                    <Button x:Name="CalibrateStocksButton"
-                            Content="Калибровка штоков"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Height="34" FontSize="13"
-                            Padding="6,4" Margin="0,8,0,0"
-                            Background="#FF6A4FA0"
-                            Click="CalibrateStocksButton_Click"/>
-
-                    <!-- статус АГК (get_status) -->
-                    <Border CornerRadius="4"
-                            Padding="8,5"
-                            Margin="0,8,0,0"
-                            Background="#FF2E2E2E">
-                        <StackPanel Orientation="Vertical">
-                            <TextBlock Text="Статус АГК:"
-                                       FontSize="11"
-                                       Foreground="#FFAAAAAA"
-                                       Margin="0,0,0,2"/>
-                            <TextBlock x:Name="AgkStatusTextBox"
-                                       Text="—"
-                                       FontSize="12"
-                                       FontFamily="Consolas"
-                                       Foreground="#FF80FF80"
-                                       TextWrapping="Wrap"
-                                       MaxHeight="80"/>
                         </StackPanel>
-                    </Border>
 
-                </StackPanel>
-            </Border>
+                        <Border CornerRadius="4"
+                                Padding="8,5"
+                                Margin="0,0,0,5"
+                                Background="#FF2E4A6B">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="Давление:"
+                                           FontSize="12"
+                                           Foreground="#FFCCDDEE"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1"
+                                           x:Name="AgkPressureText"
+                                           Text="—"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="White"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
 
-            <!-- Карточка СКТБ ЭлПа -->
-            <Border BorderBrush="LightGray" BorderThickness="1"
-                    CornerRadius="6"
-                    Padding="10,8"
-                    Background="#FFF8F8F8"
-                    Margin="0,10,0,0">
-                <StackPanel Orientation="Vertical">
+                        <Border CornerRadius="4"
+                                Padding="8,5"
+                                Background="#FF2E6B4A">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="Уставка:"
+                                           FontSize="12"
+                                           Foreground="#FFCCEEDD"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1"
+                                           x:Name="AgkSetPointText"
+                                           Text="—"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="White"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <Ellipse x:Name="PlatinaStatusEllipse"
-                                 Width="10" Height="10"
-                                 Fill="Red"
-                                 VerticalAlignment="Center"
-                                 Margin="0,0,6,0"/>
-                        <TextBlock Text="СКТБ ЭлПа"
-                                   FontSize="13" FontWeight="Bold"
-                                   Foreground="#FF505050"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-
-                    <Border CornerRadius="4"
-                            Padding="8,5"
-                            Background="#FF2E4A6B">
-                        <Grid>
+                        <Grid Margin="0,8,0,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Text="Платина:"
-                                       FontSize="12"
-                                       Foreground="#FFCCDDEE"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"/>
-                            <TextBlock Grid.Column="1"
-                                       x:Name="PlatinaTempText"
-                                       Text="— °C"
-                                       FontSize="20"
-                                       FontWeight="Bold"
-                                       Foreground="White"
-                                       HorizontalAlignment="Right"
-                                       VerticalAlignment="Center"/>
+                            <Button Grid.Column="0"
+                                    x:Name="StopButton" Content="СТОП"
+                                    Style="{StaticResource ActionButtonStyle}"
+                                    Height="34" FontSize="13"
+                                    Padding="6,4" Background="#FFD05050"
+                                    Click="StopButton_Click"/>
+                            <Button Grid.Column="1"
+                                    x:Name="VentButton" Content="СБРОС"
+                                    Style="{StaticResource ActionButtonStyle}"
+                                    Height="34" FontSize="13"
+                                    Padding="6,4" Margin="8,0,0,0"
+                                    Background="#FF5080D0"
+                                    Click="VentButton_Click"/>
                         </Grid>
-                    </Border>
 
-                </StackPanel>
-            </Border>
+                        <Button x:Name="CalibrateStocksButton"
+                                Content="Калибровка штоков"
+                                Style="{StaticResource ActionButtonStyle}"
+                                Height="34" FontSize="12"
+                                Padding="6,4" Margin="0,8,0,0"
+                                Background="#FF6A4FA0"
+                                Click="CalibrateStocksButton_Click"/>
 
-        </StackPanel>
+                        <Border CornerRadius="4"
+                                Padding="8,5"
+                                Margin="0,8,0,0"
+                                Background="#FF2E2E2E">
+                            <StackPanel Orientation="Vertical">
+                                <TextBlock Text="Статус АГК:"
+                                           FontSize="11"
+                                           Foreground="#FFAAAAAA"
+                                           Margin="0,0,0,2"/>
+                                <TextBlock x:Name="AgkStatusTextBox"
+                                           Text="—"
+                                           FontSize="12"
+                                           FontFamily="Consolas"
+                                           Foreground="#FF80FF80"
+                                           TextWrapping="Wrap"
+                                           MaxHeight="60"/>
+                            </StackPanel>
+                        </Border>
 
-        <!-- ROW 1: Сохранение + Клиенты -->
-        <Grid Grid.Row="1" Margin="0,10,0,0">
+                    </StackPanel>
+                </Border>
+
+                <!-- Карточка СКТБ ЭлПА -->
+                <Border BorderBrush="LightGray" BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,8"
+                        Background="#FFF8F8F8"
+                        Width="260"
+                        HorizontalAlignment="Left">
+                    <StackPanel Orientation="Vertical">
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Ellipse x:Name="PlatinaStatusEllipse"
+                                     Width="10" Height="10"
+                                     Fill="Red"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,6,0"/>
+                            <TextBlock Text="СКТБ ЭлПА"
+                                       FontSize="13" FontWeight="Bold"
+                                       Foreground="#FF505050"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Border CornerRadius="4"
+                                Padding="8,5"
+                                Background="#FF2E4A6B">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="Платина:"
+                                           FontSize="12"
+                                           Foreground="#FFCCDDEE"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1"
+                                           x:Name="PlatinaTempText"
+                                           Text="— °C"
+                                           FontSize="20"
+                                           FontWeight="Bold"
+                                           Foreground="White"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+
+        </Grid>
+
+        <!-- ROW 2: Путь сохранения + кнопки данных -->
+        <Grid Grid.Row="2" Margin="0,0,0,8">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,8">
+            <StackPanel Grid.Row="0" Margin="0,0,0,6">
                 <TextBlock Text="Путь сохранения:"
                            FontSize="13"
                            VerticalAlignment="Center"
@@ -1117,8 +1063,7 @@
             </StackPanel>
 
             <StackPanel Grid.Row="1" Orientation="Horizontal"
-                        HorizontalAlignment="Left"
-                        Margin="0,0,0,8">
+                        HorizontalAlignment="Left">
                 <Button x:Name="TakePointBroadcastButton"
                         Content="Снять данные"
                         Style="{StaticResource ActionButtonStyle}"
@@ -1148,17 +1093,27 @@
                         Background="#FFD08080"
                         Click="RemoveOffline_Click"/>
             </StackPanel>
+        </Grid>
 
-            <TextBlock Grid.Row="2"
+        <!-- ROW 3: Клиенты -->
+        <Grid Grid.Row="3" Margin="0,0,0,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0"
                        Text="Подключённые клиенты KalibratorGUI:"
                        FontSize="13" FontWeight="Bold"
                        VerticalAlignment="Center"
                        Margin="0,0,0,4"/>
 
-            <Border Grid.Row="3"
+            <Border Grid.Row="1"
                     BorderBrush="LightGray" BorderThickness="1"
-                    Padding="8" MaxHeight="120"
-                    HorizontalAlignment="Stretch">
+                    Padding="8" MaxHeight="100"
+                    HorizontalAlignment="Stretch"
+                    CornerRadius="4"
+                    Background="#FFF8F8F8">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl x:Name="ClientsList">
                         <ItemsControl.ItemTemplate>
@@ -1210,8 +1165,8 @@
             </Border>
         </Grid>
 
-        <!-- ROW 2: статус + версия -->
-        <Grid Grid.Row="2" Margin="0,8,0,0">
+        <!-- ROW 4: Статус + версия -->
+        <Grid Grid.Row="4" Margin="0,6,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -1219,7 +1174,8 @@
             <TextBlock x:Name="StatusText" Grid.Column="0"
                        Text="Готов" Foreground="Gray"
                        FontSize="12"
-                       VerticalAlignment="Bottom"/>
+                       VerticalAlignment="Bottom"
+                       TextTrimming="CharacterEllipsis"/>
             <TextBlock x:Name="VersionText" Grid.Column="1"
                        Text="v0.0.0"
                        Foreground="Gray"
