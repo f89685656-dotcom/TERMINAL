@@ -87,6 +87,23 @@ namespace TERMINAL
             lock (_capabilities) return _capabilities.Contains(cap);
         }
 
+        public bool IsSensorClient =>
+    HasCapability("ATM") || HasCapability("FURNACE_TEMP");
+
+        public string RoleLabel
+        {
+            get
+            {
+                bool atm = HasCapability("ATM");
+                bool ptk = HasCapability("FURNACE_TEMP");
+
+                if (atm && ptk) return "Атм.давл/Темп. в печке";
+                if (atm) return "Атм.давл";
+                if (ptk) return "Темп. в печке";
+                return "";
+            }
+        }
+
         public void SetCapabilities(IEnumerable<string> caps)
         {
             lock (_capabilities)
@@ -1771,6 +1788,8 @@ namespace TERMINAL
                 };
                 if (capsParsed.Count > 0)
                     connectedClient.SetCapabilities(capsParsed);
+                if (connectedClient.IsSensorClient)
+                    connectedClient.IsSelected = false;
                 connectedClient.SetStatusReady();
 
                 lock (_clientsLock)
@@ -1863,6 +1882,15 @@ namespace TERMINAL
                         .Where(x => x.Length > 0);
 
                     client.SetCapabilities(caps);
+
+                    if (Dispatcher.CheckAccess())
+                        RefreshClientsUi();
+                    else
+                        Dispatcher.Invoke(() => RefreshClientsUi());
+
+                    // Датчики (ATM/FURNACE_TEMP) не участвуют в TAKE_POINT/SAVE/CLEAR
+                    if (client.IsSensorClient)
+                        client.IsSelected = false;
                 }
             }
             else if (line.StartsWith("STATUS_BUSY")) client.SetStatusWaiting();
@@ -1958,7 +1986,7 @@ namespace TERMINAL
             lock (_clientsLock)
             {
                 selected = _connectedClients
-                    .Where(c => c.IsSelected && !c.IsOffline).ToList();
+                    .Where(c => c.IsSelected && !c.IsOffline && !c.IsSensorClient).ToList();
             }
 
             if (selected.Count == 0)
@@ -2107,7 +2135,7 @@ namespace TERMINAL
             lock (_clientsLock)
             {
                 selected = _connectedClients
-                    .Where(c => c.IsSelected && !c.IsOffline).ToList();
+                    .Where(c => c.IsSelected && !c.IsOffline && !c.IsSensorClient).ToList();
             }
 
             if (selected.Count == 0)
