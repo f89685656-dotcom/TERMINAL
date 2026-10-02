@@ -373,7 +373,7 @@ namespace TERMINAL
         private DateTime _platinaLastSuccess = DateTime.MinValue;
         private int _platinaFailCount = 0;
 
-        // NEW: порт broadcast-сервера (задаётся при старте: 9990 — рабочая, 9999 — тестовая)
+        // Порт broadcast-сервера (задаётся при старте: 9990 — рабочая, 9999 — тестовая)
         private int BroadcastPort = 9990;
 
         // Таймер стабилизации температуры печи
@@ -387,10 +387,7 @@ namespace TERMINAL
         private double _lastFurnaceSetPoint = double.NaN;
         private float _lastValidFurnaceSetPoint = 0f;
 
-        // Следующая уставка ST-351 (ручной режим)
-        private float? _nextFurnaceSetPoint = null;
         private string? _lastSavedFilePath = null;
-        private bool _nextSetPointApplied = false;
 
         private const int ConnectionLostThreshold = 5;
 
@@ -419,17 +416,22 @@ namespace TERMINAL
         // автоСтарт
         private bool _autoStartEnabled = false;
         private bool _autoStartTriggered = false;
-        private const int AutoStartCalibrationMinutes = 120; // 2 часа
+        private const int AutoStartCalibrationMinutes = 120;
         private const int AutoStartPumpMinutes = 30;
 
         private string _currentPressureUnitsLabel = "";
 
         // Пакетный режим по температурам (только для «Градуировка»)
         private readonly ObservableCollection<TemperatureJob> _batchJobs = new();
-        private bool _batchModeEnabled = false;
         private bool _batchRunning = false;
         private bool _batchStopRequested = false;
         private TaskCompletionSource<bool>? _batchRunDoneSignal;
+
+        // Цвета кнопки СТАРТ
+        private static readonly Brush StartButtonNormalBrush =
+            new SolidColorBrush(Color.FromRgb(0x50, 0x90, 0xD0));
+        private static readonly Brush StartButtonBatchBrush =
+            new SolidColorBrush(Color.FromRgb(0x2E, 0x8B, 0x8B));
 
         private static readonly string SettingsDir =
             Path.Combine(Environment.GetFolderPath(
@@ -449,11 +451,17 @@ namespace TERMINAL
         {
             InitializeComponent();
 
+            // Замораживаем кисти, чтобы можно было использовать из любого потока
+            if (StartButtonNormalBrush is SolidColorBrush sb1 && sb1.CanFreeze) sb1.Freeze();
+            if (StartButtonBatchBrush is SolidColorBrush sb2 && sb2.CanFreeze) sb2.Freeze();
+
             _uiLoaded = false;
 
             LoadTargetPressures();
             LoadTimerSets();
             LoadSettings();
+
+            ApplyWindowPositionOrFallback();
 
             _uiLoaded = true;
 
@@ -463,6 +471,100 @@ namespace TERMINAL
                 BatchList.ItemsSource = _batchJobs;
 
             RenumberBatchJobs();
+        }
+
+        /// <summary>
+        /// Ставит окно в правую половину рабочего стола (учитывает панель задач).
+        /// </summary>
+        private void PositionWindowRightHalf()
+        {
+            try
+            {
+                var work = SystemParameters.WorkArea;
+
+                double halfWidth = work.Width / 2.0;
+
+                this.WindowStartupLocation = WindowStartupLocation.Manual;
+                this.Width = halfWidth;
+                this.Height = work.Height;
+                this.Left = work.Left + work.Width - halfWidth;
+                this.Top = work.Top;
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        /// <summary>
+        /// Пробует применить сохранённую позицию из настроек.
+        /// Если её нет, или она вне текущего рабочего стола — ставит окно в правую половину.
+        /// </summary>
+        private void ApplyWindowPositionOrFallback()
+        {
+            try
+            {
+                var work = SystemParameters.WorkArea;
+
+                double l = _loadedSettings?.WindowLeft ?? double.NaN;
+                double t = _loadedSettings?.WindowTop ?? double.NaN;
+                double w = _loadedSettings?.WindowWidth ?? double.NaN;
+                double h = _loadedSettings?.WindowHeight ?? double.NaN;
+
+                bool hasSaved =
+                    !double.IsNaN(l) && !double.IsNaN(t) &&
+                    !double.IsNaN(w) && !double.IsNaN(h) &&
+                    w >= 300 && h >= 300;
+
+                if (hasSaved)
+                {
+                    bool intersects =
+                        l + w > work.Left &&
+                        t + h > work.Top &&
+                        l < work.Left + work.Width &&
+                        t < work.Top + work.Height;
+
+                    if (intersects)
+                    {
+                        this.WindowStartupLocation = WindowStartupLocation.Manual;
+                        this.Width = w;
+                        this.Height = h;
+                        this.Left = l;
+                        this.Top = t;
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            PositionWindowRightHalf();
+        }
+
+        /// <summary>
+        /// Сохраняет текущую позицию/размер окна в _loadedSettings
+        /// (реальная запись в файл — в SaveSettings()).
+        /// </summary>
+        private void SaveWindowPositionToSettings()
+        {
+            try
+            {
+                if (_loadedSettings == null) return;
+
+                var bounds = this.WindowState == WindowState.Normal
+                    ? new Rect(this.Left, this.Top, this.Width, this.Height)
+                    : this.RestoreBounds;
+
+                if (bounds.Width < 100 || bounds.Height < 100) return;
+
+                _loadedSettings.WindowLeft = bounds.Left;
+                _loadedSettings.WindowTop = bounds.Top;
+                _loadedSettings.WindowWidth = bounds.Width;
+                _loadedSettings.WindowHeight = bounds.Height;
+            }
+            catch { }
         }
 
         // ─────────────────────────── ЗАПОЛНЕНИЕ ───────────────────────────
@@ -540,8 +642,11 @@ namespace TERMINAL
             public bool KosaEnabled { get; set; } = false;
             public int KosaTimerSeconds { get; set; } = 25;
             public bool AutoStartEnabled { get; set; } = false;
-            public string NextFurnaceSetPoint { get; set; } = "";
             public List<BatchJobDto> BatchJobs { get; set; } = new();
+            public double WindowLeft { get; set; } = double.NaN;
+            public double WindowTop { get; set; } = double.NaN;
+            public double WindowWidth { get; set; } = double.NaN;
+            public double WindowHeight { get; set; } = double.NaN;
         }
 
         private class BatchJobDto
@@ -580,14 +685,6 @@ namespace TERMINAL
                     ? _loadedSettings.KosaTimerSeconds : 25;
                 _autoStartEnabled = _loadedSettings.AutoStartEnabled;
 
-                if (!string.IsNullOrWhiteSpace(_loadedSettings.NextFurnaceSetPoint) &&
-                    float.TryParse(_loadedSettings.NextFurnaceSetPoint.Replace(',', '.'),
-                        NumberStyles.Float, CultureInfo.InvariantCulture, out float nsp))
-                {
-                    _nextFurnaceSetPoint = nsp;
-                }
-
-                // Загружаем пакетные задания
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
                 {
                     _batchJobs.Clear();
@@ -613,7 +710,6 @@ namespace TERMINAL
                 _kosaEnabled = false;
                 _kosaTimerSeconds = 25;
                 _autoStartEnabled = false;
-                _nextFurnaceSetPoint = null;
 
                 string docs = Environment.GetFolderPath(
                     Environment.SpecialFolder.MyDocuments);
@@ -666,11 +762,6 @@ namespace TERMINAL
             if (AutoStartCheckBox != null)
                 AutoStartCheckBox.IsChecked = _autoStartEnabled;
 
-            if (NextFurnaceSetPointBox != null && _nextFurnaceSetPoint.HasValue)
-                NextFurnaceSetPointBox.Text =
-                    _nextFurnaceSetPoint.Value.ToString("0.##", CultureInfo.InvariantCulture);
-
-            UpdateNextSetPointInfo();
             UpdateModeUi();
 
             if (TargetPressureCombo.SelectedItem != null)
@@ -707,13 +798,16 @@ namespace TERMINAL
                     KosaEnabled = _kosaEnabled,
                     KosaTimerSeconds = _kosaTimerSeconds,
                     AutoStartEnabled = _autoStartEnabled,
-                    NextFurnaceSetPoint = NextFurnaceSetPointBox?.Text ?? "",
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
                         SetPoint = j.SetPointText,
                         StabilizationMinutes = j.StabilizationMinutesText,
                         IsEnabled = j.IsEnabled
-                    }).ToList()
+                    }).ToList(),
+                    WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
+                    WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
+                    WindowWidth = _loadedSettings?.WindowWidth ?? double.NaN,
+                    WindowHeight = _loadedSettings?.WindowHeight ?? double.NaN
                 };
 
                 string json = JsonSerializer.Serialize(s,
@@ -783,24 +877,33 @@ namespace TERMINAL
                 }
             }
 
-            // Пакетный режим — только для «Градуировка»
-            if (BatchModeCheckBox != null)
-            {
-                if (!_isCalibrationMode)
-                {
-                    if (BatchModeCheckBox.IsChecked == true)
-                        BatchModeCheckBox.IsChecked = false;
-                    BatchModeCheckBox.IsEnabled = false;
-                    _batchModeEnabled = false;
-                }
-                else
-                {
-                    BatchModeCheckBox.IsEnabled = !_batchRunning;
-                }
-            }
+            UpdateStartButtonMode();
 
             UpdateCyclesLabel();
             UpdateAutoStartInfo();
+        }
+
+        /// <summary>
+        /// Обновляет текст и цвет кнопки СТАРТ в зависимости от того,
+        /// запустится ли обычная градуировка или пакетный режим.
+        /// </summary>
+        private void UpdateStartButtonMode()
+        {
+            if (StartButton == null) return;
+
+            int activeJobs = _batchJobs.Count(j => j.IsEnabled);
+            bool isBatch = _isCalibrationMode && activeJobs > 0;
+
+            if (isBatch)
+            {
+                StartButton.Content = "СТАРТ (пакет)";
+                StartButton.Background = StartButtonBatchBrush;
+            }
+            else
+            {
+                StartButton.Content = "СТАРТ (обычный)";
+                StartButton.Background = StartButtonNormalBrush;
+            }
         }
 
         private void ParamBox_TextChanged(object sender,
@@ -914,31 +1017,6 @@ namespace TERMINAL
         // ПАКЕТНЫЙ РЕЖИМ ПО ТЕМПЕРАТУРАМ (только «Градуировка»)
         // ═══════════════════════════════════════════════════════════════════
 
-        private void BatchModeCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-
-            if (!_isCalibrationMode && BatchModeCheckBox.IsChecked == true)
-            {
-                BatchModeCheckBox.IsChecked = false;
-                SetStatusWarning("Пакетный режим доступен только в режиме «Градуировка»");
-                return;
-            }
-
-            _batchModeEnabled = BatchModeCheckBox.IsChecked == true;
-
-            if (_batchModeEnabled && _autoStartEnabled)
-            {
-                AutoStartCheckBox.IsChecked = false;
-            }
-
-            if (AutoStartCheckBox != null)
-                AutoStartCheckBox.IsEnabled = !_batchModeEnabled;
-
-            UpdateNextSetPointInfo();
-            SaveSettings();
-        }
-
         private void AddBatchJob_Click(object sender, RoutedEventArgs e)
         {
             if (_isRunning || _batchRunning) return;
@@ -952,6 +1030,7 @@ namespace TERMINAL
             _batchJobs.Add(job);
             RenumberBatchJobs();
             SaveSettings();
+            UpdateStartButtonMode();
         }
 
         private void RemoveBatchJob_Click(object sender, RoutedEventArgs e)
@@ -965,6 +1044,7 @@ namespace TERMINAL
                 _batchJobs.Remove(job);
                 RenumberBatchJobs();
                 SaveSettings();
+                UpdateStartButtonMode();
             }
         }
 
@@ -978,6 +1058,7 @@ namespace TERMINAL
             _batchJobs.Clear();
             RenumberBatchJobs();
             SaveSettings();
+            UpdateStartButtonMode();
         }
 
         private void RenumberBatchJobs()
@@ -997,6 +1078,10 @@ namespace TERMINAL
         private void BatchJob_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (!_uiLoaded) return;
+
+            if (e.PropertyName == nameof(TemperatureJob.IsEnabled))
+                UpdateStartButtonMode();
+
             SaveSettings();
         }
 
@@ -1005,12 +1090,6 @@ namespace TERMINAL
             if (_batchJobs.Count == 0)
             {
                 MessageBox.Show("Список температур пуст. Добавьте хотя бы одну.");
-                return;
-            }
-
-            if (!_isCalibrationMode)
-            {
-                MessageBox.Show("Пакетный режим работает только в режиме «Градуировка».");
                 return;
             }
 
@@ -1050,7 +1129,6 @@ namespace TERMINAL
 
             SetExternalButtonsEnabled(false);
             StartButton.IsEnabled = false;
-            BatchModeCheckBox.IsEnabled = false;
             AddBatchJobButton.IsEnabled = false;
             ClearBatchButton.IsEnabled = false;
 
@@ -1163,12 +1241,13 @@ namespace TERMINAL
                 _batchStopRequested = false;
 
                 StartButton.IsEnabled = true;
-                BatchModeCheckBox.IsEnabled = _isCalibrationMode;
                 AddBatchJobButton.IsEnabled = true;
                 ClearBatchButton.IsEnabled = true;
                 SetExternalButtonsEnabled(true);
 
                 BatchProgressText.Text = "";
+
+                UpdateStartButtonMode();
             }
         }
 
@@ -2080,15 +2159,17 @@ namespace TERMINAL
             if (_selectedTargetPressure == null) { MessageBox.Show("Выберите диапазон давлений."); return; }
 
             _autoStartTriggered = false;
-            _nextSetPointApplied = false;
 
-            // Пакетный режим — только для «Градуировка»
-            if (_batchModeEnabled && _isCalibrationMode && _batchJobs.Count > 0)
+            int activeJobs = _batchJobs.Count(j => j.IsEnabled);
+
+            // Пакетный режим — только для «Градуировка» и только если есть активные задания
+            if (_isCalibrationMode && activeJobs > 0)
             {
                 await RunBatchAsync();
                 return;
             }
 
+            // Обычная градуировка / жамка
             if (_autoStartEnabled && IsStabilizationThresholdReached())
             {
                 _autoStartTriggered = true;
@@ -2279,8 +2360,6 @@ namespace TERMINAL
                                 $"Файл не найден на диске: {_lastSavedFilePath} — очистка данных отменена");
                         }
                     }
-
-                    await TryApplyNextFurnaceSetPointAsync();
                 }
 
                 ResetStepsToInitial();
@@ -2297,7 +2376,6 @@ namespace TERMINAL
 
                 UpdateAutoStartInfo();
 
-                // Сигнал оркестратору пакетного режима
                 _batchRunDoneSignal?.TrySetResult(true);
             }
         }
@@ -3074,7 +3152,9 @@ namespace TERMINAL
         {
             if (!_autoStartEnabled) return;
             if (_autoStartTriggered) return;
-            if (_batchModeEnabled) return; // в пакетном режиме автоСтарт не работает
+
+            int activeJobs = _batchJobs.Count(j => j.IsEnabled);
+            if (_isCalibrationMode && activeJobs > 0) return; // в пакетном режиме автоСтарт не работает
 
             int requiredMinutes = _isCalibrationMode
                 ? AutoStartCalibrationMinutes
@@ -3100,7 +3180,6 @@ namespace TERMINAL
 
                 try
                 {
-                    _nextSetPointApplied = false;
                     if (_isCalibrationMode)
                         await RunCalibrationModeAsync();
                     else
@@ -3111,106 +3190,6 @@ namespace TERMINAL
                     SetStatusError($"автоСтарт ошибка: {ex.Message}");
                 }
             });
-        }
-
-        // ═══════════════════════════════════════════════════════════════════
-        // СЛЕДУЮЩАЯ УСТАВКА ST-351
-        // ═══════════════════════════════════════════════════════════════════
-
-        private void NextFurnaceSetPointBox_TextChanged(object sender,
-            System.Windows.Controls.TextChangedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            if (NextFurnaceSetPointBox == null) return;
-
-            string txt = NextFurnaceSetPointBox.Text?.Trim().Replace(',', '.') ?? "";
-
-            if (string.IsNullOrWhiteSpace(txt))
-            {
-                _nextFurnaceSetPoint = null;
-            }
-            else if (float.TryParse(txt, NumberStyles.Float,
-                CultureInfo.InvariantCulture, out float v))
-            {
-                _nextFurnaceSetPoint = v;
-            }
-            else
-            {
-                _nextFurnaceSetPoint = null;
-            }
-
-            UpdateNextSetPointInfo();
-            SaveSettings();
-        }
-
-        private void UpdateNextSetPointInfo()
-        {
-            if (NextFurnaceSetPointInfo == null) return;
-
-            if (_batchModeEnabled)
-            {
-                NextFurnaceSetPointInfo.Text =
-                    "в пакетном режиме игнорируется — уставками управляет оркестратор";
-                NextFurnaceSetPointInfo.Foreground = Brushes.Gray;
-                return;
-            }
-
-            if (!_nextFurnaceSetPoint.HasValue)
-            {
-                NextFurnaceSetPointInfo.Text =
-                    "не задана — уставка печи меняться не будет";
-                NextFurnaceSetPointInfo.Foreground = Brushes.Gray;
-                return;
-            }
-
-            NextFurnaceSetPointInfo.Text =
-                $"после градуировки печь будет переведена на " +
-                $"{_nextFurnaceSetPoint.Value.ToString("0.##", CultureInfo.InvariantCulture)} °C";
-            NextFurnaceSetPointInfo.Foreground =
-                new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0xA0));
-        }
-
-        private async void ApplyNextSetPoint_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isRunning || _batchRunning)
-            {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
-                return;
-            }
-            if (!_nextFurnaceSetPoint.HasValue)
-            {
-                MessageBox.Show("Сначала введите значение следующей уставки.");
-                return;
-            }
-
-            ApplyNextSetPointButton.IsEnabled = false;
-            try
-            {
-                bool ok = await WriteFurnaceSetPointAsync(
-                    _nextFurnaceSetPoint.Value, FurnaceIp, FurnacePort,
-                    FurnaceSetPointRegister);
-
-                if (ok)
-                {
-                    _lastValidFurnaceSetPoint = _nextFurnaceSetPoint.Value;
-                    await RefreshFurnaceSetPointAsync();
-                    ResetStabilizationTimer();
-                    _autoStartTriggered = false;
-                    UpdateAutoStartInfo();
-
-                    SetStatusSuccess(
-                        $"Уставка печи изменена на " +
-                        $"{_nextFurnaceSetPoint.Value.ToString("0.##", CultureInfo.InvariantCulture)} °C");
-                }
-                else
-                {
-                    SetStatusError("Не удалось записать следующую уставку в печь");
-                }
-            }
-            finally
-            {
-                ApplyNextSetPointButton.IsEnabled = true;
-            }
         }
 
         private async Task<bool> WaitForSavedFileAsync(string? path, int timeoutMs)
@@ -3224,42 +3203,6 @@ namespace TERMINAL
                 await Task.Delay(250);
             }
             return File.Exists(path);
-        }
-
-        private async Task TryApplyNextFurnaceSetPointAsync()
-        {
-            if (_batchModeEnabled) return;
-            if (!_nextFurnaceSetPoint.HasValue) return;
-            if (_nextSetPointApplied) return;
-
-            _nextSetPointApplied = true;
-
-            float target = _nextFurnaceSetPoint.Value;
-
-            SetStatus($"Применение следующей уставки ST-351: {target} °C...");
-
-            bool ok = await WriteFurnaceSetPointAsync(
-                target, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
-
-            if (ok)
-            {
-                _lastValidFurnaceSetPoint = target;
-                await RefreshFurnaceSetPointAsync();
-
-                ResetStabilizationTimer();
-                _autoStartTriggered = false;
-                UpdateAutoStartInfo();
-
-                SetStatusSuccess(
-                    $"Следующая уставка ST-351 применена: " +
-                    $"{target.ToString("0.##", CultureInfo.InvariantCulture)} °C");
-            }
-            else
-            {
-                SetStatusError(
-                    $"Не удалось применить следующую уставку ST-351 " +
-                    $"({target.ToString("0.##", CultureInfo.InvariantCulture)} °C)");
-            }
         }
 
         // ─────────────────────────── СКТБ ЭлПа (ПЛАТИНА) ───────────────────────────
@@ -4050,7 +3993,6 @@ namespace TERMINAL
             if (VersionText != null)
                 VersionText.Text = GetAppVersion();
 
-            // NEW: спрашиваем режим запуска
             AskForStartupMode();
 
             StartBroadcastServer();
@@ -4090,7 +4032,7 @@ namespace TERMINAL
             await RefreshPlatinaAsync();
 
             UpdateAutoStartInfo();
-            UpdateNextSetPointInfo();
+            UpdateStartButtonMode();
         }
 
         private async Task ConnectToDeviceLoopAsync()
@@ -4350,6 +4292,7 @@ namespace TERMINAL
 
         protected override void OnClosed(EventArgs e)
         {
+            try { SaveWindowPositionToSettings(); } catch { }
             try { SaveSettings(); } catch { }
             _stopRequested = true;
             _pauseRequested = false;
