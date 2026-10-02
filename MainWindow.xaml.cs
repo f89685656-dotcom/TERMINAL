@@ -276,6 +276,7 @@ namespace TERMINAL
         private string _statusText = "ожидает";
         private Brush _statusColor = Brushes.Gray;
         private bool _isEnabled = true;
+        private bool _isEditable = true;
 
         public string IndexText { get; set; } = "";
 
@@ -307,6 +308,12 @@ namespace TERMINAL
         {
             get => _isEnabled;
             set { _isEnabled = value; OnPropertyChanged(nameof(IsEnabled)); }
+        }
+
+        public bool IsEditable
+        {
+            get => _isEditable;
+            set { _isEditable = value; OnPropertyChanged(nameof(IsEditable)); }
         }
 
         public float SetPoint { get; set; }
@@ -1129,12 +1136,15 @@ namespace TERMINAL
             }
 
             _batchRunning = true;
-            _batchStopRequested = false;
 
             SetExternalButtonsEnabled(false);
             StartButton.IsEnabled = false;
             AddBatchJobButton.IsEnabled = false;
             ClearBatchButton.IsEnabled = false;
+            BatchList.IsEnabled = false;
+
+            foreach (var job in _batchJobs)
+                job.IsEditable = false;
 
             try
             {
@@ -1200,7 +1210,7 @@ namespace TERMINAL
                     }
 
                     // 3) Запуск «Градуировка» и ожидание завершения
-                    job.StatusText = "работа";
+                    job.StatusText = "Идёт съём данных";
                     job.StatusColor = Brushes.Blue;
 
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «Градуировка» " +
@@ -1241,6 +1251,10 @@ namespace TERMINAL
                 AddBatchJobButton.IsEnabled = true;
                 ClearBatchButton.IsEnabled = true;
                 SetExternalButtonsEnabled(true);
+                BatchList.IsEnabled = true;
+
+                foreach (var job in _batchJobs)
+                    job.IsEditable = true;
 
                 BatchProgressText.Text = "";
 
@@ -2159,8 +2173,6 @@ namespace TERMINAL
             _stopRequested = false;
             _batchStopRequested = false;
             _pauseRequested = false;
-            _autoStartTriggered = false;
-
             _autoStartTriggered = false;
 
             int activeJobs = _batchJobs.Count(j => j.IsEnabled);
