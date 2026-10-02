@@ -654,6 +654,7 @@ namespace TERMINAL
             TargetPressureCombo.Items.Add("140 МПа");
             TargetPressureCombo.Items.Add("160 МПа (БУРСЕРВИС)");
             TargetPressureCombo.Items.Add("160 МПа (Schlumberger)");
+            TargetPressureCombo.Items.Add("ТЕСТ");
             TargetPressureCombo.SelectedIndex = 0;
         }
 
@@ -661,6 +662,7 @@ namespace TERMINAL
         {
             TimerSetCombo.Items.Add("Короткие таймеры");
             TimerSetCombo.Items.Add("Длинные таймеры");
+            TimerSetCombo.Items.Add("ТЕСТ");
             TimerSetCombo.SelectedIndex = 0;
         }
 
@@ -688,6 +690,7 @@ namespace TERMINAL
             { "140 МПа", new double[] { 0, 15, 30, 45, 60, 75, 90, 105, 120, 140, 105, 90, 75, 60, 30, 0 } },
             { "160 МПа (БУРСЕРВИС)", new double[] { 0, 34.5, 69, 103.5, 138, 160, 155, 120.75, 86.25, 51.75, 17.25, 2.5 } },
             { "160 МПа (Schlumberger)", new double[] { 0, 15, 30, 45, 60, 80, 100, 120, 140, 160, 120, 80, 60, 45, 15, 0 } },
+            { "ТЕСТ", new double[] { 0, 0, 0, 0, 0 } },
         };
 
         // ─────────────────────────── НАСТРОЙКИ ───────────────────────────
@@ -1317,10 +1320,10 @@ namespace TERMINAL
         }
 
         private async Task<bool> WaitForBatchStabilizationAsync(
-            int requiredMinutes, int jobIndex, int totalJobs)
+    int requiredMinutes, int jobIndex, int totalJobs)
         {
-            var start = DateTime.Now;
-            var outOfRangeSince = DateTime.MinValue;
+            var inRangeSince = DateTime.MinValue;     // момент входа в допуск
+            var outOfRangeSince = DateTime.MinValue;  // момент выхода из допуска
 
             while (true)
             {
@@ -1350,7 +1353,12 @@ namespace TERMINAL
                 if (inRange)
                 {
                     outOfRangeSince = DateTime.MinValue;
-                    var elapsed = DateTime.Now - start;
+
+                    // Отсчёт стартует с момента первого входа в допуск
+                    if (inRangeSince == DateTime.MinValue)
+                        inRangeSince = DateTime.Now;
+
+                    var elapsed = DateTime.Now - inRangeSince;
                     var remaining = TimeSpan.FromMinutes(requiredMinutes) - elapsed;
                     if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
 
@@ -1370,7 +1378,8 @@ namespace TERMINAL
                     var outOfRange = DateTime.Now - outOfRangeSince;
                     if (outOfRange.TotalSeconds >= StabilizationOutOfRangeGraceSeconds)
                     {
-                        start = DateTime.Now;
+                        // Температура вне допуска слишком долго — сбрасываем отсчёт стабилизации
+                        inRangeSince = DateTime.MinValue;
                         outOfRangeSince = DateTime.MinValue;
                         BatchProgressText.Text =
                             $"Задание {jobIndex}/{totalJobs}: " +
@@ -4231,6 +4240,10 @@ namespace TERMINAL
 
         private int GetStepDuration(double[] steps, int index, bool longTimers)
         {
+            // Режим «ТЕСТ»: все таймеры по 10 сек
+            if (TimerSetCombo.SelectedIndex == 2)
+                return 10;
+
             if (index == 0) return 10;
             double cur = steps[index];
             double prev = steps[index - 1];
