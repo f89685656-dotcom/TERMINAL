@@ -373,8 +373,8 @@ namespace TERMINAL
         private DateTime _platinaLastSuccess = DateTime.MinValue;
         private int _platinaFailCount = 0;
 
-        // Порт broadcast-сервера
-        private const int BroadcastPort = 9990;
+        // NEW: порт broadcast-сервера (задаётся при старте: 9990 — рабочая, 9999 — тестовая)
+        private int BroadcastPort = 9990;
 
         // Таймер стабилизации температуры печи
         private DateTime _stabilizationTimerStart = DateTime.MinValue;
@@ -587,7 +587,7 @@ namespace TERMINAL
                     _nextFurnaceSetPoint = nsp;
                 }
 
-                // NEW: загружаем пакетные задания
+                // Загружаем пакетные задания
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
                 {
                     _batchJobs.Clear();
@@ -1291,7 +1291,7 @@ namespace TERMINAL
             }
 
             bool longTimers = TimerSetCombo.SelectedIndex == 1;
-            string unitsLabel = GetUnitsLabel(_selectedTargetPressure!);
+            string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
 
             _stepItems = new ObservableCollection<StepItem>();
 
@@ -1418,6 +1418,96 @@ namespace TERMINAL
         }
 
         // ═══════════════════════════════════════════════════════════════════
+        // ДИАЛОГ ВЫБОРА РЕЖИМА ЗАПУСКА (порт broadcast-сервера)
+        // ═══════════════════════════════════════════════════════════════════
+
+        private void AskForStartupMode()
+        {
+            var dlg = new Window
+            {
+                Title = "Режим запуска",
+                Width = 420,
+                Height = 200,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStyle = WindowStyle.ToolWindow,
+                Owner = this,
+                Background = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0))
+            };
+
+            var grid = new System.Windows.Controls.Grid { Margin = new Thickness(15) };
+            grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+
+            var title = new System.Windows.Controls.TextBlock
+            {
+                Text = "В каком режиме запустить программу?",
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            System.Windows.Controls.Grid.SetRow(title, 0);
+            grid.Children.Add(title);
+
+            var info = new System.Windows.Controls.TextBlock
+            {
+                Text = "Рабочая — порт 9990\n" +
+                       "Тестовая — порт 9999 (для параллельного запуска)",
+                FontSize = 12,
+                Foreground = Brushes.Gray,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            System.Windows.Controls.Grid.SetRow(info, 1);
+            grid.Children.Add(info);
+
+            var buttonsPanel = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var workBtn = new System.Windows.Controls.Button
+            {
+                Content = "Рабочая (9990)",
+                Width = 140,
+                Height = 32,
+                Margin = new Thickness(0, 0, 8, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0x50, 0x90, 0xD0)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+
+            var testBtn = new System.Windows.Controls.Button
+            {
+                Content = "Тестовая (9999)",
+                Width = 140,
+                Height = 32,
+                Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+
+            bool isWork = true;
+
+            workBtn.Click += (s, e) => { isWork = true; dlg.Close(); };
+            testBtn.Click += (s, e) => { isWork = false; dlg.Close(); };
+
+            buttonsPanel.Children.Add(workBtn);
+            buttonsPanel.Children.Add(testBtn);
+            System.Windows.Controls.Grid.SetRow(buttonsPanel, 2);
+            grid.Children.Add(buttonsPanel);
+
+            dlg.Content = grid;
+            dlg.ShowDialog();
+
+            BroadcastPort = isWork ? 9990 : 9999;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
         // BROADCAST-СЕРВЕР
         // ═══════════════════════════════════════════════════════════════════
 
@@ -1448,12 +1538,17 @@ namespace TERMINAL
                 _clientsUiTimer.Tick += (s, e) => RefreshClientsUi();
                 _clientsUiTimer.Start();
 
-                SetStatus($"Broadcast-сервер запущен на 127.0.0.1:{BroadcastPort}", false);
+                string mode = BroadcastPort == 9990 ? "рабочая" : "тестовая";
+                SetStatus($"Broadcast-сервер ({mode}) запущен на 127.0.0.1:{BroadcastPort}", false);
             }
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
             {
-                MessageBox.Show($"Порт {BroadcastPort} уже занят. Закройте старый экземпляр.",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                string which = BroadcastPort == 9990 ? "рабочая" : "тестовая";
+                MessageBox.Show(
+                    $"Порт {BroadcastPort} уже занят.\n\n" +
+                    $"Похоже, {which} версия уже запущена (или не закрыт старый экземпляр).\n" +
+                    $"Закройте другую копию или выберите другой режим при следующем запуске.",
+                    "Порт занят", MessageBoxButton.OK, MessageBoxImage.Error);
                 Environment.Exit(1);
             }
             catch (Exception ex)
@@ -2340,7 +2435,7 @@ namespace TERMINAL
 
             double maxPressure = steps.Max();
             string unitsCode = GetUnitsCode(_selectedTargetPressure!);
-            string unitsLabel = GetUnitsLabel(_selectedTargetPressure!);
+            string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
             double atmoThreshold = GetAtmosphereThreshold(unitsCode);
 
             _isRunning = true;
@@ -3907,8 +4002,9 @@ namespace TERMINAL
             }
         }
 
-        private string GetUnitsCode(string tp)
+        private string GetUnitsCode(string? tp)
         {
+            if (string.IsNullOrEmpty(tp)) return "kgs";
             if (tp.Contains("кгс/см²")) return "kgs";
             if (tp.Contains("МПа")) return "MPa";
             if (tp.Contains("кПа")) return "kPa";
@@ -3917,8 +4013,9 @@ namespace TERMINAL
             return "kgs";
         }
 
-        private string GetUnitsLabel(string tp)
+        private string GetUnitsLabel(string? tp)
         {
+            if (string.IsNullOrEmpty(tp)) return "";
             if (tp.Contains("кгс/см²")) return "кгс/см²";
             if (tp.Contains("МПа")) return "МПа";
             if (tp.Contains("кПа")) return "кПа";
@@ -3952,6 +4049,9 @@ namespace TERMINAL
         {
             if (VersionText != null)
                 VersionText.Text = GetAppVersion();
+
+            // NEW: спрашиваем режим запуска
+            AskForStartupMode();
 
             StartBroadcastServer();
 
