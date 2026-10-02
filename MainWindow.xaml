@@ -991,49 +991,125 @@
 
                 <!-- Карточка СКТБ ЭлПА -->
                 <Border BorderBrush="LightGray" BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="10,8"
-                        Background="#FFF8F8F8"
-                        Width="260"
-                        HorizontalAlignment="Left">
+                    CornerRadius="6"
+                    Padding="10,8"
+                    Background="#FFF8F8F8"
+                    Width="260"
+                    HorizontalAlignment="Left">
                     <StackPanel Orientation="Vertical">
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <Ellipse x:Name="PlatinaStatusEllipse"
-                                     Width="10" Height="10"
-                                     Fill="Red"
-                                     VerticalAlignment="Center"
-                                     Margin="0,0,6,0"/>
+                     Width="10" Height="10"
+                     Fill="Red"
+                     VerticalAlignment="Center"
+                     Margin="0,0,6,0"/>
                             <TextBlock Text="СКТБ ЭлПА"
-                                       FontSize="13" FontWeight="Bold"
-                                       Foreground="#FF505050"
-                                       VerticalAlignment="Center"/>
+                       FontSize="13" FontWeight="Bold"
+                       Foreground="#FF505050"
+                       VerticalAlignment="Center"/>
                         </StackPanel>
 
-                        <Border CornerRadius="4"
-                                Padding="8,5"
-                                Background="#FF2E4A6B">
+                        <!-- Платина -->
+                        <Border CornerRadius="4" Padding="8,5" Background="#FF2E4A6B" Margin="0,0,0,5">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Text="Платина:"
-                                           FontSize="12"
-                                           Foreground="#FFCCDDEE"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,6,0"/>
+                                <Ellipse Grid.Column="0"
+                         x:Name="PlatinaRowEllipse"
+                         Width="8" Height="8"
+                         Fill="Red"
+                         VerticalAlignment="Center"
+                         Margin="0,0,6,0"/>
                                 <TextBlock Grid.Column="1"
-                                           x:Name="PlatinaTempText"
-                                           Text="— °C"
-                                           FontSize="20"
-                                           FontWeight="Bold"
-                                           Foreground="White"
-                                           HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"/>
+                           Text="Платина:"
+                           FontSize="12"
+                           Foreground="#FFCCDDEE"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="2"
+                           x:Name="PlatinaTempText"
+                           Text="— °C"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           Foreground="White"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
+
+                        <!-- ПДА -->
+                        <Border CornerRadius="4" Padding="8,5" Background="#FF2E4A6B" Margin="0,0,0,5">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0"
+                         x:Name="PdaStatusEllipse"
+                         Width="8" Height="8"
+                         Fill="Red"
+                         VerticalAlignment="Center"
+                         Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1"
+                           Text="ПДА:"
+                           FontSize="12"
+                           Foreground="#FFCCDDEE"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="2"
+                           x:Name="PdaPressureText"
+                           Text="— мм рт. ст."
+                           FontSize="16"
+                           FontWeight="Bold"
+                           Foreground="White"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- ПТК -->
+                        <Border CornerRadius="4" Padding="8,5" Background="#FF2E4A6B">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0"
+                         x:Name="PtkStatusEllipse"
+                         Width="8" Height="8"
+                         Fill="Red"
+                         VerticalAlignment="Center"
+                         Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1"
+                           Text="ПТК:"
+                           FontSize="12"
+                           Foreground="#FFCCDDEE"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="2"
+                           x:Name="PtkTempText"
+                           Text="— °C"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           Foreground="White"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Подписи источника (одна на всех, опционально) -->
+                        <TextBlock x:Name="SensorSourceText"
+                   Text=""
+                   FontSize="9"
+                   Foreground="Gray"
+                   Margin="0,4,0,0"
+                   TextTrimming="CharacterEllipsis"/>
 
                     </StackPanel>
                 </Border>

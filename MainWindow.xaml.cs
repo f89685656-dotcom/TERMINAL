@@ -72,6 +72,30 @@ namespace TERMINAL
         public DateTime? DisconnectedAt { get; set; } = null;
         public DateTime LastActivityAt { get; set; } = DateTime.Now;
 
+        // ── Данные от клиента-датчика (ПДА/ПТК) ──
+        private readonly HashSet<string> _capabilities = new HashSet<string>();
+        public HashSet<string> Capabilities => _capabilities;
+
+        public double LastAtm { get; set; } = double.NaN;
+        public DateTime LastAtmAt { get; set; } = DateTime.MinValue;
+
+        public double LastFurnaceFromClient { get; set; } = double.NaN;
+        public DateTime LastFurnaceFromClientAt { get; set; } = DateTime.MinValue;
+
+        public bool HasCapability(string cap)
+        {
+            lock (_capabilities) return _capabilities.Contains(cap);
+        }
+
+        public void SetCapabilities(IEnumerable<string> caps)
+        {
+            lock (_capabilities)
+            {
+                _capabilities.Clear();
+                foreach (var c in caps) _capabilities.Add(c);
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged(string name) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -379,6 +403,19 @@ namespace TERMINAL
         private double _platinaLastValue = double.NaN;
         private DateTime _platinaLastSuccess = DateTime.MinValue;
         private int _platinaFailCount = 0;
+
+        // ── ПДА/ПТК (от клиентов KalibratorGUI с CAPS) ──
+        private double _pdaLastValue = double.NaN;
+        private DateTime _pdaLastSuccess = DateTime.MinValue;
+        private string _pdaSourceSid = "";
+
+        private double _ptkLastValue = double.NaN;
+        private DateTime _ptkLastSuccess = DateTime.MinValue;
+        private string _ptkSourceSid = "";
+
+        private DispatcherTimer? _sensorUiTimer;
+
+        private const double SensorStaleSeconds = 5.0;
 
         // Порт broadcast-сервера (задаётся при старте: 9990 — рабочая, 9999 — тестовая)
         private int BroadcastPort = 9990;
@@ -1699,8 +1736,30 @@ namespace TERMINAL
                 }
 
                 string hello = sb.ToString().Trim();
+                string sidParsed = "(неизвестен)";
+                var capsParsed = new List<string>();
+
                 if (hello.StartsWith("HELLO "))
-                    sid = hello.Substring(6).Trim();
+                {
+                    string rest = hello.Substring(6).Trim();
+                    int capsIdx = rest.IndexOf(" CAPS ", StringComparison.Ordinal);
+                    if (capsIdx >= 0)
+                    {
+                        sidParsed = rest.Substring(0, capsIdx).Trim();
+                        string capsPart = rest.Substring(capsIdx + 6).Trim();
+                        capsParsed = capsPart
+                            .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Select(x => x.Trim())
+                            .Where(x => x.Length > 0)
+                            .ToList();
+                    }
+                    else
+                    {
+                        sidParsed = rest;
+                    }
+                }
+
+                sid = sidParsed;
 
                 connectedClient = new ConnectedClient
                 {
@@ -1710,6 +1769,8 @@ namespace TERMINAL
                     ConnectedAt = DateTime.Now,
                     LastActivityAt = DateTime.Now
                 };
+                if (capsParsed.Count > 0)
+                    connectedClient.SetCapabilities(capsParsed);
                 connectedClient.SetStatusReady();
 
                 lock (_clientsLock)
@@ -1787,7 +1848,23 @@ namespace TERMINAL
         {
             client.LastActivityAt = DateTime.Now;
 
-            if (line.StartsWith("HELLO ")) client.SetStatusAlive();
+            // ── HELLO <sid> [CAPS a,b,c] ──
+            if (line.StartsWith("HELLO "))
+            {
+                client.SetStatusAlive();
+
+                int capsIdx = line.IndexOf(" CAPS ", StringComparison.Ordinal);
+                if (capsIdx >= 0)
+                {
+                    string capsPart = line.Substring(capsIdx + 6).Trim();
+                    var caps = capsPart
+                        .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(x => x.Trim())
+                        .Where(x => x.Length > 0);
+
+                    client.SetCapabilities(caps);
+                }
+            }
             else if (line.StartsWith("STATUS_BUSY")) client.SetStatusWaiting();
             else if (line.StartsWith("DONE_OK"))
             {
@@ -1818,6 +1895,26 @@ namespace TERMINAL
             {
                 lock (_clearLock) { _clearResponses.Add(client.Sid + ":FAIL"); }
                 client.SetStatusClearFailed();
+            }
+            else if (line.StartsWith("ATM "))
+            {
+                string val = line.Substring(4).Trim().Replace(',', '.');
+                if (double.TryParse(val, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double v))
+                {
+                    client.LastAtm = v;
+                    client.LastAtmAt = DateTime.Now;
+                }
+            }
+            else if (line.StartsWith("FURNACE_TEMP "))
+            {
+                string val = line.Substring(13).Trim().Replace(',', '.');
+                if (double.TryParse(val, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double v))
+                {
+                    client.LastFurnaceFromClient = v;
+                    client.LastFurnaceFromClientAt = DateTime.Now;
+                }
             }
         }
 
@@ -3329,6 +3426,8 @@ namespace TERMINAL
 
                 if (PlatinaStatusEllipse != null)
                     PlatinaStatusEllipse.Fill = Brushes.Green;
+                if (PlatinaRowEllipse != null)
+                    PlatinaRowEllipse.Fill = Brushes.Green;
             }
             else
             {
@@ -3342,9 +3441,116 @@ namespace TERMINAL
 
                     if (PlatinaStatusEllipse != null)
                         PlatinaStatusEllipse.Fill = Brushes.Red;
+                    if (PlatinaRowEllipse != null)
+                        PlatinaRowEllipse.Fill = Brushes.Red;
                 }
             }
         }
+
+
+        private void RefreshSensorUiFromClients()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(RefreshSensorUiFromClients);
+                return;
+            }
+
+            var now = DateTime.Now;
+
+            // ── ПДА ──
+            ConnectedClient? atmClient;
+            lock (_clientsLock)
+            {
+                atmClient = _connectedClients
+                    .Where(c => !c.IsOffline && c.HasCapability("ATM"))
+                    .OrderByDescending(c => c.LastAtmAt)
+                    .FirstOrDefault();
+            }
+
+            bool pdaFresh = atmClient != null &&
+                (now - atmClient.LastAtmAt).TotalSeconds <= SensorStaleSeconds &&
+                !double.IsNaN(atmClient.LastAtm);
+
+            if (pdaFresh)
+            {
+                _pdaLastValue = atmClient!.LastAtm;
+                _pdaLastSuccess = atmClient.LastAtmAt;
+                _pdaSourceSid = atmClient.Sid;
+
+                if (PdaStatusEllipse != null)
+                    PdaStatusEllipse.Fill = Brushes.Green;
+
+                if (PdaPressureText != null)
+                {
+                    PdaPressureText.Text =
+                        _pdaLastValue.ToString("0.00", CultureInfo.InvariantCulture) +
+                        " мм рт. ст.";
+                    PdaPressureText.Foreground = Brushes.White;
+                }
+            }
+            else
+                {
+                    if (PdaPressureText != null &&
+                        _pdaLastSuccess != DateTime.MinValue &&
+                        (now - _pdaLastSuccess).TotalSeconds > SensorStaleSeconds)
+                    {
+                        PdaPressureText.Text = "— мм рт. ст.";
+                        PdaPressureText.Foreground =
+                            new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
+                    }
+                    if (PdaStatusEllipse != null)
+                        PdaStatusEllipse.Fill = Brushes.Red;
+                }
+
+                // ── ПТК ──
+                ConnectedClient? ptkClient;
+                lock (_clientsLock)
+                {
+                    ptkClient = _connectedClients
+                        .Where(c => !c.IsOffline && c.HasCapability("FURNACE_TEMP"))
+                        .OrderByDescending(c => c.LastFurnaceFromClientAt)
+                        .FirstOrDefault();
+                }
+
+                bool ptkFresh = ptkClient != null &&
+                    (now - ptkClient.LastFurnaceFromClientAt).TotalSeconds <= SensorStaleSeconds &&
+                    !double.IsNaN(ptkClient.LastFurnaceFromClient);
+
+                if (ptkFresh)
+                {
+                    _ptkLastValue = ptkClient!.LastFurnaceFromClient;
+                    _ptkLastSuccess = ptkClient.LastFurnaceFromClientAt;
+                    _ptkSourceSid = ptkClient.Sid;
+
+                    if (PtkStatusEllipse != null)
+                        PtkStatusEllipse.Fill = Brushes.Green;
+
+                    if (PtkTempText != null)
+                    {
+                        string sign = _ptkLastValue >= 0 ? "+" : "";
+                        PtkTempText.Text =
+                            sign +
+                            _ptkLastValue.ToString("0.000", CultureInfo.InvariantCulture) +
+                            " °C";
+                        PtkTempText.Foreground = Brushes.White;
+                    }
+                }
+                else
+                {
+                    if (PtkTempText != null &&
+                        _ptkLastSuccess != DateTime.MinValue &&
+                        (now - _ptkLastSuccess).TotalSeconds > SensorStaleSeconds)
+                    {
+                        PtkTempText.Text = "— °C";
+                        PtkTempText.Foreground =
+                            new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
+                    }
+                    if (PtkStatusEllipse != null)
+                        PtkStatusEllipse.Fill = Brushes.Red;
+                }
+            }
+
 
         // ─────────────────────────── СТАТУС АГК ───────────────────────────
 
@@ -4048,6 +4254,15 @@ namespace TERMINAL
 
             await RefreshPlatinaAsync();
 
+            _sensorUiTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _sensorUiTimer.Tick += (s, e) => RefreshSensorUiFromClients();
+            _sensorUiTimer.Start();
+
+            RefreshSensorUiFromClients();
+
             UpdateAutoStartInfo();
             UpdateStartButtonMode();
         }
@@ -4320,6 +4535,7 @@ namespace TERMINAL
             _statusResetTimer?.Stop();
             _furnaceTempTimer?.Stop();
             _platinaTimer?.Stop();
+            _sensorUiTimer?.Stop();
             _cts.Cancel();
 
             lock (_streamLock)
