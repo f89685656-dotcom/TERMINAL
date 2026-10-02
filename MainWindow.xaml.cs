@@ -269,12 +269,13 @@ namespace TERMINAL
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
-    // NEW: задание пакетного режима по температуре
     public class TemperatureJob : INotifyPropertyChanged
     {
         private string _setPointText = "";
+        private string _stabilizationMinutesText = "120";
         private string _statusText = "ожидает";
         private Brush _statusColor = Brushes.Gray;
+        private bool _isEnabled = true;
 
         public string IndexText { get; set; } = "";
 
@@ -282,6 +283,12 @@ namespace TERMINAL
         {
             get => _setPointText;
             set { _setPointText = value; OnPropertyChanged(nameof(SetPointText)); }
+        }
+
+        public string StabilizationMinutesText
+        {
+            get => _stabilizationMinutesText;
+            set { _stabilizationMinutesText = value; OnPropertyChanged(nameof(StabilizationMinutesText)); }
         }
 
         public string StatusText
@@ -296,7 +303,14 @@ namespace TERMINAL
             set { _statusColor = value; OnPropertyChanged(nameof(StatusColor)); }
         }
 
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set { _isEnabled = value; OnPropertyChanged(nameof(IsEnabled)); }
+        }
+
         public float SetPoint { get; set; }
+        public int StabilizationMinutes { get; set; } = 120;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged(string name) =>
@@ -410,7 +424,7 @@ namespace TERMINAL
 
         private string _currentPressureUnitsLabel = "";
 
-        // NEW: пакетный режим по температурам (только для «Градуировка»)
+        // Пакетный режим по температурам (только для «Градуировка»)
         private readonly ObservableCollection<TemperatureJob> _batchJobs = new();
         private bool _batchModeEnabled = false;
         private bool _batchRunning = false;
@@ -445,9 +459,10 @@ namespace TERMINAL
 
             ApplyLoadedSettingsToUi();
 
-            // NEW: список заданий пакетного режима
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
+
+            RenumberBatchJobs();
         }
 
         // ─────────────────────────── ЗАПОЛНЕНИЕ ───────────────────────────
@@ -526,6 +541,14 @@ namespace TERMINAL
             public int KosaTimerSeconds { get; set; } = 25;
             public bool AutoStartEnabled { get; set; } = false;
             public string NextFurnaceSetPoint { get; set; } = "";
+            public List<BatchJobDto> BatchJobs { get; set; } = new();
+        }
+
+        private class BatchJobDto
+        {
+            public string SetPoint { get; set; } = "25";
+            public string StabilizationMinutes { get; set; } = "120";
+            public bool IsEnabled { get; set; } = true;
         }
 
         private void LoadSettings()
@@ -562,6 +585,24 @@ namespace TERMINAL
                         NumberStyles.Float, CultureInfo.InvariantCulture, out float nsp))
                 {
                     _nextFurnaceSetPoint = nsp;
+                }
+
+                // NEW: загружаем пакетные задания
+                if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
+                {
+                    _batchJobs.Clear();
+                    foreach (var dto in _loadedSettings.BatchJobs)
+                    {
+                        _batchJobs.Add(new TemperatureJob
+                        {
+                            SetPointText = string.IsNullOrWhiteSpace(dto.SetPoint)
+                                ? "25" : dto.SetPoint,
+                            StabilizationMinutesText =
+                                string.IsNullOrWhiteSpace(dto.StabilizationMinutes)
+                                    ? "120" : dto.StabilizationMinutes,
+                            IsEnabled = dto.IsEnabled
+                        });
+                    }
                 }
             }
             catch
@@ -666,7 +707,13 @@ namespace TERMINAL
                     KosaEnabled = _kosaEnabled,
                     KosaTimerSeconds = _kosaTimerSeconds,
                     AutoStartEnabled = _autoStartEnabled,
-                    NextFurnaceSetPoint = NextFurnaceSetPointBox?.Text ?? ""
+                    NextFurnaceSetPoint = NextFurnaceSetPointBox?.Text ?? "",
+                    BatchJobs = _batchJobs.Select(j => new BatchJobDto
+                    {
+                        SetPoint = j.SetPointText,
+                        StabilizationMinutes = j.StabilizationMinutesText,
+                        IsEnabled = j.IsEnabled
+                    }).ToList()
                 };
 
                 string json = JsonSerializer.Serialize(s,
@@ -736,7 +783,7 @@ namespace TERMINAL
                 }
             }
 
-            // NEW: пакетный режим — только для «Градуировка»
+            // Пакетный режим — только для «Градуировка»
             if (BatchModeCheckBox != null)
             {
                 if (!_isCalibrationMode)
@@ -888,6 +935,7 @@ namespace TERMINAL
             if (AutoStartCheckBox != null)
                 AutoStartCheckBox.IsEnabled = !_batchModeEnabled;
 
+            UpdateNextSetPointInfo();
             SaveSettings();
         }
 
@@ -897,10 +945,13 @@ namespace TERMINAL
 
             var job = new TemperatureJob
             {
-                SetPointText = "25"
+                SetPointText = "25",
+                StabilizationMinutesText = "120",
+                IsEnabled = true
             };
             _batchJobs.Add(job);
             RenumberBatchJobs();
+            SaveSettings();
         }
 
         private void RemoveBatchJob_Click(object sender, RoutedEventArgs e)
@@ -910,25 +961,43 @@ namespace TERMINAL
             if (sender is System.Windows.Controls.Button btn &&
                 btn.Tag is TemperatureJob job)
             {
+                job.PropertyChanged -= BatchJob_PropertyChanged;
                 _batchJobs.Remove(job);
                 RenumberBatchJobs();
+                SaveSettings();
             }
         }
 
         private void ClearBatch_Click(object sender, RoutedEventArgs e)
         {
             if (_isRunning || _batchRunning) return;
+
+            foreach (var j in _batchJobs)
+                j.PropertyChanged -= BatchJob_PropertyChanged;
+
             _batchJobs.Clear();
             RenumberBatchJobs();
+            SaveSettings();
         }
 
         private void RenumberBatchJobs()
         {
             for (int i = 0; i < _batchJobs.Count; i++)
+            {
                 _batchJobs[i].IndexText = (i + 1) + ".";
+
+                _batchJobs[i].PropertyChanged -= BatchJob_PropertyChanged;
+                _batchJobs[i].PropertyChanged += BatchJob_PropertyChanged;
+            }
 
             BatchList.ItemsSource = null;
             BatchList.ItemsSource = _batchJobs;
+        }
+
+        private void BatchJob_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            SaveSettings();
         }
 
         private async Task RunBatchAsync()
@@ -945,15 +1014,35 @@ namespace TERMINAL
                 return;
             }
 
+            // Валидация активных заданий
             for (int i = 0; i < _batchJobs.Count; i++)
             {
-                if (!float.TryParse(_batchJobs[i].SetPointText?.Replace(',', '.'),
+                var job = _batchJobs[i];
+                if (!job.IsEnabled) continue;
+
+                if (!float.TryParse(job.SetPointText?.Replace(',', '.'),
                     NumberStyles.Float, CultureInfo.InvariantCulture, out float sp))
                 {
-                    MessageBox.Show($"Задание #{i + 1}: некорректная уставка «{_batchJobs[i].SetPointText}»");
+                    MessageBox.Show($"Задание #{i + 1}: некорректная уставка «{job.SetPointText}»");
                     return;
                 }
-                _batchJobs[i].SetPoint = sp;
+
+                if (!int.TryParse(job.StabilizationMinutesText?.Trim(), out int mins) || mins <= 0)
+                {
+                    MessageBox.Show($"Задание #{i + 1}: некорректное время стабилизации " +
+                                    $"«{job.StabilizationMinutesText}» (нужно положительное число минут)");
+                    return;
+                }
+
+                job.SetPoint = sp;
+                job.StabilizationMinutes = mins;
+            }
+
+            int enabledCount = _batchJobs.Count(j => j.IsEnabled);
+            if (enabledCount == 0)
+            {
+                MessageBox.Show("Все задания отключены. Включите хотя бы одно.");
+                return;
             }
 
             _batchRunning = true;
@@ -965,10 +1054,10 @@ namespace TERMINAL
             AddBatchJobButton.IsEnabled = false;
             ClearBatchButton.IsEnabled = false;
 
-            int requiredMinutes = AutoStartCalibrationMinutes;
-
             try
             {
+                int completedCount = 0;
+
                 for (int i = 0; i < _batchJobs.Count; i++)
                 {
                     if (_batchStopRequested || _stopRequested)
@@ -979,11 +1068,20 @@ namespace TERMINAL
 
                     var job = _batchJobs[i];
 
+                    if (!job.IsEnabled)
+                    {
+                        job.StatusText = "пропущено";
+                        job.StatusColor = Brushes.Gray;
+                        continue;
+                    }
+
+                    completedCount++;
+
                     // 1) Запись уставки
                     job.StatusText = "запись уставки";
                     job.StatusColor = Brushes.Orange;
 
-                    SetStatus($"[Пакет {i + 1}/{_batchJobs.Count}] запись уставки " +
+                    SetStatus($"[Пакет {completedCount}/{enabledCount}] запись уставки " +
                               $"{job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C в ST-351...");
 
                     bool writeOk = await WriteFurnaceSetPointAsync(
@@ -993,7 +1091,7 @@ namespace TERMINAL
                     {
                         job.StatusText = "ошибка записи";
                         job.StatusColor = Brushes.Red;
-                        SetStatusError($"[Пакет {i + 1}] не удалось записать уставку");
+                        SetStatusError($"[Пакет {completedCount}] не удалось записать уставку");
                         return;
                     }
 
@@ -1004,18 +1102,18 @@ namespace TERMINAL
                     _autoStartTriggered = true;
                     UpdateAutoStartInfo();
 
-                    // 2) Стабилизация
-                    job.StatusText = $"стабилизация {requiredMinutes} мин";
+                    // 2) Стабилизация — своё время для каждого задания
+                    job.StatusText = $"стабилизация {job.StabilizationMinutes} мин";
                     job.StatusColor = Brushes.Orange;
 
                     bool stable = await WaitForBatchStabilizationAsync(
-                        requiredMinutes, i, _batchJobs.Count);
+                        job.StabilizationMinutes, completedCount, enabledCount);
 
                     if (!stable)
                     {
                         job.StatusText = "стабилизация прервана";
                         job.StatusColor = Brushes.Red;
-                        SetStatusWarning($"[Пакет {i + 1}] стабилизация прервана");
+                        SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
                         return;
                     }
 
@@ -1023,7 +1121,7 @@ namespace TERMINAL
                     job.StatusText = "работа";
                     job.StatusColor = Brushes.Blue;
 
-                    SetStatus($"[Пакет {i + 1}/{_batchJobs.Count}] запуск «Градуировка» " +
+                    SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «Градуировка» " +
                               $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(
@@ -1053,10 +1151,10 @@ namespace TERMINAL
                     job.StatusText = "завершено";
                     job.StatusColor = Brushes.Green;
 
-                    SetStatus($"[Пакет {i + 1}/{_batchJobs.Count}] завершён");
+                    SetStatus($"[Пакет {completedCount}/{enabledCount}] завершён");
                 }
 
-                SetStatusSuccess($"Пакетный режим завершён: обработано {_batchJobs.Count} температур");
+                SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
             }
             finally
             {
@@ -1113,7 +1211,7 @@ namespace TERMINAL
                     if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
 
                     BatchProgressText.Text =
-                        $"Задание {jobIndex + 1}/{totalJobs}: стабилизация " +
+                        $"Задание {jobIndex}/{totalJobs}: стабилизация " +
                         $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C, " +
                         $"осталось {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
 
@@ -1131,13 +1229,13 @@ namespace TERMINAL
                         start = DateTime.Now;
                         outOfRangeSince = DateTime.MinValue;
                         BatchProgressText.Text =
-                            $"Задание {jobIndex + 1}/{totalJobs}: " +
+                            $"Задание {jobIndex}/{totalJobs}: " +
                             $"температура вне диапазона — таймер стабилизации сброшен";
                     }
                     else
                     {
                         BatchProgressText.Text =
-                            $"Задание {jobIndex + 1}/{totalJobs}: " +
+                            $"Задание {jobIndex}/{totalJobs}: " +
                             $"температура вне диапазона " +
                             $"({outOfRange.TotalSeconds:F0} сек из {StabilizationOutOfRangeGraceSeconds})";
                     }
@@ -1193,7 +1291,7 @@ namespace TERMINAL
             }
 
             bool longTimers = TimerSetCombo.SelectedIndex == 1;
-            string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
+            string unitsLabel = GetUnitsLabel(_selectedTargetPressure!);
 
             _stepItems = new ObservableCollection<StepItem>();
 
@@ -1889,7 +1987,7 @@ namespace TERMINAL
             _autoStartTriggered = false;
             _nextSetPointApplied = false;
 
-            // NEW: пакетный режим — только для «Градуировка»
+            // Пакетный режим — только для «Градуировка»
             if (_batchModeEnabled && _isCalibrationMode && _batchJobs.Count > 0)
             {
                 await RunBatchAsync();
@@ -2104,7 +2202,7 @@ namespace TERMINAL
 
                 UpdateAutoStartInfo();
 
-                // NEW: сигнал оркестратору пакетного режима
+                // Сигнал оркестратору пакетного режима
                 _batchRunDoneSignal?.TrySetResult(true);
             }
         }
@@ -2242,7 +2340,7 @@ namespace TERMINAL
 
             double maxPressure = steps.Max();
             string unitsCode = GetUnitsCode(_selectedTargetPressure!);
-            string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
+            string unitsLabel = GetUnitsLabel(_selectedTargetPressure!);
             double atmoThreshold = GetAtmosphereThreshold(unitsCode);
 
             _isRunning = true;
@@ -2303,7 +2401,6 @@ namespace TERMINAL
 
                 UpdateAutoStartInfo();
 
-                // NEW: сигнал оркестратору (на всякий случай, если понадобится)
                 _batchRunDoneSignal?.TrySetResult(true);
             }
         }
@@ -3036,7 +3133,7 @@ namespace TERMINAL
 
         private async Task TryApplyNextFurnaceSetPointAsync()
         {
-            if (_batchModeEnabled) return; // в пакетном режиме уставку пишет оркестратор
+            if (_batchModeEnabled) return;
             if (!_nextFurnaceSetPoint.HasValue) return;
             if (_nextSetPointApplied) return;
 
