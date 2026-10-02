@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>6.ico</ApplicationIcon>
     <AssemblyName>T.E.R.M.I.N.A.L</AssemblyName>
-    <Version>1.0.74</Version>
+    <Version>1.0.75</Version>
     <PackageIcon>6.png</PackageIcon>
   </PropertyGroup>
 

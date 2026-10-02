@@ -1093,6 +1093,10 @@ namespace TERMINAL
                 return;
             }
 
+            // сбрасываем флаги прерывания в самом начале
+            _batchStopRequested = false;
+            _stopRequested = false;
+
             // Валидация активных заданий
             for (int i = 0; i < _batchJobs.Count; i++)
             {
@@ -1205,17 +1209,10 @@ namespace TERMINAL
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(
                         TaskCreationOptions.RunContinuationsAsynchronously);
 
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await Dispatcher.InvokeAsync(RunCalibrationModeAsync);
-                        }
-                        finally
-                        {
-                            _batchRunDoneSignal?.TrySetResult(true);
-                        }
-                    });
+                    // Запускаем градуировку в UI-потоке (fire-and-forget).
+                    // Сигнал о завершении взводится в самом конце RunCalibrationModeAsync,
+                    // в блоке finally — там же, где сохранение файла и очистка данных.
+                    _ = Dispatcher.InvokeAsync(() => RunCalibrationModeAsync());
 
                     await _batchRunDoneSignal.Task;
                     _batchRunDoneSignal = null;
@@ -2158,6 +2155,12 @@ namespace TERMINAL
             if (_batchRunning) { MessageBox.Show("Пакетный режим уже идёт."); return; }
             if (_selectedTargetPressure == null) { MessageBox.Show("Выберите диапазон давлений."); return; }
 
+            // сбрасываем флаги прерывания от предыдущей остановки
+            _stopRequested = false;
+            _batchStopRequested = false;
+            _pauseRequested = false;
+            _autoStartTriggered = false;
+
             _autoStartTriggered = false;
 
             int activeJobs = _batchJobs.Count(j => j.IsEnabled);
@@ -2274,6 +2277,7 @@ namespace TERMINAL
             _isRunning = true;
             _stopRequested = false;
             _pauseRequested = false;
+            _batchStopRequested = false;
             _completedSteps = startStep - 1;
             _currentStepIndex = startStep - 1;
 
@@ -2519,6 +2523,7 @@ namespace TERMINAL
             _isRunning = true;
             _stopRequested = false;
             _pauseRequested = false;
+            _batchStopRequested = false;
 
             TargetPressureCombo.IsEnabled = false;
             TimerSetCombo.IsEnabled = false;
