@@ -14,7 +14,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Media;
+using System.Windows.Media; 
 using System.Windows.Threading;
 
 namespace TERMINAL
@@ -388,7 +388,6 @@ namespace TERMINAL
         private bool _timerActive = false;
 
         private DateTime _totalTimerStart = DateTime.MinValue;
-        private bool _totalTimerActive = false;
 
         private TcpListener? _broadcastServer;
         private readonly List<ConnectedClient> _connectedClients = new();
@@ -455,6 +454,7 @@ namespace TERMINAL
         private int _agkFailCount = 0;
         private int _furnaceTempFailCount = 0;
         private int _furnaceSetPointFailCount = 0;
+        private volatile bool _agkBatchBusy = false;
 
         private readonly HashSet<string> _saveResponses = new();
         private readonly object _saveLock = new();
@@ -2459,7 +2459,6 @@ namespace TERMINAL
             UpdateStepCounter();
 
             _totalTimerStart = DateTime.Now;
-            _totalTimerActive = true;
 
             bool programCompleted = false;
 
@@ -2476,7 +2475,6 @@ namespace TERMINAL
             finally
             {
                 _isRunning = false;
-                _totalTimerActive = false;
                 _pauseRequested = false;
 
                 StartButton.IsEnabled = true;
@@ -2719,7 +2717,6 @@ namespace TERMINAL
             SetExternalButtonsEnabled(false);
 
             _totalTimerStart = DateTime.Now;
-            _totalTimerActive = true;
 
             try { await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold); }
             catch (Exception ex)
@@ -2730,7 +2727,6 @@ namespace TERMINAL
             finally
             {
                 _isRunning = false;
-                _totalTimerActive = false;
                 _pauseRequested = false;
 
                 StartButton.IsEnabled = true;
@@ -3563,66 +3559,66 @@ namespace TERMINAL
                 }
             }
             else
+            {
+                if (PdaPressureText != null &&
+                    _pdaLastSuccess != DateTime.MinValue &&
+                    (now - _pdaLastSuccess).TotalSeconds > SensorStaleSeconds)
                 {
-                    if (PdaPressureText != null &&
-                        _pdaLastSuccess != DateTime.MinValue &&
-                        (now - _pdaLastSuccess).TotalSeconds > SensorStaleSeconds)
-                    {
-                        PdaPressureText.Text = "— мм рт. ст.";
-                        PdaPressureText.Foreground =
-                            new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
-                    }
-                    if (PdaStatusEllipse != null)
-                        PdaStatusEllipse.Fill = Brushes.Red;
+                    PdaPressureText.Text = "— мм рт. ст.";
+                    PdaPressureText.Foreground =
+                        new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
                 }
+                if (PdaStatusEllipse != null)
+                    PdaStatusEllipse.Fill = Brushes.Red;
+            }
 
-                // ── ПТК ──
-                ConnectedClient? ptkClient;
-                lock (_clientsLock)
+            // ── ПТК ──
+            ConnectedClient? ptkClient;
+            lock (_clientsLock)
+            {
+                ptkClient = _connectedClients
+                    .Where(c => !c.IsOffline && c.HasCapability("FURNACE_TEMP"))
+                    .OrderByDescending(c => c.LastFurnaceFromClientAt)
+                    .FirstOrDefault();
+            }
+
+            bool ptkFresh = ptkClient != null &&
+                (now - ptkClient.LastFurnaceFromClientAt).TotalSeconds <= SensorStaleSeconds &&
+                !double.IsNaN(ptkClient.LastFurnaceFromClient);
+
+            if (ptkFresh)
+            {
+                _ptkLastValue = ptkClient!.LastFurnaceFromClient;
+                _ptkLastSuccess = ptkClient.LastFurnaceFromClientAt;
+                _ptkSourceSid = ptkClient.Sid;
+
+                if (PtkStatusEllipse != null)
+                    PtkStatusEllipse.Fill = Brushes.Green;
+
+                if (PtkTempText != null)
                 {
-                    ptkClient = _connectedClients
-                        .Where(c => !c.IsOffline && c.HasCapability("FURNACE_TEMP"))
-                        .OrderByDescending(c => c.LastFurnaceFromClientAt)
-                        .FirstOrDefault();
-                }
-
-                bool ptkFresh = ptkClient != null &&
-                    (now - ptkClient.LastFurnaceFromClientAt).TotalSeconds <= SensorStaleSeconds &&
-                    !double.IsNaN(ptkClient.LastFurnaceFromClient);
-
-                if (ptkFresh)
-                {
-                    _ptkLastValue = ptkClient!.LastFurnaceFromClient;
-                    _ptkLastSuccess = ptkClient.LastFurnaceFromClientAt;
-                    _ptkSourceSid = ptkClient.Sid;
-
-                    if (PtkStatusEllipse != null)
-                        PtkStatusEllipse.Fill = Brushes.Green;
-
-                    if (PtkTempText != null)
-                    {
-                        string sign = _ptkLastValue >= 0 ? "+" : "";
-                        PtkTempText.Text =
-                            sign +
-                            _ptkLastValue.ToString("0.000", CultureInfo.InvariantCulture) +
-                            " °C";
-                        PtkTempText.Foreground = Brushes.White;
-                    }
-                }
-                else
-                {
-                    if (PtkTempText != null &&
-                        _ptkLastSuccess != DateTime.MinValue &&
-                        (now - _ptkLastSuccess).TotalSeconds > SensorStaleSeconds)
-                    {
-                        PtkTempText.Text = "— °C";
-                        PtkTempText.Foreground =
-                            new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
-                    }
-                    if (PtkStatusEllipse != null)
-                        PtkStatusEllipse.Fill = Brushes.Red;
+                    string sign = _ptkLastValue >= 0 ? "+" : "";
+                    PtkTempText.Text =
+                        sign +
+                        _ptkLastValue.ToString("0.000", CultureInfo.InvariantCulture) +
+                        " °C";
+                    PtkTempText.Foreground = Brushes.White;
                 }
             }
+            else
+            {
+                if (PtkTempText != null &&
+                    _ptkLastSuccess != DateTime.MinValue &&
+                    (now - _ptkLastSuccess).TotalSeconds > SensorStaleSeconds)
+                {
+                    PtkTempText.Text = "— °C";
+                    PtkTempText.Foreground =
+                        new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
+                }
+                if (PtkStatusEllipse != null)
+                    PtkStatusEllipse.Fill = Brushes.Red;
+            }
+        }
 
 
         // ─────────────────────────── СТАТУС АГК ───────────────────────────
@@ -4055,7 +4051,6 @@ namespace TERMINAL
 
             _stopRequested = true;
             _timerActive = false;
-            _totalTimerActive = false;
             _pauseRequested = false;
             _autoStartTriggered = false;
 
@@ -4086,7 +4081,6 @@ namespace TERMINAL
                     MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
                 _stopRequested = true;
-                _totalTimerActive = false;
                 _pauseRequested = false;
                 _autoStartTriggered = false;
 
@@ -4165,6 +4159,9 @@ namespace TERMINAL
             }
 
             string? p = await SendCommandAsync("get_press;");
+            await Task.Delay(200);
+            string? sp = await SendCommandAsync("get_point;");
+
             if (p != null)
             {
                 string parsed = ParsePressure(p);
@@ -4172,6 +4169,7 @@ namespace TERMINAL
                 AgkPressureText.Text = string.IsNullOrEmpty(units)
                     ? parsed
                     : $"{parsed} {units}";
+
                 if (double.TryParse(parsed, NumberStyles.Float,
                     CultureInfo.InvariantCulture, out double v))
                 {
@@ -4180,7 +4178,6 @@ namespace TERMINAL
                 }
             }
 
-            string? sp = await SendCommandAsync("get_point;");
             if (sp != null)
             {
                 string parsedSp = ParsePressure(sp);
@@ -4405,6 +4402,9 @@ namespace TERMINAL
         {
             if (_isRunning) return;
 
+            // Защита от наслаивания: пока предыдущий batch не завершён — новый не запускаем
+            if (_agkBatchBusy) return;
+
             NetworkStream? stream;
             lock (_streamLock) stream = _stream;
 
@@ -4412,20 +4412,67 @@ namespace TERMINAL
 
             if (stream != null)
             {
+                _agkBatchBusy = true;
                 try
                 {
                     if (stream.CanRead && stream.CanWrite)
                     {
-                        string? ur = await SendCommandAsync("get_units;");
-                        if (ur != null)
+                        // Прибор НЕ поддерживает pipelining — шлём по одной команде с паузой
+                        string? unitsResp = await SendCommandAsync("get_units;");
+                        await Task.Delay(200);
+                        string? pressResp = await SendCommandAsync("get_press;");
+                        await Task.Delay(200);
+                        string? pointResp = await SendCommandAsync("get_point;");
+                        await Task.Delay(200);
+                        string? statusResp = await SendCommandAsync("get_status;");
+
+                        if (unitsResp != null)
                         {
-                            UpdateUnits(ur);
-                            await RefreshPressureAndSetPointAsync();
-
-                            await RefreshAgkStatusAsync();
-
-                            agkOk = true;
+                            UpdateUnits(unitsResp);
                         }
+
+                        if (pressResp != null)
+                        {
+                            string parsed = ParsePressure(pressResp);
+                            string units = _currentPressureUnitsLabel;
+                            AgkPressureText.Text = string.IsNullOrEmpty(units)
+                                ? parsed
+                                : $"{parsed} {units}";
+
+                            if (double.TryParse(parsed, NumberStyles.Float,
+                                CultureInfo.InvariantCulture, out double v))
+                            {
+                                _lastKnownPressure = v;
+                            }
+                        }
+
+                        if (pointResp != null)
+                        {
+                            string parsedSp = ParsePressure(pointResp);
+                            string units = _currentPressureUnitsLabel;
+                            AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                                ? parsedSp
+                                : $"{parsedSp} {units}";
+                        }
+
+                        if (statusResp != null)
+                        {
+                            string display = statusResp.Trim();
+                            if (string.IsNullOrEmpty(display)) display = "(пусто)";
+
+                            if (AgkStatusTextBox != null)
+                            {
+                                AgkStatusTextBox.Text = display;
+                                AgkStatusTextBox.Foreground =
+                                    (display == "0;" || display == "0")
+                                        ? new SolidColorBrush(Color.FromRgb(0x80, 0xFF, 0x80))
+                                        : new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x80));
+                            }
+                        }
+
+                        // Считаем связь живой, если пришёл units И press
+                        if (unitsResp != null && pressResp != null)
+                            agkOk = true;
                     }
                     else
                     {
@@ -4436,6 +4483,10 @@ namespace TERMINAL
                 {
                     ResetDeviceConnection();
                 }
+                finally
+                {
+                    _agkBatchBusy = false;
+                }
             }
 
             if (agkOk)
@@ -4443,8 +4494,6 @@ namespace TERMINAL
                 _agkFailCount = 0;
                 AgkStatusEllipse.Fill = Brushes.Green;
 
-                if (!_totalTimerActive)
-                    SetStatusSuccess($"Подключено к {DeviceIp}:{DevicePort}");
             }
             else
             {
@@ -4470,16 +4519,19 @@ namespace TERMINAL
             char? d = null;
             foreach (char c in response)
                 if (c >= '0' && c <= '9') { d = c; break; }
-            string u = d switch
+
+            string? u = d switch
             {
                 '0' => "кПа",
                 '1' => "МПа",
                 '2' => "бар",
                 '3' => "PSI",
                 '4' => "кгс/см²",
-                _ => "?"
+                _ => null
             };
-            _currentPressureUnitsLabel = u;
+
+            if (u != null)
+                _currentPressureUnitsLabel = u;
         }
 
         private async Task<string?> SendCommandAsync(string command)
@@ -4651,7 +4703,6 @@ namespace TERMINAL
             try { SaveSettings(); } catch { }
             _stopRequested = true;
             _pauseRequested = false;
-            _totalTimerActive = false;
             _batchStopRequested = true;
             _timer?.Stop();
             _clientsUiTimer?.Stop();
