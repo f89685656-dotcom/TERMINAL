@@ -4612,6 +4612,39 @@ namespace TERMINAL
             if (RemoveOfflineButton != null) RemoveOfflineButton.IsEnabled = enabled;
         }
 
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (_isRunning || _batchRunning)
+            {
+                string mode =
+                    _batchRunning ? "пакетный режим" :
+                    (_isCalibrationMode ? "«Градуировка»" : "«Жамкать»");
+
+                var result = MessageBox.Show(
+                    $"Сейчас идёт {mode}.\n\n" +
+                    "Вы уверены, что хотите закрыть программу?\n" +
+                    "Работа будет прервана, данные не будут сохранены.",
+                    "Подтверждение закрытия",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+
+                if (result != MessageBoxResult.Yes)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+
+                // Пользователь согласился — просим фоновые циклы свернуться
+                _stopRequested = true;
+                _batchStopRequested = true;
+                _pauseRequested = false;
+            }
+
+            base.OnClosing(e);
+        }
+
+
         protected override void OnClosed(EventArgs e)
         {
             try { SaveWindowPositionToSettings(); } catch { }
