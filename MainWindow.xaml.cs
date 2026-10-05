@@ -385,8 +385,6 @@ namespace TERMINAL
 
         private volatile bool _pauseRequested = false;
 
-        private bool _timerActive = false;
-
         private DateTime _totalTimerStart = DateTime.MinValue;
 
         private TcpListener? _broadcastServer;
@@ -432,6 +430,7 @@ namespace TERMINAL
         private DispatcherTimer? _sensorUiTimer;
 
         private const double SensorStaleSeconds = 5.0;
+        private const double SktbAllDeadSeconds = 5.0;
 
         // Порт broadcast-сервера (задаётся при старте: 9990 — рабочая, 9999 — тестовая)
         private int BroadcastPort = 9990;
@@ -2210,14 +2209,12 @@ namespace TERMINAL
         private async Task KosaWaitAsync(int seconds, bool waitForState, int stepIndex)
         {
             int remaining = seconds;
-            _timerActive = true;
 
             if (!waitForState)
             {
                 while (remaining > 0)
                 {
-                    if (_stopRequested) { _timerActive = false; return; }
-                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
+                    if (!await WaitIfPausedAsync()) { ; return; }
                     SetStatus($"КОСА: пауза {remaining} сек");
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
@@ -2226,7 +2223,6 @@ namespace TERMINAL
                 }
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].TimerText = "0";
-                _timerActive = false;
                 return;
             }
 
@@ -2234,8 +2230,6 @@ namespace TERMINAL
 
             while (!firstOkReceived)
             {
-                if (_stopRequested) { _timerActive = false; return; }
-                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
                 string? s = await SendCommandAsync("get_state_in_point;");
@@ -2253,8 +2247,6 @@ namespace TERMINAL
 
             while (remaining > 0)
             {
-                if (_stopRequested) { _timerActive = false; return; }
-                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
                 string? s = await SendCommandAsync("get_state_in_point;");
@@ -2275,8 +2267,6 @@ namespace TERMINAL
 
                     while (true)
                     {
-                        if (_stopRequested) { _timerActive = false; return; }
-                        if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
                         await SafeDelayAsync(1000);
 
                         string? s2 = await SendCommandAsync("get_state_in_point;");
@@ -2291,7 +2281,6 @@ namespace TERMINAL
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
 
-            _timerActive = false;
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -2836,14 +2825,11 @@ namespace TERMINAL
         private async Task RunTimerWithRightBlockAsync(int seconds, bool isMax)
         {
             int remaining = seconds;
-            _timerActive = true;
 
             if (!isMax)
             {
                 while (remaining > 0)
                 {
-                    if (_stopRequested) { _timerActive = false; return; }
-                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                     remaining--;
                     MinTimerText.Text = remaining.ToString();
@@ -2853,14 +2839,11 @@ namespace TERMINAL
                 }
 
                 MinTimerText.Text = "0";
-                _timerActive = false;
                 return;
             }
 
             while (remaining > 0)
             {
-                if (_stopRequested) { _timerActive = false; return; }
-                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
 
@@ -2877,21 +2860,16 @@ namespace TERMINAL
             }
 
             MaxTimerText.Text = "0";
-            _timerActive = false;
         }
 
         private async Task RunTimerWithStepAsync(int seconds, int stepIndex, bool waitForState)
         {
             int remaining = seconds;
-            _timerActive = true;
 
             if (!waitForState)
             {
                 while (remaining > 0)
                 {
-                    if (_stopRequested) { _timerActive = false; return; }
-                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
-
                     remaining--;
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
@@ -2902,8 +2880,6 @@ namespace TERMINAL
 
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].TimerText = "0";
-
-                _timerActive = false;
                 return;
             }
 
@@ -2911,8 +2887,6 @@ namespace TERMINAL
 
             while (remaining > 0)
             {
-                if (_stopRequested) { _timerActive = false; return; }
-                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
 
@@ -2944,8 +2918,6 @@ namespace TERMINAL
 
                     while (true)
                     {
-                        if (_stopRequested) { _timerActive = false; return; }
-                        if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
                         await SafeDelayAsync(1000);
 
                         string? s = await SendCommandAsync("get_state_in_point;");
@@ -2964,8 +2936,6 @@ namespace TERMINAL
 
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
-
-            _timerActive = false;
         }
 
         // ─────────────────────────── ПОКАЗ СООБЩЕНИЯ ───────────────────────────
@@ -3514,6 +3484,7 @@ namespace TERMINAL
                         PlatinaRowEllipse.Fill = Brushes.Red;
                 }
             }
+            UpdateSktbPanelVisibility();
         }
 
 
@@ -3618,6 +3589,57 @@ namespace TERMINAL
                 if (PtkStatusEllipse != null)
                     PtkStatusEllipse.Fill = Brushes.Red;
             }
+            UpdateSktbPanelVisibility();
+        }
+
+        /// <summary>
+        /// Скрывает карточку СКТБ ЭлПа, если все три источника (Платина, ПДА, ПТК)
+        /// молчат дольше SktbAllDeadSeconds. Как только хотя бы один оживает —
+        /// карточка снова показывается.
+        /// </summary>
+        /// <summary>
+        /// Скрывает каждую строку СКТБ (Платина / ПДА / ПТК) отдельно,
+        /// если соответствующий источник молчит дольше SktbAllDeadSeconds.
+        /// </summary>
+        private void UpdateSktbPanelVisibility()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(UpdateSktbPanelVisibility);
+                return;
+            }
+
+            var now = DateTime.Now;
+
+            // ── Платина (USB HID) ──
+            bool platinaAlive =
+                _platinaLastSuccess != DateTime.MinValue &&
+                (now - _platinaLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
+
+            if (PlatinaRowBorder != null)
+                PlatinaRowBorder.Visibility = platinaAlive
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            // ── ПДА (от клиентов KalibratorGUI) ──
+            bool pdaAlive =
+                _pdaLastSuccess != DateTime.MinValue &&
+                (now - _pdaLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
+
+            if (PdaRowBorder != null)
+                PdaRowBorder.Visibility = pdaAlive
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            // ── ПТК (от клиентов KalibratorGUI) ──
+            bool ptkAlive =
+                _ptkLastSuccess != DateTime.MinValue &&
+                (now - _ptkLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
+
+            if (PtkRowBorder != null)
+                PtkRowBorder.Visibility = ptkAlive
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
         }
 
 
@@ -4050,7 +4072,6 @@ namespace TERMINAL
             }
 
             _stopRequested = true;
-            _timerActive = false;
             _pauseRequested = false;
             _autoStartTriggered = false;
 
@@ -4349,6 +4370,7 @@ namespace TERMINAL
             _sensorUiTimer.Start();
 
             RefreshSensorUiFromClients();
+            UpdateSktbPanelVisibility();
 
             UpdateAutoStartInfo();
             UpdateStartButtonMode();
