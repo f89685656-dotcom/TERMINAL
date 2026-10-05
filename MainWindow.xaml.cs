@@ -3463,8 +3463,6 @@ namespace TERMINAL
                     $"{sign}{rounded.ToString("0.000", CultureInfo.InvariantCulture)} °C";
                 PlatinaTempText.Foreground = Brushes.White;
 
-                if (PlatinaStatusEllipse != null)
-                    PlatinaStatusEllipse.Fill = Brushes.Green;
                 if (PlatinaRowEllipse != null)
                     PlatinaRowEllipse.Fill = Brushes.Green;
             }
@@ -3478,8 +3476,6 @@ namespace TERMINAL
                     PlatinaTempText.Foreground =
                         new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
 
-                    if (PlatinaStatusEllipse != null)
-                        PlatinaStatusEllipse.Fill = Brushes.Red;
                     if (PlatinaRowEllipse != null)
                         PlatinaRowEllipse.Fill = Brushes.Red;
                 }
@@ -3640,6 +3636,11 @@ namespace TERMINAL
                 PtkRowBorder.Visibility = ptkAlive
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+            // ── Общий индикатор СКТБ: зелёный, если жив хотя бы один источник ──
+            bool anyAlive = platinaAlive || pdaAlive || ptkAlive;
+
+            if (PlatinaStatusEllipse != null)
+                PlatinaStatusEllipse.Fill = anyAlive ? Brushes.Green : Brushes.Red;
         }
 
 
