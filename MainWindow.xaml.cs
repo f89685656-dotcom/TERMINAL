@@ -481,6 +481,7 @@ namespace TERMINAL
         private const int AutoStartPumpMinutes = 30;
 
         private string _currentPressureUnitsLabel = "";
+        private double? _lastKnownPressure = null;
 
         // Пакетный режим по температурам (только для «Градуировка»)
         private readonly ObservableCollection<TemperatureJob> _batchJobs = new();
@@ -2560,6 +2561,41 @@ namespace TERMINAL
                 double v = steps[i];
                 int duration = GetStepDuration(steps, i, longTimers);
 
+                // ─── ТЕСТ-режим: не регулируем давление, просто ждём атмосферу и запускаем таймер ───
+                if (IsTestPressureRange())
+                {
+                    SetStatus($"Шаг {human}: ТЕСТ — проверка атмосферного давления");
+
+                    await RefreshPressureAndSetPointAsync();
+                    double? currentP = _lastKnownPressure; // см. правку 3
+                    if (!currentP.HasValue || Math.Abs(currentP.Value) >= atmoThreshold)
+                    {
+                        SetStatus($"Шаг {human}: ТЕСТ — сброс до атмосферы (vent)");
+                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        if (!ventOk) return;
+
+                        SetStatus($"Шаг {human}: ТЕСТ — ожидание снижения давления");
+                        bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+                        if (!lowOk) return;
+                    }
+
+                    SetStatus($"Шаг {human}: ТЕСТ — таймер {duration} сек");
+                    await RunTimerWithStepAsync(duration, i, waitForState: false);
+
+                    SetStatus($"Шаг {human}: ТЕСТ — команда съёма");
+                    bool qT = await TakePointForStepAsync(i, waitForState: false);
+                    if (!qT) return;
+
+                    if (i < _stepItems.Count)
+                    {
+                        _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].ArrowText = "  ";
+                    }
+                    _completedSteps = i + 1;
+                    UpdateStepCounter();
+                    continue;
+                }
+
                 if (i == 0)
                 {
                     SetStatus("Шаг 1: сброс до атмосферы (vent)");
@@ -4137,7 +4173,11 @@ namespace TERMINAL
                     ? parsed
                     : $"{parsed} {units}";
                 if (double.TryParse(parsed, NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out double v)) pressure = v;
+                    CultureInfo.InvariantCulture, out double v))
+                {
+                    pressure = v;
+                    _lastKnownPressure = v;
+                }
             }
 
             string? sp = await SendCommandAsync("get_point;");
@@ -4225,6 +4265,15 @@ namespace TERMINAL
             if (tp.Contains("бар")) return "бар";
             if (tp.Contains("PSI")) return "PSI";
             return "";
+        }
+
+        /// <summary>
+        /// Возвращает true, если выбран диапазон «ТЕСТ» — 
+        /// все точки = 0, регулировка давления не нужна.
+        /// </summary>
+        private bool IsTestPressureRange()
+        {
+            return _selectedTargetPressure == "ТЕСТ";
         }
 
         private double GetAtmosphereThreshold(string unitsCode) =>
