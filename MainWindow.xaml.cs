@@ -14,7 +14,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Media;
+using System.Windows.Media; 
 using System.Windows.Threading;
 
 namespace TERMINAL
@@ -385,10 +385,7 @@ namespace TERMINAL
 
         private volatile bool _pauseRequested = false;
 
-        private bool _timerActive = false;
-
         private DateTime _totalTimerStart = DateTime.MinValue;
-        private bool _totalTimerActive = false;
 
         private TcpListener? _broadcastServer;
         private readonly List<ConnectedClient> _connectedClients = new();
@@ -433,6 +430,7 @@ namespace TERMINAL
         private DispatcherTimer? _sensorUiTimer;
 
         private const double SensorStaleSeconds = 5.0;
+        private const double SktbAllDeadSeconds = 5.0;
 
         // Порт broadcast-сервера (задаётся при старте: 9990 — рабочая, 9999 — тестовая)
         private int BroadcastPort = 9990;
@@ -455,6 +453,7 @@ namespace TERMINAL
         private int _agkFailCount = 0;
         private int _furnaceTempFailCount = 0;
         private int _furnaceSetPointFailCount = 0;
+        private volatile bool _agkBatchBusy = false;
 
         private readonly HashSet<string> _saveResponses = new();
         private readonly object _saveLock = new();
@@ -481,6 +480,7 @@ namespace TERMINAL
         private const int AutoStartPumpMinutes = 30;
 
         private string _currentPressureUnitsLabel = "";
+        private double? _lastKnownPressure = null;
 
         // Пакетный режим по температурам (только для «Градуировка»)
         private readonly ObservableCollection<TemperatureJob> _batchJobs = new();
@@ -2209,14 +2209,12 @@ namespace TERMINAL
         private async Task KosaWaitAsync(int seconds, bool waitForState, int stepIndex)
         {
             int remaining = seconds;
-            _timerActive = true;
 
             if (!waitForState)
             {
                 while (remaining > 0)
                 {
-                    if (_stopRequested) { _timerActive = false; return; }
-                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
+                    if (!await WaitIfPausedAsync()) { ; return; }
                     SetStatus($"КОСА: пауза {remaining} сек");
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
@@ -2225,7 +2223,6 @@ namespace TERMINAL
                 }
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].TimerText = "0";
-                _timerActive = false;
                 return;
             }
 
@@ -2233,8 +2230,6 @@ namespace TERMINAL
 
             while (!firstOkReceived)
             {
-                if (_stopRequested) { _timerActive = false; return; }
-                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
                 string? s = await SendCommandAsync("get_state_in_point;");
@@ -2252,8 +2247,6 @@ namespace TERMINAL
 
             while (remaining > 0)
             {
-                if (_stopRequested) { _timerActive = false; return; }
-                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
                 string? s = await SendCommandAsync("get_state_in_point;");
@@ -2274,8 +2267,6 @@ namespace TERMINAL
 
                     while (true)
                     {
-                        if (_stopRequested) { _timerActive = false; return; }
-                        if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
                         await SafeDelayAsync(1000);
 
                         string? s2 = await SendCommandAsync("get_state_in_point;");
@@ -2290,7 +2281,6 @@ namespace TERMINAL
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
 
-            _timerActive = false;
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -2458,7 +2448,6 @@ namespace TERMINAL
             UpdateStepCounter();
 
             _totalTimerStart = DateTime.Now;
-            _totalTimerActive = true;
 
             bool programCompleted = false;
 
@@ -2475,7 +2464,6 @@ namespace TERMINAL
             finally
             {
                 _isRunning = false;
-                _totalTimerActive = false;
                 _pauseRequested = false;
 
                 StartButton.IsEnabled = true;
@@ -2559,6 +2547,41 @@ namespace TERMINAL
                 int human = i + 1;
                 double v = steps[i];
                 int duration = GetStepDuration(steps, i, longTimers);
+
+                // ─── ТЕСТ-режим: не регулируем давление, просто ждём атмосферу и запускаем таймер ───
+                if (IsTestPressureRange())
+                {
+                    SetStatus($"Шаг {human}: ТЕСТ — проверка атмосферного давления");
+
+                    await RefreshPressureAndSetPointAsync();
+                    double? currentP = _lastKnownPressure; // см. правку 3
+                    if (!currentP.HasValue || Math.Abs(currentP.Value) >= atmoThreshold)
+                    {
+                        SetStatus($"Шаг {human}: ТЕСТ — сброс до атмосферы (vent)");
+                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        if (!ventOk) return;
+
+                        SetStatus($"Шаг {human}: ТЕСТ — ожидание снижения давления");
+                        bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+                        if (!lowOk) return;
+                    }
+
+                    SetStatus($"Шаг {human}: ТЕСТ — таймер {duration} сек");
+                    await RunTimerWithStepAsync(duration, i, waitForState: false);
+
+                    SetStatus($"Шаг {human}: ТЕСТ — команда съёма");
+                    bool qT = await TakePointForStepAsync(i, waitForState: false);
+                    if (!qT) return;
+
+                    if (i < _stepItems.Count)
+                    {
+                        _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].ArrowText = "  ";
+                    }
+                    _completedSteps = i + 1;
+                    UpdateStepCounter();
+                    continue;
+                }
 
                 if (i == 0)
                 {
@@ -2683,7 +2706,6 @@ namespace TERMINAL
             SetExternalButtonsEnabled(false);
 
             _totalTimerStart = DateTime.Now;
-            _totalTimerActive = true;
 
             try { await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold); }
             catch (Exception ex)
@@ -2694,7 +2716,6 @@ namespace TERMINAL
             finally
             {
                 _isRunning = false;
-                _totalTimerActive = false;
                 _pauseRequested = false;
 
                 StartButton.IsEnabled = true;
@@ -2804,14 +2825,11 @@ namespace TERMINAL
         private async Task RunTimerWithRightBlockAsync(int seconds, bool isMax)
         {
             int remaining = seconds;
-            _timerActive = true;
 
             if (!isMax)
             {
                 while (remaining > 0)
                 {
-                    if (_stopRequested) { _timerActive = false; return; }
-                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                     remaining--;
                     MinTimerText.Text = remaining.ToString();
@@ -2821,14 +2839,11 @@ namespace TERMINAL
                 }
 
                 MinTimerText.Text = "0";
-                _timerActive = false;
                 return;
             }
 
             while (remaining > 0)
             {
-                if (_stopRequested) { _timerActive = false; return; }
-                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
 
@@ -2845,21 +2860,16 @@ namespace TERMINAL
             }
 
             MaxTimerText.Text = "0";
-            _timerActive = false;
         }
 
         private async Task RunTimerWithStepAsync(int seconds, int stepIndex, bool waitForState)
         {
             int remaining = seconds;
-            _timerActive = true;
 
             if (!waitForState)
             {
                 while (remaining > 0)
                 {
-                    if (_stopRequested) { _timerActive = false; return; }
-                    if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
-
                     remaining--;
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
@@ -2870,8 +2880,6 @@ namespace TERMINAL
 
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].TimerText = "0";
-
-                _timerActive = false;
                 return;
             }
 
@@ -2879,8 +2887,6 @@ namespace TERMINAL
 
             while (remaining > 0)
             {
-                if (_stopRequested) { _timerActive = false; return; }
-                if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
 
                 await RefreshPressureAndSetPointAsync();
 
@@ -2912,8 +2918,6 @@ namespace TERMINAL
 
                     while (true)
                     {
-                        if (_stopRequested) { _timerActive = false; return; }
-                        if (!await WaitIfPausedAsync()) { _timerActive = false; return; }
                         await SafeDelayAsync(1000);
 
                         string? s = await SendCommandAsync("get_state_in_point;");
@@ -2932,8 +2936,6 @@ namespace TERMINAL
 
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
-
-            _timerActive = false;
         }
 
         // ─────────────────────────── ПОКАЗ СООБЩЕНИЯ ───────────────────────────
@@ -3482,6 +3484,7 @@ namespace TERMINAL
                         PlatinaRowEllipse.Fill = Brushes.Red;
                 }
             }
+            UpdateSktbPanelVisibility();
         }
 
 
@@ -3527,66 +3530,117 @@ namespace TERMINAL
                 }
             }
             else
+            {
+                if (PdaPressureText != null &&
+                    _pdaLastSuccess != DateTime.MinValue &&
+                    (now - _pdaLastSuccess).TotalSeconds > SensorStaleSeconds)
                 {
-                    if (PdaPressureText != null &&
-                        _pdaLastSuccess != DateTime.MinValue &&
-                        (now - _pdaLastSuccess).TotalSeconds > SensorStaleSeconds)
-                    {
-                        PdaPressureText.Text = "— мм рт. ст.";
-                        PdaPressureText.Foreground =
-                            new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
-                    }
-                    if (PdaStatusEllipse != null)
-                        PdaStatusEllipse.Fill = Brushes.Red;
+                    PdaPressureText.Text = "— мм рт. ст.";
+                    PdaPressureText.Foreground =
+                        new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
                 }
+                if (PdaStatusEllipse != null)
+                    PdaStatusEllipse.Fill = Brushes.Red;
+            }
 
-                // ── ПТК ──
-                ConnectedClient? ptkClient;
-                lock (_clientsLock)
+            // ── ПТК ──
+            ConnectedClient? ptkClient;
+            lock (_clientsLock)
+            {
+                ptkClient = _connectedClients
+                    .Where(c => !c.IsOffline && c.HasCapability("FURNACE_TEMP"))
+                    .OrderByDescending(c => c.LastFurnaceFromClientAt)
+                    .FirstOrDefault();
+            }
+
+            bool ptkFresh = ptkClient != null &&
+                (now - ptkClient.LastFurnaceFromClientAt).TotalSeconds <= SensorStaleSeconds &&
+                !double.IsNaN(ptkClient.LastFurnaceFromClient);
+
+            if (ptkFresh)
+            {
+                _ptkLastValue = ptkClient!.LastFurnaceFromClient;
+                _ptkLastSuccess = ptkClient.LastFurnaceFromClientAt;
+                _ptkSourceSid = ptkClient.Sid;
+
+                if (PtkStatusEllipse != null)
+                    PtkStatusEllipse.Fill = Brushes.Green;
+
+                if (PtkTempText != null)
                 {
-                    ptkClient = _connectedClients
-                        .Where(c => !c.IsOffline && c.HasCapability("FURNACE_TEMP"))
-                        .OrderByDescending(c => c.LastFurnaceFromClientAt)
-                        .FirstOrDefault();
-                }
-
-                bool ptkFresh = ptkClient != null &&
-                    (now - ptkClient.LastFurnaceFromClientAt).TotalSeconds <= SensorStaleSeconds &&
-                    !double.IsNaN(ptkClient.LastFurnaceFromClient);
-
-                if (ptkFresh)
-                {
-                    _ptkLastValue = ptkClient!.LastFurnaceFromClient;
-                    _ptkLastSuccess = ptkClient.LastFurnaceFromClientAt;
-                    _ptkSourceSid = ptkClient.Sid;
-
-                    if (PtkStatusEllipse != null)
-                        PtkStatusEllipse.Fill = Brushes.Green;
-
-                    if (PtkTempText != null)
-                    {
-                        string sign = _ptkLastValue >= 0 ? "+" : "";
-                        PtkTempText.Text =
-                            sign +
-                            _ptkLastValue.ToString("0.000", CultureInfo.InvariantCulture) +
-                            " °C";
-                        PtkTempText.Foreground = Brushes.White;
-                    }
-                }
-                else
-                {
-                    if (PtkTempText != null &&
-                        _ptkLastSuccess != DateTime.MinValue &&
-                        (now - _ptkLastSuccess).TotalSeconds > SensorStaleSeconds)
-                    {
-                        PtkTempText.Text = "— °C";
-                        PtkTempText.Foreground =
-                            new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
-                    }
-                    if (PtkStatusEllipse != null)
-                        PtkStatusEllipse.Fill = Brushes.Red;
+                    string sign = _ptkLastValue >= 0 ? "+" : "";
+                    PtkTempText.Text =
+                        sign +
+                        _ptkLastValue.ToString("0.000", CultureInfo.InvariantCulture) +
+                        " °C";
+                    PtkTempText.Foreground = Brushes.White;
                 }
             }
+            else
+            {
+                if (PtkTempText != null &&
+                    _ptkLastSuccess != DateTime.MinValue &&
+                    (now - _ptkLastSuccess).TotalSeconds > SensorStaleSeconds)
+                {
+                    PtkTempText.Text = "— °C";
+                    PtkTempText.Foreground =
+                        new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
+                }
+                if (PtkStatusEllipse != null)
+                    PtkStatusEllipse.Fill = Brushes.Red;
+            }
+            UpdateSktbPanelVisibility();
+        }
+
+        /// <summary>
+        /// Скрывает карточку СКТБ ЭлПа, если все три источника (Платина, ПДА, ПТК)
+        /// молчат дольше SktbAllDeadSeconds. Как только хотя бы один оживает —
+        /// карточка снова показывается.
+        /// </summary>
+        /// <summary>
+        /// Скрывает каждую строку СКТБ (Платина / ПДА / ПТК) отдельно,
+        /// если соответствующий источник молчит дольше SktbAllDeadSeconds.
+        /// </summary>
+        private void UpdateSktbPanelVisibility()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(UpdateSktbPanelVisibility);
+                return;
+            }
+
+            var now = DateTime.Now;
+
+            // ── Платина (USB HID) ──
+            bool platinaAlive =
+                _platinaLastSuccess != DateTime.MinValue &&
+                (now - _platinaLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
+
+            if (PlatinaRowBorder != null)
+                PlatinaRowBorder.Visibility = platinaAlive
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            // ── ПДА (от клиентов KalibratorGUI) ──
+            bool pdaAlive =
+                _pdaLastSuccess != DateTime.MinValue &&
+                (now - _pdaLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
+
+            if (PdaRowBorder != null)
+                PdaRowBorder.Visibility = pdaAlive
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            // ── ПТК (от клиентов KalibratorGUI) ──
+            bool ptkAlive =
+                _ptkLastSuccess != DateTime.MinValue &&
+                (now - _ptkLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
+
+            if (PtkRowBorder != null)
+                PtkRowBorder.Visibility = ptkAlive
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+        }
 
 
         // ─────────────────────────── СТАТУС АГК ───────────────────────────
@@ -4018,8 +4072,6 @@ namespace TERMINAL
             }
 
             _stopRequested = true;
-            _timerActive = false;
-            _totalTimerActive = false;
             _pauseRequested = false;
             _autoStartTriggered = false;
 
@@ -4050,7 +4102,6 @@ namespace TERMINAL
                     MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
                 _stopRequested = true;
-                _totalTimerActive = false;
                 _pauseRequested = false;
                 _autoStartTriggered = false;
 
@@ -4129,6 +4180,9 @@ namespace TERMINAL
             }
 
             string? p = await SendCommandAsync("get_press;");
+            await Task.Delay(200);
+            string? sp = await SendCommandAsync("get_point;");
+
             if (p != null)
             {
                 string parsed = ParsePressure(p);
@@ -4136,11 +4190,15 @@ namespace TERMINAL
                 AgkPressureText.Text = string.IsNullOrEmpty(units)
                     ? parsed
                     : $"{parsed} {units}";
+
                 if (double.TryParse(parsed, NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out double v)) pressure = v;
+                    CultureInfo.InvariantCulture, out double v))
+                {
+                    pressure = v;
+                    _lastKnownPressure = v;
+                }
             }
 
-            string? sp = await SendCommandAsync("get_point;");
             if (sp != null)
             {
                 string parsedSp = ParsePressure(sp);
@@ -4227,6 +4285,15 @@ namespace TERMINAL
             return "";
         }
 
+        /// <summary>
+        /// Возвращает true, если выбран диапазон «ТЕСТ» — 
+        /// все точки = 0, регулировка давления не нужна.
+        /// </summary>
+        private bool IsTestPressureRange()
+        {
+            return _selectedTargetPressure == "ТЕСТ";
+        }
+
         private double GetAtmosphereThreshold(string unitsCode) =>
             unitsCode switch
             {
@@ -4303,6 +4370,7 @@ namespace TERMINAL
             _sensorUiTimer.Start();
 
             RefreshSensorUiFromClients();
+            UpdateSktbPanelVisibility();
 
             UpdateAutoStartInfo();
             UpdateStartButtonMode();
@@ -4356,6 +4424,9 @@ namespace TERMINAL
         {
             if (_isRunning) return;
 
+            // Защита от наслаивания: пока предыдущий batch не завершён — новый не запускаем
+            if (_agkBatchBusy) return;
+
             NetworkStream? stream;
             lock (_streamLock) stream = _stream;
 
@@ -4363,20 +4434,67 @@ namespace TERMINAL
 
             if (stream != null)
             {
+                _agkBatchBusy = true;
                 try
                 {
                     if (stream.CanRead && stream.CanWrite)
                     {
-                        string? ur = await SendCommandAsync("get_units;");
-                        if (ur != null)
+                        // Прибор НЕ поддерживает pipelining — шлём по одной команде с паузой
+                        string? unitsResp = await SendCommandAsync("get_units;");
+                        await Task.Delay(200);
+                        string? pressResp = await SendCommandAsync("get_press;");
+                        await Task.Delay(200);
+                        string? pointResp = await SendCommandAsync("get_point;");
+                        await Task.Delay(200);
+                        string? statusResp = await SendCommandAsync("get_status;");
+
+                        if (unitsResp != null)
                         {
-                            UpdateUnits(ur);
-                            await RefreshPressureAndSetPointAsync();
-
-                            await RefreshAgkStatusAsync();
-
-                            agkOk = true;
+                            UpdateUnits(unitsResp);
                         }
+
+                        if (pressResp != null)
+                        {
+                            string parsed = ParsePressure(pressResp);
+                            string units = _currentPressureUnitsLabel;
+                            AgkPressureText.Text = string.IsNullOrEmpty(units)
+                                ? parsed
+                                : $"{parsed} {units}";
+
+                            if (double.TryParse(parsed, NumberStyles.Float,
+                                CultureInfo.InvariantCulture, out double v))
+                            {
+                                _lastKnownPressure = v;
+                            }
+                        }
+
+                        if (pointResp != null)
+                        {
+                            string parsedSp = ParsePressure(pointResp);
+                            string units = _currentPressureUnitsLabel;
+                            AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                                ? parsedSp
+                                : $"{parsedSp} {units}";
+                        }
+
+                        if (statusResp != null)
+                        {
+                            string display = statusResp.Trim();
+                            if (string.IsNullOrEmpty(display)) display = "(пусто)";
+
+                            if (AgkStatusTextBox != null)
+                            {
+                                AgkStatusTextBox.Text = display;
+                                AgkStatusTextBox.Foreground =
+                                    (display == "0;" || display == "0")
+                                        ? new SolidColorBrush(Color.FromRgb(0x80, 0xFF, 0x80))
+                                        : new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x80));
+                            }
+                        }
+
+                        // Считаем связь живой, если пришёл units И press
+                        if (unitsResp != null && pressResp != null)
+                            agkOk = true;
                     }
                     else
                     {
@@ -4387,6 +4505,10 @@ namespace TERMINAL
                 {
                     ResetDeviceConnection();
                 }
+                finally
+                {
+                    _agkBatchBusy = false;
+                }
             }
 
             if (agkOk)
@@ -4394,8 +4516,6 @@ namespace TERMINAL
                 _agkFailCount = 0;
                 AgkStatusEllipse.Fill = Brushes.Green;
 
-                if (!_totalTimerActive)
-                    SetStatusSuccess($"Подключено к {DeviceIp}:{DevicePort}");
             }
             else
             {
@@ -4421,16 +4541,19 @@ namespace TERMINAL
             char? d = null;
             foreach (char c in response)
                 if (c >= '0' && c <= '9') { d = c; break; }
-            string u = d switch
+
+            string? u = d switch
             {
                 '0' => "кПа",
                 '1' => "МПа",
                 '2' => "бар",
                 '3' => "PSI",
                 '4' => "кгс/см²",
-                _ => "?"
+                _ => null
             };
-            _currentPressureUnitsLabel = u;
+
+            if (u != null)
+                _currentPressureUnitsLabel = u;
         }
 
         private async Task<string?> SendCommandAsync(string command)
@@ -4563,13 +4686,45 @@ namespace TERMINAL
             if (RemoveOfflineButton != null) RemoveOfflineButton.IsEnabled = enabled;
         }
 
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (_isRunning || _batchRunning)
+            {
+                string mode =
+                    _batchRunning ? "пакетный режим" :
+                    (_isCalibrationMode ? "«Градуировка»" : "«Жамкать»");
+
+                var result = MessageBox.Show(
+                    $"Сейчас идёт {mode}.\n\n" +
+                    "Вы уверены, что хотите закрыть программу?\n" +
+                    "Работа будет прервана, данные не будут сохранены.",
+                    "Подтверждение закрытия",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+
+                if (result != MessageBoxResult.Yes)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+
+                // Пользователь согласился — просим фоновые циклы свернуться
+                _stopRequested = true;
+                _batchStopRequested = true;
+                _pauseRequested = false;
+            }
+
+            base.OnClosing(e);
+        }
+
+
         protected override void OnClosed(EventArgs e)
         {
             try { SaveWindowPositionToSettings(); } catch { }
             try { SaveSettings(); } catch { }
             _stopRequested = true;
             _pauseRequested = false;
-            _totalTimerActive = false;
             _batchStopRequested = true;
             _timer?.Stop();
             _clientsUiTimer?.Stop();
