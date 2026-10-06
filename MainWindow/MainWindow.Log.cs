@@ -1,9 +1,10 @@
-﻿using System;
-using System.IO;
+﻿using HidSharp;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -13,9 +14,10 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using HidSharp;
 using TERMINAL.Models;
 
 namespace TERMINAL
@@ -84,6 +86,14 @@ namespace TERMINAL
                 _logWindow.Activate();
                 return;
             }
+
+            // ── Счётчик создаём первым, т.к. его используют команды контекстного меню ──
+            var counter = new System.Windows.Controls.TextBlock
+            {
+                FontSize = 11,
+                Foreground = Brushes.Gray,
+                VerticalAlignment = VerticalAlignment.Center
+            };
 
             _logWindow = new Window
             {
@@ -202,6 +212,98 @@ namespace TERMINAL
             System.Windows.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(
                 _logListBox, System.Windows.Controls.ScrollBarVisibility.Auto);
 
+            // ── Контекстное меню для строки журнала ──
+            var ctxMenu = new System.Windows.Controls.ContextMenu();
+
+            var miCopyLine = new System.Windows.Controls.MenuItem
+            {
+                Header = "Копировать строку"
+            };
+            miCopyLine.Click += (s, ev) =>
+            {
+                if (_logListBox?.SelectedItem is LogEntry entry)
+                {
+                    try
+                    {
+                        Clipboard.SetText(entry.DisplayText);
+                        counter.Text = "Строка скопирована";
+                    }
+                    catch
+                    {
+                        MessageBox.Show("Не удалось скопировать в буфер обмена.");
+                    }
+                }
+            };
+            ctxMenu.Items.Add(miCopyLine);
+
+            var miCopyContext = new System.Windows.Controls.MenuItem
+            {
+                Header = "Копировать с контекстом ±5"
+            };
+            miCopyContext.Click += (s, ev) =>
+            {
+                if (_logListBox?.SelectedItem is LogEntry entry)
+                {
+                    int idx = _logEntries.IndexOf(entry);
+                    if (idx < 0) return;
+
+                    int from = Math.Max(0, idx - 5);
+                    int to = Math.Min(_logEntries.Count - 1, idx + 5);
+
+                    var sb = new StringBuilder();
+                    for (int i = from; i <= to; i++)
+                        sb.AppendLine(_logEntries[i].DisplayText);
+
+                    try
+                    {
+                        Clipboard.SetText(sb.ToString());
+                        counter.Text = $"Скопировано строк: {to - from + 1}";
+                    }
+                    catch
+                    {
+                        MessageBox.Show("Не удалось скопировать в буфер обмена.");
+                    }
+                }
+            };
+            ctxMenu.Items.Add(miCopyContext);
+
+            ctxMenu.Items.Add(new System.Windows.Controls.Separator());
+
+            var miCopyAll = new System.Windows.Controls.MenuItem
+            {
+                Header = "Копировать всё"
+            };
+            miCopyAll.Click += (s, ev) =>
+            {
+                var sb = new StringBuilder();
+                foreach (var entry in _logEntries)
+                    sb.AppendLine(entry.DisplayText);
+
+                try
+                {
+                    Clipboard.SetText(sb.ToString());
+                    counter.Text = $"Скопировано строк: {_logEntries.Count}";
+                }
+                catch
+                {
+                    MessageBox.Show("Не удалось скопировать в буфер обмена.");
+                }
+            };
+            ctxMenu.Items.Add(miCopyAll);
+
+            // Привязываем меню и логику выбора строки по правому клику
+            _logListBox.ContextMenu = ctxMenu;
+            _logListBox.PreviewMouseRightButtonDown += (s, ev) =>
+            {
+                var item = ItemsControl.ContainerFromElement(
+                    _logListBox, (DependencyObject)ev.OriginalSource) as ListBoxItem;
+
+                if (item != null)
+                {
+                    item.IsSelected = true;
+                }
+            };
+
             var itemTemplate = new DataTemplate();
             var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
             factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty,
@@ -222,13 +324,6 @@ namespace TERMINAL
             root.Children.Add(_logListBox);
 
             var bottomPanel = new System.Windows.Controls.DockPanel { Margin = new Thickness(0, 6, 0, 0) };
-
-            var counter = new System.Windows.Controls.TextBlock
-            {
-                FontSize = 11,
-                Foreground = Brushes.Gray,
-                VerticalAlignment = VerticalAlignment.Center
-            };
 
             void UpdateCounter()
             {
