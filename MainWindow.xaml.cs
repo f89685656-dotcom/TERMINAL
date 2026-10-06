@@ -1296,11 +1296,11 @@ namespace TERMINAL
                     return;
                 }
 
-                // 2) время стабилизации — нужно всегда
-                if (!int.TryParse(job.StabilizationMinutesText?.Trim(), out int mins) || mins <= 0)
+                // 2) время стабилизации — 0 допустим (означает «без выдержки, но проверить допуск»)
+                if (!int.TryParse(job.StabilizationMinutesText?.Trim(), out int mins) || mins < 0)
                 {
                     MessageBox.Show($"Задание #{i + 1}: некорректное время стабилизации " +
-                                    $"«{job.StabilizationMinutesText}» (нужно положительное число минут)");
+                                    $"«{job.StabilizationMinutesText}» (нужно неотрицательное число минут)");
                     return;
                 }
 
@@ -1392,18 +1392,44 @@ namespace TERMINAL
                     UpdateAutoStartInfo();
 
                     // 2) Стабилизация — своё время для каждого задания
-                    job.StatusText = $"стабилизация {job.StabilizationMinutes} мин";
-                    job.StatusColor = Brushes.Orange;
-
-                    bool stable = await WaitForBatchStabilizationAsync(
-                        job.StabilizationMinutes, completedCount, enabledCount);
-
-                    if (!stable)
+                    if (job.StabilizationMinutes > 0)
                     {
-                        job.StatusText = "стабилизация прервана";
-                        job.StatusColor = Brushes.Red;
-                        SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
-                        return;
+                        job.StatusText = $"стабилизация {job.StabilizationMinutes} мин";
+                        job.StatusColor = Brushes.Orange;
+
+                        bool stable = await WaitForBatchStabilizationAsync(
+                            job.StabilizationMinutes, completedCount, enabledCount);
+
+                        if (!stable)
+                        {
+                            job.StatusText = "стабилизация прервана";
+                            job.StatusColor = Brushes.Red;
+                            SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // 0 минут = «без выдержки», но проверяем, что температура в допуске
+                        job.StatusText = "проверка допуска";
+                        job.StatusColor = Brushes.Orange;
+
+                        SetStatus($"[Пакет {completedCount}/{enabledCount}] стабилизация 0 мин — " +
+                                  $"проверка попадания в допуск...");
+
+                        bool inTolerance = await WaitForBatchTemperatureInToleranceAsync(
+                            completedCount, enabledCount);
+
+                        if (!inTolerance)
+                        {
+                            job.StatusText = "проверка прервана";
+                            job.StatusColor = Brushes.Red;
+                            SetStatusWarning($"[Пакет {completedCount}] проверка допуска прервана");
+                            return;
+                        }
+
+                        SetStatus($"[Пакет {completedCount}/{enabledCount}] температура в допуске, " +
+                                  $"стабилизация пропущена");
                     }
 
                     // 3) Запуск нужного режима и ожидание завершения
@@ -1597,6 +1623,62 @@ namespace TERMINAL
                 await Task.Delay(1000);
             }
         }
+
+        /// <summary>
+        /// Ждёт, пока температура печи войдёт в допуск ±FurnaceStabilizationTolerance
+        /// относительно уставки, и сразу возвращает true — без выдержки.
+        /// Используется в пакетном режиме, когда StabilizationMinutes = 0.
+        /// </summary>
+        private async Task<bool> WaitForBatchTemperatureInToleranceAsync(
+            int jobIndex, int totalJobs)
+        {
+            BatchProgressText.Text =
+                $"Задание {jobIndex}/{totalJobs}: ожидание попадания в допуск...";
+
+            while (true)
+            {
+                if (_batchStopRequested || _stopRequested) return false;
+
+                await RefreshFurnaceCurrentTempAsync();
+                await RefreshFurnaceSetPointAsync();
+
+                string spTxt = FurnaceSetPointBox?.Text?.Replace(',', '.') ?? "";
+                string tTxt = FurnaceCurrentTempText?.Text ?? "";
+
+                int idx = tTxt.IndexOf(" °C", StringComparison.Ordinal);
+                if (idx >= 0) tTxt = tTxt.Substring(0, idx);
+                tTxt = tTxt.Trim().TrimStart('+').Replace(',', '.');
+
+                if (!double.TryParse(spTxt, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double setPoint) ||
+                    !double.TryParse(tTxt, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double currentTemp))
+                {
+                    BatchProgressText.Text =
+                        $"Задание {jobIndex}/{totalJobs}: ожидание данных от печи...";
+                    await Task.Delay(1000);
+                    continue;
+                }
+
+                bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
+
+                if (inRange)
+                {
+                    BatchProgressText.Text =
+                        $"Задание {jobIndex}/{totalJobs}: температура в допуске " +
+                        $"({currentTemp.ToString("0.000", CultureInfo.InvariantCulture)} °C)";
+                    return true;
+                }
+
+                BatchProgressText.Text =
+                    $"Задание {jobIndex}/{totalJobs}: ожидание допуска — " +
+                    $"текущая {currentTemp.ToString("0.000", CultureInfo.InvariantCulture)} °C, " +
+                    $"уставка {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C";
+
+                await Task.Delay(1000);
+            }
+        }
+
 
         // ─────────────────────────── COMBOBOX ───────────────────────────
 
@@ -5386,7 +5468,7 @@ namespace TERMINAL
         @"═══════════════════════════════════════════════════════════════
  T.E.R.M.I.N.A.L. — история изменений
 ═══════════════════════════════════════════════════════════════
-v1.0.79
+v1.1.01
   • Добавлен Changelog с описанием изменений в каждой версии программы
   • Добавлен журнал операций, в котором можно посмотреть все логи событий
   • Добавлены подписи SID клиентов через макрос, можно подписать каждый клиент либо вручную, либо через макрос
