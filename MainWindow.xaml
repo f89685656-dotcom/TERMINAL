@@ -686,23 +686,45 @@
                                                         <ComboBoxItem Content="Жамкать"/>
                                                     </ComboBox>
 
+                                                    <!-- Поле «Стартовый шаг» — видно только для Градуировки -->
                                                     <TextBox Grid.Column="7"
-                                                                Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                Text="{Binding StartStepText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                 FontSize="12"
                                                                 Padding="3,1"
                                                                 HorizontalContentAlignment="Center"
                                                                 VerticalContentAlignment="Center"
                                                                 IsEnabled="{Binding IsEditable}"
-                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
-                                                                ToolTip="Количество циклов накачки/сброса"/>
+                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"
+                                                                ToolTip="Стартовый шаг градуировки"/>
 
+                                                    <!-- Поле «Циклов» — видно только для Жамкать -->
+                                                    <TextBox Grid.Column="7"
+                                                                 Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                 FontSize="12"
+                                                                 Padding="3,1"
+                                                                 HorizontalContentAlignment="Center"
+                                                                 VerticalContentAlignment="Center"
+                                                                 IsEnabled="{Binding IsEditable}"
+                                                                 Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
+                                                                 ToolTip="Количество циклов накачки/сброса"/>
+
+                                                    <!-- Подпись «шаг» — только для Градуировки -->
                                                     <TextBlock Grid.Column="8"
-                                                                Text="цикл"
-                                                                FontSize="10"
-                                                                Foreground="#FF505050"
-                                                                VerticalAlignment="Center"
-                                                                Margin="3,0,5,0"
-                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
+                                                               Text="шаг"
+                                                               FontSize="10"
+                                                               Foreground="#FF505050"
+                                                               VerticalAlignment="Center"
+                                                               Margin="3,0,5,0"
+                                                               Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
+
+                                                    <!-- Подпись «цикл» — только для Жамкать -->
+                                                    <TextBlock Grid.Column="8"
+                                                               Text="цикл"
+                                                               FontSize="10"
+                                                               Foreground="#FF505050"
+                                                               VerticalAlignment="Center"
+                                                               Margin="3,0,5,0"
+                                                               Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
 
                                                     <TextBlock Grid.Column="9"
                                                                Text="{Binding StatusText}"

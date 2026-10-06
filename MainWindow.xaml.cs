@@ -336,10 +336,22 @@ namespace TERMINAL
         private bool _isEditable = true;
         private bool _isCalibrationMode = true;
 
-        // ── НОВОЕ: количество циклов для «Жамкать» ──
+        // ── Количество циклов для «Жамкать» ──
         private string _cyclesText = "10";
 
         public string IndexText { get; set; } = "";
+
+        // ── Стартовый шаг для «Градуировка» ──
+        private string _startStepText = "1";
+
+        public string StartStepText
+        {
+            get => _startStepText;
+            set { _startStepText = value; OnPropertyChanged(nameof(StartStepText)); }
+        }
+
+        // ── Числовое значение (вычисляется при валидации) ──
+        public int StartStep { get; set; } = 1;
 
         public string SetPointText
         {
@@ -831,7 +843,8 @@ namespace TERMINAL
             public string StabilizationMinutes { get; set; } = "120";
             public bool IsEnabled { get; set; } = true;
             public bool IsCalibrationMode { get; set; } = true;
-            public string Cycles { get; set; } = "10";   // НОВОЕ
+            public string Cycles { get; set; } = "10";
+            public string StartStep { get; set; } = "1";
         }
 
         private void LoadSettings()
@@ -874,7 +887,8 @@ namespace TERMINAL
                             StabilizationMinutesText = string.IsNullOrWhiteSpace(dto.StabilizationMinutes) ? "120" : dto.StabilizationMinutes,
                             IsEnabled = dto.IsEnabled,
                             IsCalibrationMode = dto.IsCalibrationMode,
-                            CyclesText = string.IsNullOrWhiteSpace(dto.Cycles) ? "10" : dto.Cycles   // НОВОЕ
+                            CyclesText = string.IsNullOrWhiteSpace(dto.Cycles) ? "10" : dto.Cycles,
+                            StartStepText = string.IsNullOrWhiteSpace(dto.StartStep) ? "1" : dto.StartStep
                         });
                     }
                 }
@@ -981,7 +995,8 @@ namespace TERMINAL
                         StabilizationMinutes = j.StabilizationMinutesText,
                         IsEnabled = j.IsEnabled,
                         IsCalibrationMode = j.IsCalibrationMode,
-                        Cycles = j.CyclesText   // НОВОЕ
+                        Cycles = j.CyclesText,
+                        StartStep = j.StartStepText
                     }).ToList(),
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
@@ -1207,8 +1222,8 @@ namespace TERMINAL
             {
                 SetPointText = "25",
                 StabilizationMinutesText = "120",
-
-                CyclesText = "10",           // НОВОЕ
+                CyclesText = "10",
+                StartStepText = "1",
                 IsEnabled = true,
                 IsCalibrationMode = true
             };
@@ -1307,7 +1322,7 @@ namespace TERMINAL
                 job.SetPoint = sp;
                 job.StabilizationMinutes = mins;
 
-                // 3) НОВОЕ: количество циклов — только для «Жамкать»
+                // 3) для «Жамкать» — количество циклов, для «Градуировка» — стартовый шаг
                 if (!job.IsCalibrationMode)
                 {
                     if (!int.TryParse(job.CyclesText?.Trim(), out int cycles) || cycles <= 0)
@@ -1317,11 +1332,34 @@ namespace TERMINAL
                         return;
                     }
                     job.Cycles = cycles;
+                    job.StartStep = 1;   // для «Жамкать» стартовый шаг не используется
                 }
                 else
                 {
-                    // для «Градуировка» циклы не используются, но сбросим на всякий случай
-                    job.Cycles = 0;
+                    if (!int.TryParse(job.StartStepText?.Trim(), out int startStep) || startStep < 1)
+                    {
+                        MessageBox.Show($"Задание #{i + 1}: некорректный стартовый шаг " +
+                                        $"«{job.StartStepText}» (нужно положительное число)");
+                        return;
+                    }
+
+                    // проверим, что шаг не выходит за пределы диапазона
+                    int stepsCount = 0;
+                    if (_selectedTargetPressure != null &&
+                        _stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
+                    {
+                        stepsCount = steps.Length;
+                    }
+
+                    if (stepsCount > 0 && startStep > stepsCount)
+                    {
+                        MessageBox.Show($"Задание #{i + 1}: стартовый шаг {startStep} " +
+                                        $"больше числа шагов в диапазоне «{_selectedTargetPressure}» ({stepsCount})");
+                        return;
+                    }
+
+                    job.StartStep = startStep;
+                    job.Cycles = 0;   // для «Градуировка» циклы не используются
                 }
             }
 
