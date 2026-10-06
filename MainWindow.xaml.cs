@@ -29,6 +29,7 @@ namespace TERMINAL
         private DispatcherTimer? _timer;
         private DispatcherTimer? _furnaceTempTimer;
         private DispatcherTimer? _platinaTimer;
+        private DispatcherTimer? _batchStatusTimer;
 
         private string? _selectedTargetPressure;
         private int _currentStepIndex = 0;

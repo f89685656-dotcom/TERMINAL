@@ -1,14 +1,15 @@
 ﻿using System;
-using System.IO;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using TERMINAL.Models;
 
 namespace TERMINAL
@@ -187,6 +188,7 @@ namespace TERMINAL
             }
 
             _batchRunning = true;
+            StartBatchStatusTimer();
 
             SetExternalButtonsEnabled(false);
             StartButton.IsEnabled = false;
@@ -329,8 +331,11 @@ namespace TERMINAL
             finally
             {
                 _batchRunning = false;
+                StopBatchStatusTimer();
                 _batchRunDoneSignal = null;
                 _batchStopRequested = false;
+
+                StopBatchStatusTimer();
 
                 StartButton.IsEnabled = true;
                 AddBatchJobButton.IsEnabled = true;
@@ -346,6 +351,7 @@ namespace TERMINAL
                     job.IsEditable = true;
 
                 BatchProgressText.Text = "";
+                UpdateStartButtonMode();
 
                 UpdateStartButtonMode();
             }
@@ -825,5 +831,137 @@ namespace TERMINAL
             }
         }
 
+        private void StartBatchStatusTimer()
+        {
+            if (_batchStatusTimer != null) return;
+
+            _batchStatusTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(500)
+            };
+            _batchStatusTimer.Tick += (s, e) => UpdateBatchStatusPanel();
+            _batchStatusTimer.Start();
+
+            // Показать панель
+            if (BatchStatusPanel != null)
+                BatchStatusPanel.Visibility = Visibility.Visible;
+
+            // Сбросить цвета
+            if (BatchCurrentJobText != null) BatchCurrentJobText.Foreground = new SolidColorBrush(Color.FromRgb(0x2E, 0x4A, 0x6B));
+            if (BatchCurrentTempText != null) BatchCurrentTempText.Foreground = new SolidColorBrush(Color.FromRgb(0x2E, 0x4A, 0x6B));
+            if (BatchDeltaText != null) BatchDeltaText.Foreground = Brushes.Gray;
+        }
+        private void StopBatchStatusTimer()
+        {
+            _batchStatusTimer?.Stop();
+            _batchStatusTimer = null;
+
+            if (BatchStatusPanel != null)
+                BatchStatusPanel.Visibility = Visibility.Collapsed;
+
+            if (BatchCurrentJobText != null) BatchCurrentJobText.Text = "—";
+            if (BatchCurrentTempText != null) BatchCurrentTempText.Text = "— °C";
+            if (BatchDeltaText != null) BatchDeltaText.Text = "—";
+        }
+        private void UpdateBatchStatusPanel()
+        {
+            if (!_batchRunning) return;
+            if (BatchCurrentJobText == null || BatchCurrentTempText == null || BatchDeltaText == null) return;
+
+            // 1. Номер текущего задания
+            int activeIndex = -1;
+            int activeCount = 0;
+            int totalActive = 0;
+
+            for (int i = 0; i < _batchJobs.Count; i++)
+            {
+                if (!_batchJobs[i].IsEnabled) continue;
+                totalActive++;
+
+                // Задание считается текущим, если оно в статусе работы
+                string st = _batchJobs[i].StatusText ?? "";
+                if (st.Contains("запись") || st.Contains("стабилизация") ||
+                    st.Contains("проверка") || st.Contains("Идёт съём"))
+                {
+                    if (activeIndex < 0)
+                    {
+                        activeIndex = i;
+                        activeCount = totalActive;
+                    }
+                }
+            }
+
+            if (activeIndex >= 0)
+            {
+                var job = _batchJobs[activeIndex];
+                string sp = job.SetPointText ?? "—";
+                BatchCurrentJobText.Text = $"{activeCount}/{totalActive}  →  {sp} °C";
+            }
+            else
+            {
+                BatchCurrentJobText.Text = "—";
+            }
+
+            // 2. Текущая температура
+            string tTxt = FurnaceCurrentTempText?.Text ?? "";
+            int idx = tTxt.IndexOf(" °C", StringComparison.Ordinal);
+            if (idx >= 0) tTxt = tTxt.Substring(0, idx);
+            tTxt = tTxt.Trim().TrimStart('+').Replace(',', '.');
+
+            if (!double.TryParse(tTxt, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double currentTemp))
+            {
+                BatchCurrentTempText.Text = "— °C";
+                BatchDeltaText.Text = "—";
+                BatchDeltaText.Foreground = Brushes.Gray;
+                return;
+            }
+
+            BatchCurrentTempText.Text = currentTemp.ToString("0.00", CultureInfo.InvariantCulture) + " °C";
+
+            // 3. Цель — из активного задания (парсим SetPointText)
+            double? setPoint = null;
+            if (activeIndex >= 0)
+            {
+                string spTxt = _batchJobs[activeIndex].SetPointText?.Replace(',', '.') ?? "";
+                if (double.TryParse(spTxt, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double sp))
+                {
+                    setPoint = sp;
+                }
+            }
+
+            if (!setPoint.HasValue)
+            {
+                // Если активного задания нет — берём уставку из печи
+                string spBox = FurnaceSetPointBox?.Text?.Replace(',', '.') ?? "";
+                if (double.TryParse(spBox, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double spBoxV))
+                {
+                    setPoint = spBoxV;
+                }
+            }
+
+            if (!setPoint.HasValue)
+            {
+                BatchDeltaText.Text = "—";
+                BatchDeltaText.Foreground = Brushes.Gray;
+                return;
+            }
+
+            // 4. Δ
+            double delta = currentTemp - setPoint.Value;
+            string sign = delta >= 0 ? "+" : "";
+            BatchDeltaText.Text = $"{sign}{delta.ToString("0.00", CultureInfo.InvariantCulture)} °C";
+
+            // Цветовая индикация
+            double abs = Math.Abs(delta);
+            if (abs <= FurnaceStabilizationTolerance)          // ±0.1 °C
+                BatchDeltaText.Foreground = new SolidColorBrush(Color.FromRgb(0x30, 0xA0, 0x30));  // зелёный
+            else if (abs <= 1.0)                                // ±1 °C
+                BatchDeltaText.Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xA0, 0x30));  // оранжевый
+            else                                                // > 1 °C
+                BatchDeltaText.Foreground = new SolidColorBrush(Color.FromRgb(0xD0, 0x50, 0x50));  // красный
+        }
     }
 }
