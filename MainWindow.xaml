@@ -58,17 +58,17 @@
         <Style x:Key="TableCellTextStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="LineHeight" Value="14"/>
+            <Setter Property="LineHeight" Value="15"/>
             <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
         </Style>
 
         <!-- Стиль текста заголовка шапки -->
         <Style x:Key="TableHeaderTextStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Foreground" Value="#FF505050"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="LineHeight" Value="11"/>
+            <Setter Property="LineHeight" Value="14"/>
             <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
         </Style>
 
@@ -115,7 +115,7 @@
                 <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
                     <TextBlock Text="{Binding ArrowText}"
                                Style="{StaticResource TableCellTextStyle}"
-                               FontSize="15" Foreground="Black"
+                               Foreground="Black"
                                HorizontalAlignment="Left"/>
                 </Border>
                 <Border Grid.Column="4" Style="{StaticResource TableCellBorderStyle}">
@@ -132,7 +132,7 @@
                 <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
                     <TextBlock Text="{Binding StatusMark}"
                                Style="{StaticResource TableCellTextStyle}"
-                               FontSize="16" Foreground="Green"
+                               Foreground="Green"
                                HorizontalAlignment="Center"/>
                 </Border>
             </Grid>
@@ -167,7 +167,7 @@
                 <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
                     <TextBlock Text="{Binding ArrowText}"
                                Style="{StaticResource TableCellTextStyle}"
-                               FontSize="15" Foreground="Black"
+                               Foreground="Black"
                                HorizontalAlignment="Left"/>
                 </Border>
                 <Border Grid.Column="4" Style="{StaticResource TableCellBorderStyle}">
@@ -184,7 +184,7 @@
                 <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
                     <TextBlock Text="{Binding StatusMark}"
                                Style="{StaticResource TableCellTextStyle}"
-                               FontSize="16" Foreground="Green"
+                               Foreground="Green"
                                HorizontalAlignment="Center"/>
                 </Border>
             </Grid>
@@ -194,7 +194,6 @@
 
     <Grid Margin="15">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -202,99 +201,10 @@
         </Grid.RowDefinitions>
 
         <!-- ═══════════════════════════════════════════════════════════════ -->
-        <!-- ROW 0: панель настроек                                         -->
+        <!-- ROW 0: левая колонка (СТАРТ/ПАУЗА + таблица) + правая          -->
+        <!--        (пакетный режим с шапкой настроек + карточки приборов)   -->
         <!-- ═══════════════════════════════════════════════════════════════ -->
-        <Border Grid.Row="0"
-                BorderBrush="LightGray" BorderThickness="1"
-                CornerRadius="6" Padding="10,6"
-                Background="#FFF8F8F8"
-                Margin="0,0,0,8">
-            <WrapPanel Orientation="Horizontal">
-
-                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
-                    <TextBlock Text="Диапазон:" FontSize="12"
-                               VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <ComboBox x:Name="TargetPressureCombo"
-                              Width="150" Height="26" FontSize="12"
-                              Padding="4,2" VerticalContentAlignment="Center"
-                              SelectionChanged="TargetPressureCombo_SelectionChanged"/>
-                </StackPanel>
-
-                <StackPanel x:Name="TimerSetPanel" Orientation="Horizontal"
-                            Margin="0,3,14,3" VerticalAlignment="Center">
-                    <TextBlock Text="Таймеры:" FontSize="12"
-                               VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <ComboBox x:Name="TimerSetCombo"
-                              Width="130" Height="26" FontSize="12"
-                              Padding="4,2" VerticalContentAlignment="Center"
-                              SelectionChanged="TimerSetCombo_SelectionChanged"/>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
-                    <TextBlock Text="Режим:" FontSize="12"
-                               VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <ComboBox x:Name="ModeCombo"
-                              Width="120" Height="26" FontSize="12"
-                              Padding="4,2" VerticalContentAlignment="Center"
-                              SelectionChanged="ModeCombo_SelectionChanged">
-                        <ComboBoxItem Content="Градуировка" IsSelected="True"/>
-                        <ComboBoxItem Content="Жамкать"/>
-                    </ComboBox>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
-                    <TextBlock x:Name="ParamLabel" Text="Начать с шага:"
-                               FontSize="12" VerticalAlignment="Center"
-                               Margin="0,0,5,0"/>
-                    <TextBox x:Name="ParamBox"
-                             Width="48" Height="26" FontSize="12"
-                             Text="1" Padding="4,2"
-                             HorizontalContentAlignment="Center"
-                             VerticalContentAlignment="Center"
-                             TextChanged="ParamBox_TextChanged"/>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
-                    <CheckBox x:Name="KosaCheckBox"
-                              Content="КОСА:"
-                              FontSize="12" VerticalAlignment="Center"
-                              Margin="0,0,5,0"
-                              Checked="KosaCheckBox_Changed"
-                              Unchecked="KosaCheckBox_Changed"/>
-                    <TextBox x:Name="KosaTimerBox"
-                             Width="48" Height="26" FontSize="12"
-                             Text="25" Padding="4,2"
-                             HorizontalContentAlignment="Center"
-                             VerticalContentAlignment="Center"
-                             PreviewTextInput="KosaTimerBox_PreviewTextInput"
-                             TextChanged="KosaTimerBox_TextChanged"/>
-                    <TextBlock Text="сек" FontSize="12"
-                               VerticalAlignment="Center" Margin="4,0,0,0"/>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Margin="0,3,14,3" VerticalAlignment="Center">
-                    <CheckBox x:Name="AutoStartCheckBox"
-                              Content="автоСтарт"
-                              FontSize="12" VerticalAlignment="Center"
-                              Checked="AutoStartCheckBox_Changed"
-                              Unchecked="AutoStartCheckBox_Changed"/>
-                    <TextBlock x:Name="AutoStartInfoText"
-                               Text="" FontSize="11"
-                               Foreground="Gray"
-                               VerticalAlignment="Center"
-                               Margin="8,0,0,0"
-                               MaxWidth="360"
-                               TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
-
-            </WrapPanel>
-        </Border>
-
-        <!-- ═══════════════════════════════════════════════════════════════ -->
-        <!-- ROW 1: левая колонка (кнопки + таблица шагов) + правая         -->
-        <!--        (пакетный режим сверху + три карточки приборов снизу)    -->
-        <!-- ═══════════════════════════════════════════════════════════════ -->
-        <Grid Grid.Row="1" Margin="0,0,0,8">
+        <Grid Grid.Row="0" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -312,11 +222,11 @@
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0"
                             x:Name="StartButton"
-                            Content="СТАРТ (обычный)"
+                            Content="СТАРТ (пакет)"
                             Style="{StaticResource ActionButtonStyle}"
                             Height="36" FontSize="13"
                             Padding="4,4"
-                            Background="#FF5090D0"
+                            Background="#FF2E8B8B"
                             Click="StartButton_Click"/>
                     <Button Grid.Column="1"
                             x:Name="PauseButton"
@@ -378,7 +288,7 @@
                                     </Border>
                                 </Grid>
 
-                                <Grid x:Name="StepsHeaderLong" Margin="0,0,0,4"
+                                <Grid x:Name="StepsHeaderLong" Margin="0,0,0,2"
                                       Visibility="Collapsed">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32"/>
@@ -432,11 +342,11 @@
 
                     <TextBlock x:Name="StepCounterText"
                                Text="Шаг: 0/0"
-                               FontSize="13"
+                               FontSize="14"
                                Margin="8,5,0,0"/>
                 </StackPanel>
 
-                <!-- Максимум/Минимум -->
+                <!-- Максимум/Минимум (для «Жамкать» в пакете) -->
                 <StackPanel x:Name="PumpPanel"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Top"
@@ -485,7 +395,8 @@
                                     <ColumnDefinition Width="62"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MaxArrow" Text="  " FontSize="15"
+                                    <TextBlock x:Name="MaxArrow" Text="  "
+                                               Style="{StaticResource TableCellTextStyle}"
                                                Foreground="Black" HorizontalAlignment="Left"/>
                                 </Border>
                                 <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
@@ -516,7 +427,8 @@
                                     <ColumnDefinition Width="62"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MinArrow" Text="  " FontSize="15"
+                                    <TextBlock x:Name="MinArrow" Text="  "
+                                               Style="{StaticResource TableCellTextStyle}"
                                                Foreground="Black" HorizontalAlignment="Left"/>
                                 </Border>
                                 <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
@@ -543,12 +455,12 @@
 
                     <TextBlock x:Name="CyclesText"
                                Text="Цикл: 0/0"
-                               FontSize="13"
+                               FontSize="14"
                                Margin="8,5,0,0"/>
                 </StackPanel>
             </StackPanel>
 
-            <!-- ─────────────── КОЛОНКА 1: пакет + три карточки ─────────────── -->
+            <!-- ─────────────── КОЛОНКА 1: пакет + карточки приборов ─────────────── -->
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -576,11 +488,53 @@
                                        Margin="8,0,0,0"/>
                         </StackPanel>
 
+                        <!-- ─── Шапка пакета: общие настройки для всех заданий ─── -->
+                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,14,0" VerticalAlignment="Center">
+                                <TextBlock Text="Диапазон:" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox x:Name="BatchTargetPressureCombo"
+                                          Width="140" Height="22" FontSize="11"
+                                          Padding="3,1" VerticalContentAlignment="Center"
+                                          SelectionChanged="BatchTargetPressureCombo_SelectionChanged"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,14,0" VerticalAlignment="Center">
+                                <TextBlock Text="Таймеры:" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox x:Name="BatchTimerSetCombo"
+                                          Width="120" Height="22" FontSize="11"
+                                          Padding="3,1" VerticalContentAlignment="Center"
+                                          SelectionChanged="BatchTimerSetCombo_SelectionChanged"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,14,0" VerticalAlignment="Center">
+                                <CheckBox x:Name="BatchKosaCheckBox"
+                                          Content="КОСА:"
+                                          FontSize="11" VerticalAlignment="Center"
+                                          Margin="0,0,4,0"
+                                          Checked="BatchKosaCheckBox_Changed"
+                                          Unchecked="BatchKosaCheckBox_Changed"/>
+                                <TextBox x:Name="BatchKosaTimerBox"
+                                         Width="42" Height="22" FontSize="11"
+                                         Text="25" Padding="3,1"
+                                         HorizontalContentAlignment="Center"
+                                         VerticalContentAlignment="Center"
+                                         PreviewTextInput="BatchKosaTimerBox_PreviewTextInput"
+                                         TextChanged="BatchKosaTimerBox_TextChanged"/>
+                                <TextBlock Text="сек" FontSize="11"
+                                           VerticalAlignment="Center" Margin="3,0,0,0"/>
+                            </StackPanel>
+
+                        </WrapPanel>
+
                         <Border x:Name="BatchPanel"
                                 BorderBrush="#FFDDDDDD" BorderThickness="1"
                                 CornerRadius="4"
                                 Padding="6"
-                                Background="White">
+                                Background="White"
+                                MinHeight="80">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -590,7 +544,8 @@
 
                                 <ScrollViewer Grid.Row="0"
                                               MaxHeight="200"
-                                              VerticalScrollBarVisibility="Auto">
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
                                     <ItemsControl x:Name="BatchList">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
@@ -607,27 +562,16 @@
                                                     </Grid.Style>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <!-- 0: чекбокс -->
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <!-- 1: индекс -->
                                                         <ColumnDefinition Width="50"/>
-                                                        <!-- 2: уставка -->
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <!-- 3: °C -->
                                                         <ColumnDefinition Width="50"/>
-                                                        <!-- 4: минуты -->
                                                         <ColumnDefinition Width="34"/>
-                                                        <!-- 5: мин -->
                                                         <ColumnDefinition Width="110"/>
-                                                        <!-- 6: режим -->
                                                         <ColumnDefinition Width="50"/>
-                                                        <!-- 7: циклы -->
                                                         <ColumnDefinition Width="40"/>
-                                                        <!-- 8: цикл -->
+                                                        <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <!-- 9: статус -->
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <!-- 10: крестик -->
                                                     </Grid.ColumnDefinitions>
 
                                                     <CheckBox Grid.Column="0"
@@ -665,7 +609,7 @@
                                                              HorizontalContentAlignment="Center"
                                                              VerticalContentAlignment="Center"
                                                              IsEnabled="{Binding IsEditable}"
-                                                             ToolTip="Время стабилизации, мин"/>
+                                                             ToolTip="Время стабилизации, мин (0 = без выдержки, но с проверкой допуска)"/>
 
                                                     <TextBlock Grid.Column="5"
                                                                Text="мин"
@@ -673,42 +617,32 @@
                                                                Foreground="#FF505050"
                                                                VerticalAlignment="Center"
                                                                Margin="3,0,5,0"/>
+
                                                     <ComboBox Grid.Column="6"
-                                                                SelectedIndex="{Binding ModeIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                FontSize="11"
-                                                                Height="20"
-                                                                Padding="2,0"
-                                                                VerticalContentAlignment="Center"
-                                                                Margin="0,0,5,0"
-                                                                IsEnabled="{Binding IsEditable}"
-                                                                ToolTip="Режим для этой температуры">
+                                                              SelectedIndex="{Binding ModeIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              FontSize="11"
+                                                              Height="20"
+                                                              Padding="2,0"
+                                                              VerticalContentAlignment="Center"
+                                                              Margin="0,0,5,0"
+                                                              IsEnabled="{Binding IsEditable}"
+                                                              ToolTip="Режим для этой температуры">
                                                         <ComboBoxItem Content="Градуировка"/>
                                                         <ComboBoxItem Content="Жамкать"/>
                                                     </ComboBox>
 
-                                                    <!-- Поле «Стартовый шаг» — видно только для Градуировки -->
+                                                    <!-- Поле «Шаг» — видно для Градуировки -->
                                                     <TextBox Grid.Column="7"
-                                                                Text="{Binding StartStepText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                FontSize="12"
-                                                                Padding="3,1"
-                                                                HorizontalContentAlignment="Center"
-                                                                VerticalContentAlignment="Center"
-                                                                IsEnabled="{Binding IsEditable}"
-                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"
-                                                                ToolTip="Стартовый шаг градуировки"/>
+                                                             Text="{Binding StartStepText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             FontSize="12"
+                                                             Padding="3,1"
+                                                             HorizontalContentAlignment="Center"
+                                                             VerticalContentAlignment="Center"
+                                                             IsEnabled="{Binding IsEditable}"
+                                                             Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"
+                                                             ToolTip="Стартовый шаг градуировки"/>
 
-                                                    <!-- Поле «Циклов» — видно только для Жамкать -->
-                                                    <TextBox Grid.Column="7"
-                                                                 Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                 FontSize="12"
-                                                                 Padding="3,1"
-                                                                 HorizontalContentAlignment="Center"
-                                                                 VerticalContentAlignment="Center"
-                                                                 IsEnabled="{Binding IsEditable}"
-                                                                 Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
-                                                                 ToolTip="Количество циклов накачки/сброса"/>
-
-                                                    <!-- Подпись «шаг» — только для Градуировки -->
+                                                    <!-- Подпись «шаг» -->
                                                     <TextBlock Grid.Column="8"
                                                                Text="шаг"
                                                                FontSize="10"
@@ -717,7 +651,18 @@
                                                                Margin="3,0,5,0"
                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
 
-                                                    <!-- Подпись «цикл» — только для Жамкать -->
+                                                    <!-- Поле «Цикл» — видно для Жамкать -->
+                                                    <TextBox Grid.Column="7"
+                                                             Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             FontSize="12"
+                                                             Padding="3,1"
+                                                             HorizontalContentAlignment="Center"
+                                                             VerticalContentAlignment="Center"
+                                                             IsEnabled="{Binding IsEditable}"
+                                                             Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
+                                                             ToolTip="Количество циклов накачки/сброса"/>
+
+                                                    <!-- Подпись «цикл» -->
                                                     <TextBlock Grid.Column="8"
                                                                Text="цикл"
                                                                FontSize="10"
@@ -1216,9 +1161,9 @@
         </Grid>
 
         <!-- ═══════════════════════════════════════════════════════════════ -->
-        <!-- ROW 2: Путь сохранения + кнопки данных                         -->
+        <!-- ROW 1: Путь сохранения + кнопки данных                         -->
         <!-- ═══════════════════════════════════════════════════════════════ -->
-        <Grid Grid.Row="2" Margin="0,0,0,8">
+        <Grid Grid.Row="1" Margin="0,0,0,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -1271,9 +1216,9 @@
         </Grid>
 
         <!-- ═══════════════════════════════════════════════════════════════ -->
-        <!-- ROW 3: Клиенты                                                 -->
+        <!-- ROW 2: Клиенты                                                 -->
         <!-- ═══════════════════════════════════════════════════════════════ -->
-        <Grid Grid.Row="3" Margin="0,0,0,8">
+        <Grid Grid.Row="2" Margin="0,0,0,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -1364,9 +1309,9 @@
         </Grid>
 
         <!-- ═══════════════════════════════════════════════════════════════ -->
-        <!-- ROW 4: Статус + версия                                         -->
+        <!-- ROW 3: Статус + версия                                         -->
         <!-- ═══════════════════════════════════════════════════════════════ -->
-        <Grid Grid.Row="4" Margin="0,6,0,0">
+        <Grid Grid.Row="3" Margin="0,6,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>

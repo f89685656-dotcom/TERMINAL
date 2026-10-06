@@ -14,12 +14,11 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Media; 
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace TERMINAL
 {
-
     public class ConnectedClient : INotifyPropertyChanged
     {
         private bool _isSelected = true;
@@ -73,7 +72,6 @@ namespace TERMINAL
         public DateTime? DisconnectedAt { get; set; } = null;
         public DateTime LastActivityAt { get; set; } = DateTime.Now;
 
-        // ── Данные от клиента-датчика (ПДА/ПТК) ──
         private readonly HashSet<string> _capabilities = new HashSet<string>();
         public HashSet<string> Capabilities => _capabilities;
 
@@ -89,7 +87,7 @@ namespace TERMINAL
         }
 
         public bool IsSensorClient =>
-    HasCapability("ATM") || HasCapability("FURNACE_TEMP");
+            HasCapability("ATM") || HasCapability("FURNACE_TEMP");
 
         public string RoleLabel
         {
@@ -129,7 +127,6 @@ namespace TERMINAL
 
         public string DisplayText => $"SID: {Sid}";
 
-        // ── Ручное/клиентское имя ──
         private string _customName = "";
         public string CustomName
         {
@@ -141,7 +138,6 @@ namespace TERMINAL
                 OnPropertyChanged(nameof(CustomName));
             }
         }
-
 
         public void SetStatusReady()
         {
@@ -328,30 +324,17 @@ namespace TERMINAL
 
     public class TemperatureJob : INotifyPropertyChanged
     {
-        private string _setPointText = "";
+        private string _setPointText = "25";
         private string _stabilizationMinutesText = "120";
         private string _statusText = "ожидает";
         private Brush _statusColor = Brushes.Gray;
         private bool _isEnabled = true;
         private bool _isEditable = true;
         private bool _isCalibrationMode = true;
-
-        // ── Количество циклов для «Жамкать» ──
         private string _cyclesText = "10";
-
-        public string IndexText { get; set; } = "";
-
-        // ── Стартовый шаг для «Градуировка» ──
         private string _startStepText = "1";
 
-        public string StartStepText
-        {
-            get => _startStepText;
-            set { _startStepText = value; OnPropertyChanged(nameof(StartStepText)); }
-        }
-
-        // ── Числовое значение (вычисляется при валидации) ──
-        public int StartStep { get; set; } = 1;
+        public string IndexText { get; set; } = "";
 
         public string SetPointText
         {
@@ -365,11 +348,16 @@ namespace TERMINAL
             set { _stabilizationMinutesText = value; OnPropertyChanged(nameof(StabilizationMinutesText)); }
         }
 
-        // ── НОВОЕ: текстовое поле «Циклов» (для UI) ──
         public string CyclesText
         {
             get => _cyclesText;
             set { _cyclesText = value; OnPropertyChanged(nameof(CyclesText)); }
+        }
+
+        public string StartStepText
+        {
+            get => _startStepText;
+            set { _startStepText = value; OnPropertyChanged(nameof(StartStepText)); }
         }
 
         public string StatusText
@@ -409,9 +397,6 @@ namespace TERMINAL
             }
         }
 
-        /// <summary>
-        /// 0 — Градуировка, 1 — Жамкать. Привязан к ComboBox.SelectedIndex.
-        /// </summary>
         public int ModeIndex
         {
             get => _isCalibrationMode ? 0 : 1;
@@ -428,22 +413,12 @@ namespace TERMINAL
             }
         }
 
-        /// <summary>
-        /// Текст для отображения/логов. Оставлен для удобства, в XAML не используется.
-        /// </summary>
-        public string ModeLabel
-        {
-            get => _isCalibrationMode ? "Градуировка" : "Жамкать";
-        }
-
-        // ── Числовые значения, вычисленные из текстовых полей ──
+        public string ModeLabel => _isCalibrationMode ? "Градуировка" : "Жамкать";
 
         public float SetPoint { get; set; }
-
         public int StabilizationMinutes { get; set; } = 120;
-
-        // ── НОВОЕ: количество циклов (для «Жамкать») ──
         public int Cycles { get; set; } = 10;
+        public int StartStep { get; set; } = 1;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged(string name) =>
@@ -466,9 +441,8 @@ namespace TERMINAL
                               System.Globalization.CultureInfo culture)
         {
             bool b = value is bool v && v;
-            return b
-                ? System.Windows.Visibility.Collapsed
-                : System.Windows.Visibility.Visible;
+            return b ? System.Windows.Visibility.Collapsed
+                     : System.Windows.Visibility.Visible;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter,
@@ -477,7 +451,6 @@ namespace TERMINAL
             throw new NotImplementedException();
         }
     }
-
 
     public partial class MainWindow : Window
     {
@@ -517,13 +490,11 @@ namespace TERMINAL
         private const string FurnaceIp = "192.168.0.167";
         private const int FurnacePort = 502;
         private const ushort FurnaceSetPointRegister = 201;
-        private const ushort FurnaceSetPointReadRegister = 202;
         private const ushort FurnaceCurrentTempRegister = 205;
         private const ushort FurnaceModeRegister = 200;
         private const ushort FurnaceModeManual = 2;
         private const ushort FurnaceModeIdle = 1;
 
-        // СКТБ ЭлПа (платина) — USB HID
         private const int PlatinaVid = 0xFFFF;
         private const int PlatinaPid = 0x0009;
         private const string PlatinaRequest = "pass2 meas2? 2\n\0";
@@ -532,7 +503,6 @@ namespace TERMINAL
         private DateTime _platinaLastSuccess = DateTime.MinValue;
         private int _platinaFailCount = 0;
 
-        // ── ПДА/ПТК (от клиентов KalibratorGUI с CAPS) ──
         private double _pdaLastValue = double.NaN;
         private DateTime _pdaLastSuccess = DateTime.MinValue;
         private string _pdaSourceSid = "";
@@ -546,10 +516,8 @@ namespace TERMINAL
         private const double SensorStaleSeconds = 5.0;
         private const double SktbAllDeadSeconds = 5.0;
 
-        // Порт broadcast-сервера (задаётся при старте: 9990 — рабочая, 9999 — тестовая)
         private int BroadcastPort = 9990;
 
-        // Таймер стабилизации температуры печи
         private DateTime _stabilizationTimerStart = DateTime.MinValue;
         private bool _stabilizationTimerActive = false;
         private const double FurnaceStabilizationTolerance = 0.1;
@@ -577,34 +545,20 @@ namespace TERMINAL
 
         private ObservableCollection<StepItem> _stepItems = new();
 
-        private string _savedStartStep = "1";
-        private string _savedCycleCount = "10";
-
-        private bool _isCalibrationMode = true;
-
         private bool _uiLoaded = false;
 
-        private bool _kosaEnabled = false;
-        private int _kosaTimerSeconds = 25;
-
-        // автоСтарт
-        private bool _autoStartEnabled = false;
-        private bool _autoStartTriggered = false;
-        private const int AutoStartCalibrationMinutes = 120;
-        private const int AutoStartPumpMinutes = 30;
+        // ── Общие настройки пакета ──
+        private bool _batchKosaEnabled = false;
+        private int _batchKosaTimerSeconds = 25;
 
         private string _currentPressureUnitsLabel = "";
         private double? _lastKnownPressure = null;
 
-        // Пакетный режим по температурам (только для «Градуировка»)
         private readonly ObservableCollection<TemperatureJob> _batchJobs = new();
         private bool _batchRunning = false;
         private bool _batchStopRequested = false;
         private TaskCompletionSource<bool>? _batchRunDoneSignal;
 
-        // Цвета кнопки СТАРТ
-        private static readonly Brush StartButtonNormalBrush =
-            new SolidColorBrush(Color.FromRgb(0x50, 0x90, 0xD0));
         private static readonly Brush StartButtonBatchBrush =
             new SolidColorBrush(Color.FromRgb(0x2E, 0x8B, 0x8B));
 
@@ -633,9 +587,8 @@ namespace TERMINAL
         {
             InitializeComponent();
 
-            // Замораживаем кисти, чтобы можно было использовать из любого потока
-            if (StartButtonNormalBrush is SolidColorBrush sb1 && sb1.CanFreeze) sb1.Freeze();
-            if (StartButtonBatchBrush is SolidColorBrush sb2 && sb2.CanFreeze) sb2.Freeze();
+            if (StartButtonBatchBrush is SolidColorBrush sb2 && sb2.CanFreeze)
+                sb2.Freeze();
 
             _uiLoaded = false;
 
@@ -650,23 +603,20 @@ namespace TERMINAL
             ApplyLoadedSettingsToUi();
 
             if (BatchList != null)
-                BatchList.ItemsSource = _batchJobs;   // ← привязка ЗДЕСЬ
+                BatchList.ItemsSource = _batchJobs;
 
             if (ClientsList != null)
-                ClientsList.ItemsSource = _connectedClients;   // ← ДОБАВЛЕНО
+                ClientsList.ItemsSource = _connectedClients;
 
             RenumberBatchJobs();
+            UpdateStartButtonMode();
         }
 
-        /// <summary>
-        /// Ставит окно в правую половину рабочего стола (учитывает панель задач).
-        /// </summary>
         private void PositionWindowRightHalf()
         {
             try
             {
                 var work = SystemParameters.WorkArea;
-
                 double halfWidth = work.Width / 2.0;
 
                 this.WindowStartupLocation = WindowStartupLocation.Manual;
@@ -675,16 +625,9 @@ namespace TERMINAL
                 this.Left = work.Left + work.Width - halfWidth;
                 this.Top = work.Top;
             }
-            catch
-            {
-                // ignore
-            }
+            catch { }
         }
 
-        /// <summary>
-        /// Пробует применить сохранённую позицию из настроек.
-        /// Если её нет, или она вне текущего рабочего стола — ставит окно в правую половину.
-        /// </summary>
         private void ApplyWindowPositionOrFallback()
         {
             try
@@ -720,18 +663,11 @@ namespace TERMINAL
                     }
                 }
             }
-            catch
-            {
-                // ignore
-            }
+            catch { }
 
             PositionWindowRightHalf();
         }
 
-        /// <summary>
-        /// Сохраняет текущую позицию/размер окна в _loadedSettings
-        /// (реальная запись в файл — в SaveSettings()).
-        /// </summary>
         private void SaveWindowPositionToSettings()
         {
             try
@@ -756,38 +692,38 @@ namespace TERMINAL
 
         private void LoadTargetPressures()
         {
-            TargetPressureCombo.Items.Add("100 кгс/см²");
-            TargetPressureCombo.Items.Add("200 кгс/см²");
-            TargetPressureCombo.Items.Add("250 кгс/см²");
-            TargetPressureCombo.Items.Add("300 кгс/см²");
-            TargetPressureCombo.Items.Add("350 кгс/см²");
-            TargetPressureCombo.Items.Add("350 кгс/см² (БИДТ)");
-            TargetPressureCombo.Items.Add("400 кгс/см²");
-            TargetPressureCombo.Items.Add("450 кгс/см²");
-            TargetPressureCombo.Items.Add("500 кгс/см²");
-            TargetPressureCombo.Items.Add("600 кгс/см²");
-            TargetPressureCombo.Items.Add("600 кгс/см² (13 точек)");
-            TargetPressureCombo.Items.Add("25 МПа");
-            TargetPressureCombo.Items.Add("60 МПа");
-            TargetPressureCombo.Items.Add("75 МПа");
-            TargetPressureCombo.Items.Add("80 МПа");
-            TargetPressureCombo.Items.Add("100 МПа");
-            TargetPressureCombo.Items.Add("110 МПа");
-            TargetPressureCombo.Items.Add("130 МПа");
-            TargetPressureCombo.Items.Add("138 МПа (БУРСЕРВИС)");
-            TargetPressureCombo.Items.Add("140 МПа");
-            TargetPressureCombo.Items.Add("160 МПа (БУРСЕРВИС)");
-            TargetPressureCombo.Items.Add("160 МПа (Schlumberger)");
-            TargetPressureCombo.Items.Add("ТЕСТ");
-            TargetPressureCombo.SelectedIndex = 0;
+            BatchTargetPressureCombo.Items.Add("100 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("200 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("250 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("300 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("350 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("350 кгс/см² (БИДТ)");
+            BatchTargetPressureCombo.Items.Add("400 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("450 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("500 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("600 кгс/см²");
+            BatchTargetPressureCombo.Items.Add("600 кгс/см² (13 точек)");
+            BatchTargetPressureCombo.Items.Add("25 МПа");
+            BatchTargetPressureCombo.Items.Add("60 МПа");
+            BatchTargetPressureCombo.Items.Add("75 МПа");
+            BatchTargetPressureCombo.Items.Add("80 МПа");
+            BatchTargetPressureCombo.Items.Add("100 МПа");
+            BatchTargetPressureCombo.Items.Add("110 МПа");
+            BatchTargetPressureCombo.Items.Add("130 МПа");
+            BatchTargetPressureCombo.Items.Add("138 МПа (БУРСЕРВИС)");
+            BatchTargetPressureCombo.Items.Add("140 МПа");
+            BatchTargetPressureCombo.Items.Add("160 МПа (БУРСЕРВИС)");
+            BatchTargetPressureCombo.Items.Add("160 МПа (Schlumberger)");
+            BatchTargetPressureCombo.Items.Add("ТЕСТ");
+            BatchTargetPressureCombo.SelectedIndex = 0;
         }
 
         private void LoadTimerSets()
         {
-            TimerSetCombo.Items.Add("Короткие таймеры");
-            TimerSetCombo.Items.Add("Длинные таймеры");
-            TimerSetCombo.Items.Add("ТЕСТ");
-            TimerSetCombo.SelectedIndex = 0;
+            BatchTimerSetCombo.Items.Add("Короткие таймеры");
+            BatchTimerSetCombo.Items.Add("Длинные таймеры");
+            BatchTimerSetCombo.Items.Add("ТЕСТ");
+            BatchTimerSetCombo.SelectedIndex = 0;
         }
 
         private readonly Dictionary<string, double[]> _stepsByTarget = new()
@@ -821,15 +757,11 @@ namespace TERMINAL
 
         private class Settings
         {
-            public int TargetPressureIndex { get; set; } = 0;
-            public int TimerSetIndex { get; set; } = 0;
             public string SavePath { get; set; } = "";
-            public int ModeIndex { get; set; } = 0;
-            public string StartStep { get; set; } = "1";
-            public string CycleCount { get; set; } = "10";
-            public bool KosaEnabled { get; set; } = false;
-            public int KosaTimerSeconds { get; set; } = 25;
-            public bool AutoStartEnabled { get; set; } = false;
+            public bool BatchKosaEnabled { get; set; } = false;
+            public int BatchKosaTimerSeconds { get; set; } = 25;
+            public int BatchTargetPressureIndex { get; set; } = 0;
+            public int BatchTimerSetIndex { get; set; } = 0;
             public List<BatchJobDto> BatchJobs { get; set; } = new();
             public double WindowLeft { get; set; } = double.NaN;
             public double WindowTop { get; set; } = double.NaN;
@@ -867,14 +799,9 @@ namespace TERMINAL
                     _loadedSettings.SavePath = Path.Combine(docs, "TERMINAL");
                 }
 
-                _savedStartStep = string.IsNullOrWhiteSpace(_loadedSettings.StartStep)
-                    ? "1" : _loadedSettings.StartStep;
-                _savedCycleCount = string.IsNullOrWhiteSpace(_loadedSettings.CycleCount)
-                    ? "10" : _loadedSettings.CycleCount;
-                _kosaEnabled = _loadedSettings.KosaEnabled;
-                _kosaTimerSeconds = _loadedSettings.KosaTimerSeconds > 0
-                    ? _loadedSettings.KosaTimerSeconds : 25;
-                _autoStartEnabled = _loadedSettings.AutoStartEnabled;
+                _batchKosaEnabled = _loadedSettings.BatchKosaEnabled;
+                _batchKosaTimerSeconds = _loadedSettings.BatchKosaTimerSeconds > 0
+                    ? _loadedSettings.BatchKosaTimerSeconds : 25;
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
                 {
@@ -896,11 +823,8 @@ namespace TERMINAL
             catch
             {
                 _loadedSettings = new Settings();
-                _savedStartStep = "1";
-                _savedCycleCount = "10";
-                _kosaEnabled = false;
-                _kosaTimerSeconds = 25;
-                _autoStartEnabled = false;
+                _batchKosaEnabled = false;
+                _batchKosaTimerSeconds = 25;
 
                 string docs = Environment.GetFolderPath(
                     Environment.SpecialFolder.MyDocuments);
@@ -912,57 +836,44 @@ namespace TERMINAL
         {
             if (_loadedSettings == null) return;
 
-            if (_loadedSettings.TargetPressureIndex >= 0 &&
-                _loadedSettings.TargetPressureIndex < TargetPressureCombo.Items.Count)
-            {
-                TargetPressureCombo.SelectedIndex = _loadedSettings.TargetPressureIndex;
-            }
+            if (_loadedSettings.BatchTargetPressureIndex >= 0 &&
+                _loadedSettings.BatchTargetPressureIndex < BatchTargetPressureCombo.Items.Count)
+                BatchTargetPressureCombo.SelectedIndex = _loadedSettings.BatchTargetPressureIndex;
             else
-            {
-                TargetPressureCombo.SelectedIndex = 0;
-            }
+                BatchTargetPressureCombo.SelectedIndex = 0;
 
-            if (_loadedSettings.TimerSetIndex >= 0 &&
-                _loadedSettings.TimerSetIndex < TimerSetCombo.Items.Count)
-            {
-                TimerSetCombo.SelectedIndex = _loadedSettings.TimerSetIndex;
-            }
+            if (_loadedSettings.BatchTimerSetIndex >= 0 &&
+                _loadedSettings.BatchTimerSetIndex < BatchTimerSetCombo.Items.Count)
+                BatchTimerSetCombo.SelectedIndex = _loadedSettings.BatchTimerSetIndex;
             else
-            {
-                TimerSetCombo.SelectedIndex = 0;
-            }
+                BatchTimerSetCombo.SelectedIndex = 0;
 
             if (!string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
                 SavePathBox.Text = _loadedSettings.SavePath;
 
-            if (_loadedSettings.ModeIndex >= 0 &&
-                _loadedSettings.ModeIndex < ModeCombo.Items.Count)
+            if (BatchKosaCheckBox != null)
+                BatchKosaCheckBox.IsChecked = _batchKosaEnabled;
+            if (BatchKosaTimerBox != null)
+                BatchKosaTimerBox.Text = _batchKosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
+
+            if (BatchList != null)
+                BatchList.ItemsSource = _batchJobs;
+
+            if (ClientsList != null)
+                ClientsList.ItemsSource = _connectedClients;
+
+            RenumberBatchJobs();
+
+            if (BatchTargetPressureCombo.SelectedItem != null)
             {
-                ModeCombo.SelectedIndex = _loadedSettings.ModeIndex;
-            }
-            else
-            {
-                ModeCombo.SelectedIndex = 0;
-            }
-
-            if (KosaCheckBox != null)
-                KosaCheckBox.IsChecked = _kosaEnabled;
-            if (KosaTimerBox != null)
-                KosaTimerBox.Text = _kosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
-
-            if (AutoStartCheckBox != null)
-                AutoStartCheckBox.IsChecked = _autoStartEnabled;
-
-            UpdateModeUi();
-
-            if (TargetPressureCombo.SelectedItem != null)
-            {
-                _selectedTargetPressure = TargetPressureCombo.SelectedItem.ToString();
+                _selectedTargetPressure = BatchTargetPressureCombo.SelectedItem.ToString();
                 _currentStepIndex = 0;
                 _completedSteps = 0;
                 ShowSteps();
                 UpdateMaxMinFromRange();
             }
+
+            UpdateStartButtonMode();
         }
 
         private void SaveSettings()
@@ -971,24 +882,19 @@ namespace TERMINAL
             {
                 if (!_uiLoaded) return;
                 if (SavePathBox == null) return;
-                if (TargetPressureCombo == null) return;
-                if (TimerSetCombo == null) return;
-                if (ModeCombo == null) return;
+                if (BatchTargetPressureCombo == null) return;
+                if (BatchTimerSetCombo == null) return;
 
                 if (!Directory.Exists(SettingsDir))
                     Directory.CreateDirectory(SettingsDir);
 
                 var s = new Settings
                 {
-                    TargetPressureIndex = TargetPressureCombo.SelectedIndex,
-                    TimerSetIndex = TimerSetCombo.SelectedIndex,
+                    BatchTargetPressureIndex = BatchTargetPressureCombo.SelectedIndex,
+                    BatchTimerSetIndex = BatchTimerSetCombo.SelectedIndex,
                     SavePath = SavePathBox.Text,
-                    ModeIndex = ModeCombo.SelectedIndex,
-                    StartStep = _savedStartStep,
-                    CycleCount = _savedCycleCount,
-                    KosaEnabled = _kosaEnabled,
-                    KosaTimerSeconds = _kosaTimerSeconds,
-                    AutoStartEnabled = _autoStartEnabled,
+                    BatchKosaEnabled = _batchKosaEnabled,
+                    BatchKosaTimerSeconds = _batchKosaTimerSeconds,
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
                         SetPoint = j.SetPointText,
@@ -1012,206 +918,44 @@ namespace TERMINAL
             catch { }
         }
 
-        // ─────────────────────────── РЕЖИМ РАБОТЫ ───────────────────────────
+        // ─────────────────────────── KOSA ───────────────────────────
 
-        private void ModeCombo_SelectionChanged(object sender,
-            System.Windows.Controls.SelectionChangedEventArgs e)
+        private void BatchKosaCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             if (!_uiLoaded) return;
-            if (ModeCombo == null) return;
-
-            SaveCurrentParamValue();
-
-            _isCalibrationMode = ModeCombo.SelectedIndex == 0;
-
-            UpdateModeUi();
-            SaveSettings();
-        }
-
-        private void SaveCurrentParamValue()
-        {
-            if (ParamBox == null) return;
-
-            string val = ParamBox.Text?.Trim() ?? "";
-            if (_isCalibrationMode) _savedStartStep = val;
-            else _savedCycleCount = val;
-        }
-
-        private void UpdateModeUi()
-        {
-            if (ParamLabel == null || ParamBox == null) return;
-
-            if (_isCalibrationMode)
-            {
-                ParamLabel.Text = "Начать с шага:";
-                ParamBox.Text = string.IsNullOrWhiteSpace(_savedStartStep)
-                    ? "1" : _savedStartStep;
-            }
-            else
-            {
-                ParamLabel.Text = "Циклов:";
-                ParamBox.Text = string.IsNullOrWhiteSpace(_savedCycleCount)
-                    ? "10" : _savedCycleCount;
-            }
-
-            if (TimerSetPanel != null)
-                TimerSetPanel.Visibility = Visibility.Visible;
-
-            if (CalibrationPanel != null && PumpPanel != null)
-            {
-                if (_isCalibrationMode)
-                {
-                    CalibrationPanel.Visibility = Visibility.Visible;
-                    PumpPanel.Visibility = Visibility.Collapsed;
-                }
-                else
-                {
-                    CalibrationPanel.Visibility = Visibility.Collapsed;
-                    PumpPanel.Visibility = Visibility.Visible;
-                }
-            }
-
-            UpdateStartButtonMode();
-
-            UpdateCyclesLabel();
-            UpdateAutoStartInfo();
-        }
-
-        /// <summary>
-        /// Обновляет текст и цвет кнопки СТАРТ в зависимости от того,
-        /// запустится ли обычная градуировка или пакетный режим.
-        /// </summary>
-        private void UpdateStartButtonMode()
-        {
-            if (StartButton == null) return;
-
-            int activeJobs = _batchJobs.Count(j => j.IsEnabled);
-            bool isBatch = _isCalibrationMode && activeJobs > 0;
-
-            if (isBatch)
-            {
-                StartButton.Content = "СТАРТ (пакет)";
-                StartButton.Background = StartButtonBatchBrush;
-            }
-            else
-            {
-                StartButton.Content = "СТАРТ (обычный)";
-                StartButton.Background = StartButtonNormalBrush;
-            }
-            int pumpCount = _batchJobs.Count(j => j.IsEnabled && !j.IsCalibrationMode);
-            if (isBatch && pumpCount > 0)
-                StartButton.Content = "СТАРТ (пакет: смешанный)";
-        }
-
-        private void ParamBox_TextChanged(object sender,
-            System.Windows.Controls.TextChangedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            if (ParamBox == null) return;
-
-            string val = ParamBox.Text?.Trim() ?? "";
-
-            if (_isCalibrationMode) _savedStartStep = val;
-            else _savedCycleCount = val;
-
-            if (!_isCalibrationMode)
-                UpdateCyclesLabel();
-
-            SaveSettings();
-        }
-
-        private void UpdateCyclesLabel()
-        {
-            if (CyclesText == null) return;
-
-            int total = 0;
-            if (ParamBox != null &&
-                int.TryParse(ParamBox.Text?.Trim(), out int c) && c > 0)
-            {
-                total = c;
-            }
-
-            CyclesText.Text = $"Цикл: 0/{total}";
-        }
-
-        // ─────────────────────────── KOSA UI ───────────────────────────
-
-        private void KosaCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            _kosaEnabled = KosaCheckBox.IsChecked == true;
+            _batchKosaEnabled = BatchKosaCheckBox.IsChecked == true;
 
             foreach (var item in _stepItems)
             {
                 if (item.KosaCounterText == "0/3" || item.KosaCounterText == "0/1")
-                {
-                    item.KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
-                }
+                    item.KosaCounterText = _batchKosaEnabled ? "0/3" : "0/1";
             }
 
             SaveSettings();
         }
 
-        private void KosaTimerBox_PreviewTextInput(object sender,
+        private void BatchKosaTimerBox_PreviewTextInput(object sender,
             System.Windows.Input.TextCompositionEventArgs e)
         {
             e.Handled = !e.Text.All(char.IsDigit);
         }
 
-        private void KosaTimerBox_TextChanged(object sender,
+        private void BatchKosaTimerBox_TextChanged(object sender,
             System.Windows.Controls.TextChangedEventArgs e)
         {
             if (!_uiLoaded) return;
-            if (KosaTimerBox == null) return;
+            if (BatchKosaTimerBox == null) return;
 
-            string val = KosaTimerBox.Text?.Trim() ?? "";
+            string val = BatchKosaTimerBox.Text?.Trim() ?? "";
             if (int.TryParse(val, out int v) && v > 0)
             {
-                _kosaTimerSeconds = v;
+                _batchKosaTimerSeconds = v;
                 SaveSettings();
             }
         }
 
-        // ─────────────────────────── АВТОСТАРТ ───────────────────────────
-
-        private void AutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            _autoStartEnabled = AutoStartCheckBox.IsChecked == true;
-            _autoStartTriggered = false;
-            UpdateAutoStartInfo();
-            SaveSettings();
-        }
-
-        private void UpdateAutoStartInfo()
-        {
-            if (AutoStartInfoText == null) return;
-
-            if (!_autoStartEnabled)
-            {
-                AutoStartInfoText.Text = "";
-                return;
-            }
-
-            if (_autoStartTriggered)
-            {
-                AutoStartInfoText.Text =
-                    "автоСтарт уже сработал/заблокирован. " +
-                    "Смените уставку или сбросьте таймер стабилизации для повтора.";
-                return;
-            }
-
-            int minutes = _isCalibrationMode
-                ? AutoStartCalibrationMinutes
-                : AutoStartPumpMinutes;
-
-            AutoStartInfoText.Text =
-                $"Запуск «{(_isCalibrationMode ? "Градуировка" : "Жамкать")}» " +
-                $"после {minutes} мин стабилизации";
-        }
-
         // ═══════════════════════════════════════════════════════════════════
-        // ПАКЕТНЫЙ РЕЖИМ ПО ТЕМПЕРАТУРАМ (только «Градуировка»)
+        // ПАКЕТНЫЙ РЕЖИМ
         // ═══════════════════════════════════════════════════════════════════
 
         private void AddBatchJob_Click(object sender, RoutedEventArgs e)
@@ -1266,10 +1010,10 @@ namespace TERMINAL
             for (int i = 0; i < _batchJobs.Count; i++)
             {
                 _batchJobs[i].IndexText = (i + 1) + ".";
+
                 _batchJobs[i].PropertyChanged -= BatchJob_PropertyChanged;
                 _batchJobs[i].PropertyChanged += BatchJob_PropertyChanged;
             }
-            // ItemsSource перепривязывать не нужно — привязка сделана в конструкторе
         }
 
         private void BatchJob_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1285,6 +1029,26 @@ namespace TERMINAL
             SaveSettings();
         }
 
+        private void UpdateStartButtonMode()
+        {
+            if (StartButton == null) return;
+
+            int activeJobs = _batchJobs.Count(j => j.IsEnabled);
+
+            if (activeJobs > 0)
+            {
+                StartButton.Content = "СТАРТ (пакет)";
+                StartButton.Background = StartButtonBatchBrush;
+                StartButton.IsEnabled = true;
+            }
+            else
+            {
+                StartButton.Content = "СТАРТ (нет заданий)";
+                StartButton.Background = StartButtonBatchBrush;
+                StartButton.IsEnabled = true;
+            }
+        }
+
         private async Task RunBatchAsync()
         {
             if (_batchJobs.Count == 0)
@@ -1293,7 +1057,6 @@ namespace TERMINAL
                 return;
             }
 
-            // сбрасываем флаги прерывания в самом начале
             _batchStopRequested = false;
             _stopRequested = false;
 
@@ -1303,7 +1066,6 @@ namespace TERMINAL
                 var job = _batchJobs[i];
                 if (!job.IsEnabled) continue;
 
-                // 1) уставка
                 if (!float.TryParse(job.SetPointText?.Replace(',', '.'),
                     NumberStyles.Float, CultureInfo.InvariantCulture, out float sp))
                 {
@@ -1311,7 +1073,6 @@ namespace TERMINAL
                     return;
                 }
 
-                // 2) время стабилизации — 0 допустим (означает «без выдержки, но проверить допуск»)
                 if (!int.TryParse(job.StabilizationMinutesText?.Trim(), out int mins) || mins < 0)
                 {
                     MessageBox.Show($"Задание #{i + 1}: некорректное время стабилизации " +
@@ -1322,7 +1083,6 @@ namespace TERMINAL
                 job.SetPoint = sp;
                 job.StabilizationMinutes = mins;
 
-                // 3) для «Жамкать» — количество циклов, для «Градуировка» — стартовый шаг
                 if (!job.IsCalibrationMode)
                 {
                     if (!int.TryParse(job.CyclesText?.Trim(), out int cycles) || cycles <= 0)
@@ -1332,7 +1092,7 @@ namespace TERMINAL
                         return;
                     }
                     job.Cycles = cycles;
-                    job.StartStep = 1;   // для «Жамкать» стартовый шаг не используется
+                    job.StartStep = 1;
                 }
                 else
                 {
@@ -1343,7 +1103,6 @@ namespace TERMINAL
                         return;
                     }
 
-                    // проверим, что шаг не выходит за пределы диапазона
                     int stepsCount = 0;
                     if (_selectedTargetPressure != null &&
                         _stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
@@ -1359,7 +1118,7 @@ namespace TERMINAL
                     }
 
                     job.StartStep = startStep;
-                    job.Cycles = 0;   // для «Градуировка» циклы не используются
+                    job.Cycles = 0;
                 }
             }
 
@@ -1377,6 +1136,10 @@ namespace TERMINAL
             AddBatchJobButton.IsEnabled = false;
             ClearBatchButton.IsEnabled = false;
             BatchList.IsEnabled = false;
+            BatchTargetPressureCombo.IsEnabled = false;
+            BatchTimerSetCombo.IsEnabled = false;
+            BatchKosaCheckBox.IsEnabled = false;
+            BatchKosaTimerBox.IsEnabled = false;
 
             foreach (var job in _batchJobs)
                 job.IsEditable = false;
@@ -1426,10 +1189,8 @@ namespace TERMINAL
                     await RefreshFurnaceSetPointAsync();
 
                     ResetStabilizationTimer();
-                    _autoStartTriggered = true;
-                    UpdateAutoStartInfo();
 
-                    // 2) Стабилизация — своё время для каждого задания
+                    // 2) Стабилизация
                     if (job.StabilizationMinutes > 0)
                     {
                         job.StatusText = $"стабилизация {job.StabilizationMinutes} мин";
@@ -1448,7 +1209,6 @@ namespace TERMINAL
                     }
                     else
                     {
-                        // 0 минут = «без выдержки», но проверяем, что температура в допуске
                         job.StatusText = "проверка допуска";
                         job.StatusColor = Brushes.Orange;
 
@@ -1470,7 +1230,7 @@ namespace TERMINAL
                                   $"стабилизация пропущена");
                     }
 
-                    // 3) Запуск нужного режима и ожидание завершения
+                    // 3) Запуск нужного режима
                     job.StatusText = "Идёт съём данных";
                     job.StatusColor = Brushes.Blue;
 
@@ -1483,11 +1243,13 @@ namespace TERMINAL
 
                     if (job.IsCalibrationMode)
                     {
-                        _ = Dispatcher.InvokeAsync(() => RunCalibrationModeAsync());
+                        int startStep = job.StartStep;
+                        _ = Dispatcher.InvokeAsync(() => RunCalibrationModeAsync(startStep));
                     }
                     else
                     {
-                        _ = Dispatcher.InvokeAsync(() => RunPumpForBatchAsync(job.Cycles));
+                        int cycles = job.Cycles;
+                        _ = Dispatcher.InvokeAsync(() => RunPumpForBatchAsync(cycles));
                     }
 
                     await _batchRunDoneSignal.Task;
@@ -1516,6 +1278,10 @@ namespace TERMINAL
                 StartButton.IsEnabled = true;
                 AddBatchJobButton.IsEnabled = true;
                 ClearBatchButton.IsEnabled = true;
+                BatchTargetPressureCombo.IsEnabled = true;
+                BatchTimerSetCombo.IsEnabled = true;
+                BatchKosaCheckBox.IsEnabled = true;
+                BatchKosaTimerBox.IsEnabled = true;
                 SetExternalButtonsEnabled(true);
                 BatchList.IsEnabled = true;
 
@@ -1528,19 +1294,17 @@ namespace TERMINAL
             }
         }
 
-        /// <summary>
-        /// Запускает «Жамкать» с указанным числом циклов в контексте пакетного режима.
-        /// Не читает ParamBox и не блокирует UI — всё управление снаружи.
-        /// </summary>
         private async Task RunPumpForBatchAsync(int cycles)
         {
-            if (_selectedTargetPressure == null)
+            if (BatchTargetPressureCombo.SelectedItem == null)
             {
                 MessageBox.Show("Не выбран диапазон давлений для «Жамкать»");
                 return;
             }
 
-            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
+            _selectedTargetPressure = BatchTargetPressureCombo.SelectedItem.ToString();
+
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure!, out var steps))
             {
                 MessageBox.Show($"Шаги не заданы для «{_selectedTargetPressure}»");
                 return;
@@ -1555,7 +1319,7 @@ namespace TERMINAL
             }
 
             double maxPressure = steps.Max();
-            string unitsCode = GetUnitsCode(_selectedTargetPressure);
+            string unitsCode = GetUnitsCode(_selectedTargetPressure!);
             string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
             double atmoThreshold = GetAtmosphereThreshold(unitsCode);
 
@@ -1578,16 +1342,16 @@ namespace TERMINAL
             {
                 _isRunning = false;
                 _pauseRequested = false;
+
                 _batchRunDoneSignal?.TrySetResult(true);
             }
         }
 
-
         private async Task<bool> WaitForBatchStabilizationAsync(
-    int requiredMinutes, int jobIndex, int totalJobs)
+            int requiredMinutes, int jobIndex, int totalJobs)
         {
-            var inRangeSince = DateTime.MinValue;     // момент входа в допуск
-            var outOfRangeSince = DateTime.MinValue;  // момент выхода из допуска
+            var inRangeSince = DateTime.MinValue;
+            var outOfRangeSince = DateTime.MinValue;
 
             while (true)
             {
@@ -1618,7 +1382,6 @@ namespace TERMINAL
                 {
                     outOfRangeSince = DateTime.MinValue;
 
-                    // Отсчёт стартует с момента первого входа в допуск
                     if (inRangeSince == DateTime.MinValue)
                         inRangeSince = DateTime.Now;
 
@@ -1642,7 +1405,6 @@ namespace TERMINAL
                     var outOfRange = DateTime.Now - outOfRangeSince;
                     if (outOfRange.TotalSeconds >= StabilizationOutOfRangeGraceSeconds)
                     {
-                        // Температура вне допуска слишком долго — сбрасываем отсчёт стабилизации
                         inRangeSince = DateTime.MinValue;
                         outOfRangeSince = DateTime.MinValue;
                         BatchProgressText.Text =
@@ -1662,11 +1424,6 @@ namespace TERMINAL
             }
         }
 
-        /// <summary>
-        /// Ждёт, пока температура печи войдёт в допуск ±FurnaceStabilizationTolerance
-        /// относительно уставки, и сразу возвращает true — без выдержки.
-        /// Используется в пакетном режиме, когда StabilizationMinutes = 0.
-        /// </summary>
         private async Task<bool> WaitForBatchTemperatureInToleranceAsync(
             int jobIndex, int totalJobs)
         {
@@ -1717,37 +1474,35 @@ namespace TERMINAL
             }
         }
 
-
         // ─────────────────────────── COMBOBOX ───────────────────────────
 
-        private void TargetPressureCombo_SelectionChanged(object sender,
+        private void BatchTargetPressureCombo_SelectionChanged(object sender,
             System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (!_uiLoaded) return;
-            if (TargetPressureCombo == null) return;
+            if (BatchTargetPressureCombo == null) return;
             if (StepsList == null) return;
 
-            if (TargetPressureCombo.SelectedItem == null)
+            if (BatchTargetPressureCombo.SelectedItem == null)
             {
                 _selectedTargetPressure = null;
                 StepsList.ItemsSource = null;
                 return;
             }
 
-            _selectedTargetPressure = TargetPressureCombo.SelectedItem.ToString();
+            _selectedTargetPressure = BatchTargetPressureCombo.SelectedItem.ToString();
             _currentStepIndex = 0;
             _completedSteps = 0;
             ShowSteps();
             UpdateMaxMinFromRange();
-            UpdateModeUi();
             SaveSettings();
         }
 
-        private void TimerSetCombo_SelectionChanged(object sender,
+        private void BatchTimerSetCombo_SelectionChanged(object sender,
             System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (!_uiLoaded) return;
-            if (TimerSetCombo == null) return;
+            if (BatchTimerSetCombo == null) return;
 
             RecalcStepTimers();
             SaveSettings();
@@ -1763,7 +1518,7 @@ namespace TERMINAL
                 return;
             }
 
-            bool longTimers = TimerSetCombo.SelectedIndex == 1;
+            bool longTimers = BatchTimerSetCombo.SelectedIndex == 1;
             string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
 
             _stepItems = new ObservableCollection<StepItem>();
@@ -1779,7 +1534,7 @@ namespace TERMINAL
                     TimerText = dur.ToString(),
                     ArrowText = "  ",
                     StatusMark = "☐",
-                    KosaCounterText = _kosaEnabled ? "0/3" : "0/1",
+                    KosaCounterText = _batchKosaEnabled ? "0/3" : "0/1",
                     PlannedDuration = dur
                 });
             }
@@ -1802,7 +1557,7 @@ namespace TERMINAL
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var values)) return;
             if (_stepItems.Count != values.Length) return;
 
-            bool longTimers = TimerSetCombo.SelectedIndex == 1;
+            bool longTimers = BatchTimerSetCombo.SelectedIndex == 1;
             for (int i = 0; i < _stepItems.Count; i++)
             {
                 int dur = GetStepDuration(values, i, longTimers);
@@ -1837,7 +1592,7 @@ namespace TERMINAL
                 item.StatusMark = "☐";
                 item.ArrowText = "  ";
                 item.TimerText = item.PlannedDuration.ToString();
-                item.KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
+                item.KosaCounterText = _batchKosaEnabled ? "0/3" : "0/1";
             }
 
             UpdateStepCounter();
@@ -1849,7 +1604,7 @@ namespace TERMINAL
             {
                 item.TimerText = item.PlannedDuration.ToString();
                 item.ArrowText = "  ";
-                item.KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
+                item.KosaCounterText = _batchKosaEnabled ? "0/3" : "0/1";
             }
             UpdateStepCounter();
         }
@@ -1891,7 +1646,7 @@ namespace TERMINAL
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // ДИАЛОГ ВЫБОРА РЕЖИМА ЗАПУСКА (порт broadcast-сервера)
+        // ДИАЛОГ ВЫБОРА РЕЖИМА ЗАПУСКА
         // ═══════════════════════════════════════════════════════════════════
 
         private void AskForStartupMode()
@@ -2058,7 +1813,6 @@ namespace TERMINAL
                     _connectedClients.Remove(c);
             }
 
-            // SetStatusOffline внутри дёргает Dispatcher — вызываем вне lock
             foreach (var c in toMarkOffline)
                 c.SetStatusOffline();
         }
@@ -2142,8 +1896,6 @@ namespace TERMINAL
                 }
                 else
                 {
-                    // Добавление в ObservableCollection — строго в UI-потоке,
-                    // иначе WPF + lock дают дедлок
                     Dispatcher.Invoke(() =>
                     {
                         lock (_clientsLock)
@@ -2153,8 +1905,6 @@ namespace TERMINAL
                         }
                     });
                 }
-
-                // RefreshClientsUi() больше не нужен — ObservableCollection сама обновит UI
 
                 var buffer = new StringBuilder();
                 byte[] buf = new byte[512];
@@ -2199,7 +1949,6 @@ namespace TERMINAL
                     lock (_clientsLock)
                         sameClient = connectedClient.TcpClient == client;
 
-                    // Вне lock — SetStatusOffline дёргает Dispatcher
                     if (sameClient)
                         connectedClient.SetStatusOffline();
                 }
@@ -2210,7 +1959,6 @@ namespace TERMINAL
         {
             client.LastActivityAt = DateTime.Now;
 
-            // ── HELLO <sid> [CAPS a,b,c] ──
             if (line.StartsWith("HELLO "))
             {
                 client.SetStatusAlive();
@@ -2224,7 +1972,7 @@ namespace TERMINAL
                         .Select(x => x.Trim())
                         .Where(x => x.Length > 0);
 
-                    client.SetCapabilities(caps);   // внутри уведомит RoleLabel
+                    client.SetCapabilities(caps);
 
                     if (client.IsSensorClient)
                         client.IsSelected = false;
@@ -2288,8 +2036,6 @@ namespace TERMINAL
             }
         }
 
-        // ─────────────────────────── УДАЛЕНИЕ КЛИЕНТОВ ───────────────────────────
-
         private void RemoveOffline_Click(object sender, RoutedEventArgs e)
         {
             if (_isRunning || _batchRunning) return;
@@ -2303,7 +2049,6 @@ namespace TERMINAL
                     _connectedClients.Remove(c);
                 }
             }
-            // RefreshClientsUi() убран
         }
 
         private void DisconnectClient_Click(object sender, RoutedEventArgs e)
@@ -2316,11 +2061,8 @@ namespace TERMINAL
                     try { client.TcpClient.Close(); } catch { }
                     _connectedClients.Remove(client);
                 }
-                // RefreshClientsUi() убран
             }
         }
-
-        // ─────────────────────────── ОЖИДАНИЕ DONE ───────────────────────────
 
         private async Task<bool> TakePointAndWaitAllAsync()
         {
@@ -2441,7 +2183,7 @@ namespace TERMINAL
 
         private async Task<bool> TakePointForStepAsync(int stepIndex, bool waitForState)
         {
-            if (!_kosaEnabled)
+            if (!_batchKosaEnabled)
             {
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].KosaCounterText = "1/1";
@@ -2458,8 +2200,8 @@ namespace TERMINAL
             {
                 if (_stopRequested) return false;
 
-                SetStatus($"КОСА: пауза перед съёмом {i + 2}/3 ({_kosaTimerSeconds} сек)");
-                await KosaWaitAsync(_kosaTimerSeconds, waitForState, stepIndex);
+                SetStatus($"КОСА: пауза перед съёмом {i + 2}/3 ({_batchKosaTimerSeconds} сек)");
+                await KosaWaitAsync(_batchKosaTimerSeconds, waitForState, stepIndex);
                 if (_stopRequested) return false;
 
                 SetStatus($"КОСА: съём {i + 2}/3");
@@ -2547,7 +2289,7 @@ namespace TERMINAL
             {
                 while (remaining > 0)
                 {
-                    if (!await WaitIfPausedAsync()) { ; return; }
+                    if (!await WaitIfPausedAsync()) return;
                     SetStatus($"КОСА: пауза {remaining} сек");
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
@@ -2563,14 +2305,11 @@ namespace TERMINAL
 
             while (!firstOkReceived)
             {
-
                 await RefreshPressureAndSetPointAsync();
                 string? s = await SendCommandAsync("get_state_in_point;");
 
                 if (s != null && s.Contains("ok;", StringComparison.Ordinal))
-                {
                     firstOkReceived = true;
-                }
                 else
                 {
                     SetStatus("КОСА: ожидание стабилизации давления...");
@@ -2580,7 +2319,6 @@ namespace TERMINAL
 
             while (remaining > 0)
             {
-
                 await RefreshPressureAndSetPointAsync();
                 string? s = await SendCommandAsync("get_state_in_point;");
 
@@ -2601,7 +2339,6 @@ namespace TERMINAL
                     while (true)
                     {
                         await SafeDelayAsync(1000);
-
                         string? s2 = await SendCommandAsync("get_state_in_point;");
                         if (s2 != null && s2.Contains("ok;", StringComparison.Ordinal))
                             break;
@@ -2613,7 +2350,6 @@ namespace TERMINAL
 
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
-
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -2624,75 +2360,19 @@ namespace TERMINAL
         {
             if (_isRunning) { MessageBox.Show("Программа уже запущена."); return; }
             if (_batchRunning) { MessageBox.Show("Пакетный режим уже идёт."); return; }
-            if (_selectedTargetPressure == null) { MessageBox.Show("Выберите диапазон давлений."); return; }
-
-            // сбрасываем флаги прерывания от предыдущей остановки
-            _stopRequested = false;
-            _batchStopRequested = false;
-            _pauseRequested = false;
-            _autoStartTriggered = false;
 
             int activeJobs = _batchJobs.Count(j => j.IsEnabled);
-
-            // Пакетный режим — только для «Градуировка» и только если есть активные задания
-            if (_isCalibrationMode && activeJobs > 0)
+            if (activeJobs == 0)
             {
-                await RunBatchAsync();
+                MessageBox.Show("Нет активных заданий в пакетном режиме. Добавьте хотя бы одно.");
                 return;
             }
 
-            // Обычная градуировка / жамка
-            if (_autoStartEnabled && IsStabilizationThresholdReached())
-            {
-                _autoStartTriggered = true;
-                SetStatusWarning(
-                    "автоСтарт: ручной пуск — автозапуск отменён для текущего цикла стабилизации");
-                UpdateAutoStartInfo();
-            }
+            _stopRequested = false;
+            _batchStopRequested = false;
+            _pauseRequested = false;
 
-            if (_isCalibrationMode && _kosaEnabled)
-            {
-                if (!int.TryParse(KosaTimerBox.Text?.Trim(), out int kt) || kt <= 0)
-                {
-                    MessageBox.Show("Введите положительное число секунд для КОСА.");
-                    return;
-                }
-                _kosaTimerSeconds = kt;
-            }
-
-            if (_isCalibrationMode)
-                await RunCalibrationModeAsync();
-            else
-                await RunPumpModeAsync();
-        }
-
-        private bool IsStabilizationThresholdReached()
-        {
-            if (!_stabilizationTimerActive) return false;
-
-            string spTxt = FurnaceSetPointBox?.Text?.Replace(',', '.') ?? "";
-            if (!double.TryParse(spTxt, NumberStyles.Float,
-                CultureInfo.InvariantCulture, out double sp))
-                return false;
-
-            string tTxt = FurnaceCurrentTempText?.Text ?? "";
-            int idx = tTxt.IndexOf(" °C", StringComparison.Ordinal);
-            if (idx >= 0) tTxt = tTxt.Substring(0, idx);
-            tTxt = tTxt.Trim().TrimStart('+').Replace(',', '.');
-
-            if (!double.TryParse(tTxt, NumberStyles.Float,
-                CultureInfo.InvariantCulture, out double ct))
-                return false;
-
-            if (Math.Abs(ct - sp) > FurnaceStabilizationTolerance) return false;
-
-            var elapsed = DateTime.Now - _stabilizationTimerStart;
-
-            int requiredMinutes = _isCalibrationMode
-                ? AutoStartCalibrationMinutes
-                : AutoStartPumpMinutes;
-
-            return elapsed.TotalMinutes >= requiredMinutes;
+            await RunBatchAsync();
         }
 
         private void PauseButton_Click(object sender, RoutedEventArgs e)
@@ -2722,9 +2402,11 @@ namespace TERMINAL
             return !_stopRequested;
         }
 
-        // ─────────────────────────── ГРАДУИРОВКА ───────────────────────────
+        // ═══════════════════════════════════════════════════════════════════
+        // ГРАДУИРОВКА
+        // ═══════════════════════════════════════════════════════════════════
 
-        private async Task RunCalibrationModeAsync()
+        private async Task RunCalibrationModeAsync(int startStep)
         {
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure!, out var steps))
             { MessageBox.Show($"Для «{_selectedTargetPressure}» не заданы шаги."); return; }
@@ -2733,15 +2415,14 @@ namespace TERMINAL
             lock (_streamLock) { noConnection = (_stream == null); }
             if (noConnection) { MessageBox.Show("Нет соединения с прибором."); return; }
 
-            if (!int.TryParse(ParamBox.Text?.Trim(), out int startStep) ||
-                startStep < 1 || startStep > steps.Length)
+            if (startStep < 1 || startStep > steps.Length)
             {
-                MessageBox.Show($"Некорректный номер шага: {ParamBox.Text}\n" +
+                MessageBox.Show($"Некорректный номер шага: {startStep}\n" +
                     $"Допустимо от 1 до {steps.Length}.");
                 return;
             }
 
-            bool longTimers = TimerSetCombo.SelectedIndex == 1;
+            bool longTimers = BatchTimerSetCombo.SelectedIndex == 1;
 
             _isRunning = true;
             _stopRequested = false;
@@ -2750,16 +2431,9 @@ namespace TERMINAL
             _completedSteps = startStep - 1;
             _currentStepIndex = startStep - 1;
 
-            TargetPressureCombo.IsEnabled = false;
-            TimerSetCombo.IsEnabled = false;
-            ModeCombo.IsEnabled = false;
             PauseButton.IsEnabled = true;
             PauseButton.Content = "ПАУЗА";
             PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
-
-            StartButton.IsEnabled = false;
-
-            SetExternalButtonsEnabled(false);
 
             for (int i = 0; i < _stepItems.Count; i++)
             {
@@ -2768,14 +2442,14 @@ namespace TERMINAL
                     _stepItems[i].StatusMark = "☑";
                     _stepItems[i].TimerText = "0";
                     _stepItems[i].ArrowText = "  ";
-                    _stepItems[i].KosaCounterText = _kosaEnabled ? "3/3" : "1/1";
+                    _stepItems[i].KosaCounterText = _batchKosaEnabled ? "3/3" : "1/1";
                 }
                 else
                 {
                     _stepItems[i].StatusMark = "☐";
                     _stepItems[i].TimerText = _stepItems[i].PlannedDuration.ToString();
                     _stepItems[i].ArrowText = "  ";
-                    _stepItems[i].KosaCounterText = _kosaEnabled ? "0/3" : "0/1";
+                    _stepItems[i].KosaCounterText = _batchKosaEnabled ? "0/3" : "0/1";
                 }
             }
             UpdateStepCounter();
@@ -2799,16 +2473,9 @@ namespace TERMINAL
                 _isRunning = false;
                 _pauseRequested = false;
 
-                StartButton.IsEnabled = true;
                 PauseButton.IsEnabled = false;
                 PauseButton.Content = "ПАУЗА";
                 PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
-                TargetPressureCombo.IsEnabled = true;
-                TimerSetCombo.IsEnabled = true;
-                ModeCombo.IsEnabled = true;
-
-                var elapsed = DateTime.Now - _totalTimerStart;
-                await ShowCompletionMessageAsync(elapsed);
 
                 if (programCompleted && !_stopRequested)
                 {
@@ -2835,8 +2502,6 @@ namespace TERMINAL
 
                 ResetStepsToInitial();
 
-                SetExternalButtonsEnabled(true);
-
                 List<ConnectedClient> clientsSnapshot;
                 lock (_clientsLock)
                     clientsSnapshot = _connectedClients.ToList();
@@ -2844,8 +2509,6 @@ namespace TERMINAL
                 {
                     if (!c.IsOffline) c.SetStatusReady();
                 }
-
-                UpdateAutoStartInfo();
 
                 _batchRunDoneSignal?.TrySetResult(true);
             }
@@ -2881,13 +2544,12 @@ namespace TERMINAL
                 double v = steps[i];
                 int duration = GetStepDuration(steps, i, longTimers);
 
-                // ─── ТЕСТ-режим: не регулируем давление, просто ждём атмосферу и запускаем таймер ───
                 if (IsTestPressureRange())
                 {
                     SetStatus($"Шаг {human}: ТЕСТ — проверка атмосферного давления");
 
                     await RefreshPressureAndSetPointAsync();
-                    double? currentP = _lastKnownPressure; // см. правку 3
+                    double? currentP = _lastKnownPressure;
                     if (!currentP.HasValue || Math.Abs(currentP.Value) >= atmoThreshold)
                     {
                         SetStatus($"Шаг {human}: ТЕСТ — сброс до атмосферы (vent)");
@@ -3003,85 +2665,9 @@ namespace TERMINAL
             SetStatus("Программа завершена");
         }
 
-        // ─────────────────────────── ЖАМКАТЬ ───────────────────────────
-
-        private async Task RunPumpModeAsync()
-        {
-            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure!, out var steps))
-            { MessageBox.Show($"Шаги не заданы."); return; }
-
-            bool noConnection;
-            lock (_streamLock) { noConnection = (_stream == null); }
-            if (noConnection) { MessageBox.Show("Нет соединения."); return; }
-
-            if (!int.TryParse(ParamBox.Text?.Trim(), out int cycles) || cycles <= 0)
-            { MessageBox.Show("Введите корректное количество циклов."); return; }
-
-            double maxPressure = steps.Max();
-            string unitsCode = GetUnitsCode(_selectedTargetPressure!);
-            string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
-            double atmoThreshold = GetAtmosphereThreshold(unitsCode);
-
-            _isRunning = true;
-            _stopRequested = false;
-            _pauseRequested = false;
-            _batchStopRequested = false;
-
-            TargetPressureCombo.IsEnabled = false;
-            TimerSetCombo.IsEnabled = false;
-            ModeCombo.IsEnabled = false;
-            PauseButton.IsEnabled = true;
-            PauseButton.Content = "ПАУЗА";
-            PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
-
-            StartButton.IsEnabled = false;
-
-            SetExternalButtonsEnabled(false);
-
-            _totalTimerStart = DateTime.Now;
-
-            try { await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold); }
-            catch (Exception ex)
-            {
-                StatusText.Text = $"Ошибка: {ex.Message}";
-                StatusText.Foreground = Brushes.Red;
-            }
-            finally
-            {
-                _isRunning = false;
-                _pauseRequested = false;
-
-                StartButton.IsEnabled = true;
-                PauseButton.IsEnabled = false;
-                PauseButton.Content = "ПАУЗА";
-                PauseButton.Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50));
-                TargetPressureCombo.IsEnabled = true;
-                TimerSetCombo.IsEnabled = true;
-                ModeCombo.IsEnabled = true;
-
-                var elapsed = DateTime.Now - _totalTimerStart;
-                await ShowCompletionMessageAsync(elapsed);
-
-                MaxArrow.Text = "  ";
-                MinArrow.Text = "  ";
-                MaxTimerText.Text = "";
-                MinTimerText.Text = "";
-
-                SetExternalButtonsEnabled(true);
-
-                List<ConnectedClient> clientsSnapshot;
-                lock (_clientsLock)
-                    clientsSnapshot = _connectedClients.ToList();
-                foreach (var c in clientsSnapshot)
-                {
-                    if (!c.IsOffline) c.SetStatusReady();
-                }
-
-                UpdateAutoStartInfo();
-
-                _batchRunDoneSignal?.TrySetResult(true);
-            }
-        }
+        // ═══════════════════════════════════════════════════════════════════
+        // ЖАМКАТЬ
+        // ═══════════════════════════════════════════════════════════════════
 
         private async Task RunPumpSequenceAsync(double maxPressure, int totalCycles,
             string unitsCode, string unitsLabel, double atmoThreshold)
@@ -3163,7 +2749,6 @@ namespace TERMINAL
             {
                 while (remaining > 0)
                 {
-
                     remaining--;
                     MinTimerText.Text = remaining.ToString();
 
@@ -3177,7 +2762,6 @@ namespace TERMINAL
 
             while (remaining > 0)
             {
-
                 await RefreshPressureAndSetPointAsync();
 
                 string? stateResponse = await SendCommandAsync("get_state_in_point;");
@@ -3220,7 +2804,6 @@ namespace TERMINAL
 
             while (remaining > 0)
             {
-
                 await RefreshPressureAndSetPointAsync();
 
                 string? unitsResponse = await SendCommandAsync("get_units;");
@@ -3269,43 +2852,6 @@ namespace TERMINAL
 
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
-        }
-
-        // ─────────────────────────── ПОКАЗ СООБЩЕНИЯ ───────────────────────────
-
-        private async Task ShowCompletionMessageAsync(TimeSpan elapsed)
-        {
-            string timeStr = $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
-
-            float? temp = await TryReadCurrentTemperatureAsync();
-
-            string msg;
-            if (temp.HasValue)
-            {
-                double rounded = Math.Round((double)temp.Value, 2);
-                string sign = rounded >= 0 ? "+" : "";
-                msg = $"Съём данных на температуре {sign}{rounded.ToString("0.##", CultureInfo.InvariantCulture)} °C длился {timeStr}";
-            }
-            else
-            {
-                msg = $"Съём данных: ошибка чтения температурной уставки из камеры, время работы {timeStr}";
-            }
-
-            SetStatusSuccess(msg);
-
-            _statusResetTimer?.Stop();
-            _statusResetTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(10)
-            };
-            _statusResetTimer.Tick += (s, e) =>
-            {
-                _statusResetTimer.Stop();
-                SetStatusSuccess($"Подключено к {DeviceIp}:{DevicePort}");
-            };
-            _statusResetTimer.Start();
-
-            await Task.CompletedTask;
         }
 
         // ─────────────────────────── ПЕЧЬ ST-351 ───────────────────────────
@@ -3525,14 +3071,11 @@ namespace TERMINAL
             }
         }
 
-        // ─────────────────────────── ТАЙМЕР СТАБИЛИЗАЦИИ ───────────────────────────
-
         private void FurnaceSetPointBox_TextChanged(object sender,
             System.Windows.Controls.TextChangedEventArgs e)
         {
             if (!_uiLoaded) return;
             if (FurnaceSetPointBox == null) return;
-
             if (!FurnaceSetPointBox.IsKeyboardFocused) return;
 
             string txt = FurnaceSetPointBox.Text?.Replace(',', '.') ?? "";
@@ -3543,8 +3086,6 @@ namespace TERMINAL
                     Math.Abs(sp - _lastFurnaceSetPoint) > 0.0001)
                 {
                     ResetStabilizationTimer();
-                    _autoStartTriggered = false;
-                    UpdateAutoStartInfo();
                 }
                 _lastFurnaceSetPoint = sp;
             }
@@ -3562,9 +3103,7 @@ namespace TERMINAL
         private void ResetStabilizationTimer_Click(object sender, RoutedEventArgs e)
         {
             ResetStabilizationTimer();
-            _autoStartTriggered = false;
-            UpdateAutoStartInfo();
-            SetStatus("Таймер стабилизации сброшен, автоСтарт разрешён", false);
+            SetStatus("Таймер стабилизации сброшен", false);
         }
 
         private void UpdateStabilizationTimer()
@@ -3574,9 +3113,7 @@ namespace TERMINAL
             string spTxt = FurnaceSetPointBox?.Text?.Replace(',', '.') ?? "";
             if (!double.TryParse(spTxt, NumberStyles.Float,
                 CultureInfo.InvariantCulture, out double setPoint))
-            {
                 return;
-            }
 
             string tTxt = FurnaceCurrentTempText?.Text ?? "";
             int idx = tTxt.IndexOf(" °C", StringComparison.Ordinal);
@@ -3585,9 +3122,7 @@ namespace TERMINAL
 
             if (!double.TryParse(tTxt, NumberStyles.Float,
                 CultureInfo.InvariantCulture, out double currentTemp))
-            {
                 return;
-            }
 
             bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
 
@@ -3603,15 +3138,11 @@ namespace TERMINAL
                 var elapsed = DateTime.Now - _stabilizationTimerStart;
                 StabilizationTimerText.Text =
                     $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
-
-                TryTriggerAutoStart(elapsed);
             }
             else
             {
                 if (_stabilizationOutOfRangeSince == DateTime.MinValue)
-                {
                     _stabilizationOutOfRangeSince = DateTime.Now;
-                }
 
                 var outOfRange = DateTime.Now - _stabilizationOutOfRangeSince;
 
@@ -3627,55 +3158,9 @@ namespace TERMINAL
                         var elapsed = DateTime.Now - _stabilizationTimerStart;
                         StabilizationTimerText.Text =
                             $"{(int)elapsed.TotalHours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
-
-                        TryTriggerAutoStart(elapsed);
                     }
                 }
             }
-        }
-
-        private void TryTriggerAutoStart(TimeSpan elapsed)
-        {
-            if (!_autoStartEnabled) return;
-            if (_autoStartTriggered) return;
-
-            int activeJobs = _batchJobs.Count(j => j.IsEnabled);
-            if (_isCalibrationMode && activeJobs > 0) return; // в пакетном режиме автоСтарт не работает
-
-            int requiredMinutes = _isCalibrationMode
-                ? AutoStartCalibrationMinutes
-                : AutoStartPumpMinutes;
-
-            if (elapsed.TotalMinutes < requiredMinutes) return;
-
-            if (_isRunning)
-            {
-                _autoStartTriggered = true;
-                UpdateAutoStartInfo();
-                return;
-            }
-
-            _autoStartTriggered = true;
-            UpdateAutoStartInfo();
-
-            Dispatcher.InvokeAsync(async () =>
-            {
-                SetStatusSuccess(
-                    $"автоСтарт: стабилизация {requiredMinutes} мин — " +
-                    $"запуск «{(_isCalibrationMode ? "Градуировка" : "Жамкать")}»");
-
-                try
-                {
-                    if (_isCalibrationMode)
-                        await RunCalibrationModeAsync();
-                    else
-                        await RunPumpModeAsync();
-                }
-                catch (Exception ex)
-                {
-                    SetStatusError($"автоСтарт ошибка: {ex.Message}");
-                }
-            });
         }
 
         private async Task<bool> WaitForSavedFileAsync(string? path, int timeoutMs)
@@ -3691,7 +3176,7 @@ namespace TERMINAL
             return File.Exists(path);
         }
 
-        // ─────────────────────────── СКТБ ЭлПа (ПЛАТИНА) ───────────────────────────
+        // ─────────────────────────── ПЛАТИНА ───────────────────────────
 
         private async Task<double?> TryReadPlatinaAsync()
         {
@@ -3751,9 +3236,7 @@ namespace TERMINAL
 
                                         if (double.TryParse(first, NumberStyles.Float,
                                             CultureInfo.InvariantCulture, out double val))
-                                        {
                                             return (double?)val;
-                                        }
                                         return (double?)null;
                                     }
                                 }
@@ -3761,10 +3244,7 @@ namespace TERMINAL
 
                             return (double?)null;
                         }
-                        catch
-                        {
-                            // ignore, try next device
-                        }
+                        catch { }
                         finally
                         {
                             try { stream?.Close(); } catch { }
@@ -3815,7 +3295,6 @@ namespace TERMINAL
             }
             UpdateSktbPanelVisibility();
         }
-
 
         private void RefreshSensorUiFromClients()
         {
@@ -3921,15 +3400,6 @@ namespace TERMINAL
             UpdateSktbPanelVisibility();
         }
 
-        /// <summary>
-        /// Скрывает карточку СКТБ ЭлПа, если все три источника (Платина, ПДА, ПТК)
-        /// молчат дольше SktbAllDeadSeconds. Как только хотя бы один оживает —
-        /// карточка снова показывается.
-        /// </summary>
-        /// <summary>
-        /// Скрывает каждую строку СКТБ (Платина / ПДА / ПТК) отдельно,
-        /// если соответствующий источник молчит дольше SktbAllDeadSeconds.
-        /// </summary>
         private void UpdateSktbPanelVisibility()
         {
             if (!Dispatcher.CheckAccess())
@@ -3940,77 +3410,34 @@ namespace TERMINAL
 
             var now = DateTime.Now;
 
-            // ── Платина (USB HID) ──
             bool platinaAlive =
                 _platinaLastSuccess != DateTime.MinValue &&
                 (now - _platinaLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
 
             if (PlatinaRowBorder != null)
                 PlatinaRowBorder.Visibility = platinaAlive
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                    ? Visibility.Visible : Visibility.Collapsed;
 
-            // ── ПДА (от клиентов KalibratorGUI) ──
             bool pdaAlive =
                 _pdaLastSuccess != DateTime.MinValue &&
                 (now - _pdaLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
 
             if (PdaRowBorder != null)
                 PdaRowBorder.Visibility = pdaAlive
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                    ? Visibility.Visible : Visibility.Collapsed;
 
-            // ── ПТК (от клиентов KalibratorGUI) ──
             bool ptkAlive =
                 _ptkLastSuccess != DateTime.MinValue &&
                 (now - _ptkLastSuccess).TotalSeconds <= SktbAllDeadSeconds;
 
             if (PtkRowBorder != null)
                 PtkRowBorder.Visibility = ptkAlive
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
-            // ── Общий индикатор СКТБ: зелёный, если жив хотя бы один источник ──
+                    ? Visibility.Visible : Visibility.Collapsed;
+
             bool anyAlive = platinaAlive || pdaAlive || ptkAlive;
 
             if (PlatinaStatusEllipse != null)
                 PlatinaStatusEllipse.Fill = anyAlive ? Brushes.Green : Brushes.Red;
-        }
-
-
-        // ─────────────────────────── СТАТУС АГК ───────────────────────────
-
-        private async Task RefreshAgkStatusAsync()
-        {
-            if ((DateTime.Now - _lastAgkStatusRequest).TotalMilliseconds < AgkStatusRequestIntervalMs)
-                return;
-            _lastAgkStatusRequest = DateTime.Now;
-
-            string? resp = await SendCommandAsync("get_status;");
-            if (resp == null)
-            {
-                _agkStatusFailCount++;
-                if (_agkStatusFailCount >= ConnectionLostThreshold)
-                {
-                    if (AgkStatusTextBox != null)
-                    {
-                        AgkStatusTextBox.Text = "(нет ответа)";
-                        AgkStatusTextBox.Foreground = Brushes.OrangeRed;
-                    }
-                }
-                return;
-            }
-            _agkStatusFailCount = 0;
-
-            string display = resp.Trim();
-            if (string.IsNullOrEmpty(display)) display = "(пусто)";
-
-            if (AgkStatusTextBox != null)
-            {
-                AgkStatusTextBox.Text = display;
-                AgkStatusTextBox.Foreground = (display == "0;" || display == "0")
-                    ? new SolidColorBrush(Color.FromRgb(0x80, 0xFF, 0x80))
-                    : new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x80));
-            }
         }
 
         // ─────────────────────────── ПРОЧЕЕ ───────────────────────────
@@ -4316,8 +3743,6 @@ namespace TERMINAL
             await SaveDataCoreAsync(silent: false);
         }
 
-        // ─────────────────────────── ОЧИСТКА ДАННЫХ ───────────────────────────
-
         private async Task<bool> ClearDataCoreAsync(bool silent = false)
         {
             List<ConnectedClient> selected;
@@ -4407,13 +3832,11 @@ namespace TERMINAL
 
             _stopRequested = true;
             _pauseRequested = false;
-            _autoStartTriggered = false;
 
             ResetStepTimers();
 
             await SendCommandNoWaitAsync("set_mode=stop;");
             SetStatusError("АВАРИЙНАЯ ОСТАНОВКА");
-            UpdateAutoStartInfo();
         }
 
         private async void VentButton_Click(object sender, RoutedEventArgs e)
@@ -4437,10 +3860,8 @@ namespace TERMINAL
 
                 _stopRequested = true;
                 _pauseRequested = false;
-                _autoStartTriggered = false;
 
                 ResetStepTimers();
-                UpdateAutoStartInfo();
             }
             string? resp = await SendCommandAsync("set_mode=vent;");
             SetStatus($"Сброс отправлен: {resp}");
@@ -4508,10 +3929,7 @@ namespace TERMINAL
             NetworkStream? stream;
             lock (_streamLock) stream = _stream;
 
-            if (stream == null)
-            {
-                return null;
-            }
+            if (stream == null) return null;
 
             string? p = await SendCommandAsync("get_press;");
             await Task.Delay(200);
@@ -4522,8 +3940,7 @@ namespace TERMINAL
                 string parsed = ParsePressure(p);
                 string units = _currentPressureUnitsLabel;
                 AgkPressureText.Text = string.IsNullOrEmpty(units)
-                    ? parsed
-                    : $"{parsed} {units}";
+                    ? parsed : $"{parsed} {units}";
 
                 if (double.TryParse(parsed, NumberStyles.Float,
                     CultureInfo.InvariantCulture, out double v))
@@ -4538,8 +3955,7 @@ namespace TERMINAL
                 string parsedSp = ParsePressure(sp);
                 string units = _currentPressureUnitsLabel;
                 AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                    ? parsedSp
-                    : $"{parsedSp} {units}";
+                    ? parsedSp : $"{parsedSp} {units}";
             }
 
             return pressure;
@@ -4619,10 +4035,6 @@ namespace TERMINAL
             return "";
         }
 
-        /// <summary>
-        /// Возвращает true, если выбран диапазон «ТЕСТ» — 
-        /// все точки = 0, регулировка давления не нужна.
-        /// </summary>
         private bool IsTestPressureRange()
         {
             return _selectedTargetPressure == "ТЕСТ";
@@ -4641,8 +4053,7 @@ namespace TERMINAL
 
         private int GetStepDuration(double[] steps, int index, bool longTimers)
         {
-            // Режим «ТЕСТ»: все таймеры по 10 сек
-            if (TimerSetCombo.SelectedIndex == 2)
+            if (BatchTimerSetCombo.SelectedIndex == 2)
                 return 10;
 
             if (index == 0) return 10;
@@ -4708,8 +4119,6 @@ namespace TERMINAL
 
                 RefreshSensorUiFromClients();
                 UpdateSktbPanelVisibility();
-
-                UpdateAutoStartInfo();
                 UpdateStartButtonMode();
             }
             catch (Exception ex)
@@ -4765,8 +4174,6 @@ namespace TERMINAL
         private async void Timer_Tick(object? sender, EventArgs e)
         {
             if (_isRunning) return;
-
-            // Защита от наслаивания: пока предыдущий batch не завершён — новый не запускаем
             if (_agkBatchBusy) return;
 
             NetworkStream? stream;
@@ -4781,7 +4188,6 @@ namespace TERMINAL
                 {
                     if (stream.CanRead && stream.CanWrite)
                     {
-                        // Прибор НЕ поддерживает pipelining — шлём по одной команде с паузой
                         string? unitsResp = await SendCommandAsync("get_units;");
                         await Task.Delay(200);
                         string? pressResp = await SendCommandAsync("get_press;");
@@ -4790,24 +4196,18 @@ namespace TERMINAL
                         await Task.Delay(200);
                         string? statusResp = await SendCommandAsync("get_status;");
 
-                        if (unitsResp != null)
-                        {
-                            UpdateUnits(unitsResp);
-                        }
+                        if (unitsResp != null) UpdateUnits(unitsResp);
 
                         if (pressResp != null)
                         {
                             string parsed = ParsePressure(pressResp);
                             string units = _currentPressureUnitsLabel;
                             AgkPressureText.Text = string.IsNullOrEmpty(units)
-                                ? parsed
-                                : $"{parsed} {units}";
+                                ? parsed : $"{parsed} {units}";
 
                             if (double.TryParse(parsed, NumberStyles.Float,
                                 CultureInfo.InvariantCulture, out double v))
-                            {
                                 _lastKnownPressure = v;
-                            }
                         }
 
                         if (pointResp != null)
@@ -4815,8 +4215,7 @@ namespace TERMINAL
                             string parsedSp = ParsePressure(pointResp);
                             string units = _currentPressureUnitsLabel;
                             AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                                ? parsedSp
-                                : $"{parsedSp} {units}";
+                                ? parsedSp : $"{parsedSp} {units}";
                         }
 
                         if (statusResp != null)
@@ -4834,7 +4233,6 @@ namespace TERMINAL
                             }
                         }
 
-                        // Считаем связь живой, если пришёл units И press
                         if (unitsResp != null && pressResp != null)
                             agkOk = true;
                     }
@@ -4857,7 +4255,6 @@ namespace TERMINAL
             {
                 _agkFailCount = 0;
                 AgkStatusEllipse.Fill = Brushes.Green;
-
             }
             else
             {
@@ -4983,7 +4380,6 @@ namespace TERMINAL
             if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatus(text, running)); return; }
             StatusText.Text = text;
             StatusText.Foreground = running ? Brushes.Green : Brushes.Gray;
-
             AppendLog(text, running ? Brushes.Green : Brushes.Gray);
         }
 
@@ -5008,15 +4404,10 @@ namespace TERMINAL
             AppendLog(text, Brushes.OrangeRed);
         }
 
-
-
         // ═══════════════════════════════════════════════════════════════════
         // ЖУРНАЛ СОБЫТИЙ
         // ═══════════════════════════════════════════════════════════════════
 
-        /// <summary>
-        /// Добавляет запись в журнал. Вызывается из всех SetStatus*-методов.
-        /// </summary>
         private void AppendLog(string message, Brush color)
         {
             if (!Dispatcher.CheckAccess())
@@ -5027,14 +4418,12 @@ namespace TERMINAL
 
             if (string.IsNullOrEmpty(message)) return;
 
-            // Не плодим дубликаты подряд (одинаковые сообщения в пределах 1 сек)
             if (_logEntries.Count > 0)
             {
                 var last = _logEntries[_logEntries.Count - 1];
                 if (last.Message == message
                     && (DateTime.Now - last.Time).TotalSeconds < 1.0)
                 {
-                    // Обновляем только время — не хотим засорять лог
                     last.Time = DateTime.Now;
                     OnPropertyChangedForLogList();
                     return;
@@ -5048,11 +4437,9 @@ namespace TERMINAL
                 Color = color
             });
 
-            // Ограничиваем размер
             while (_logEntries.Count > LogMaxEntries)
                 _logEntries.RemoveAt(0);
 
-            // Автопрокрутка к последней строке, если окно открыто
             if (_logListBox != null && _logListBox.Items.Count > 0)
             {
                 try
@@ -5102,7 +4489,6 @@ namespace TERMINAL
             root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
 
-            // ── Верхняя панель: фильтр + кнопки ──
             var topPanel = new System.Windows.Controls.DockPanel { Margin = new Thickness(0, 0, 0, 8) };
 
             var btnClear = new System.Windows.Controls.Button
@@ -5188,7 +4574,6 @@ namespace TERMINAL
             System.Windows.Controls.Grid.SetRow(topPanel, 0);
             root.Children.Add(topPanel);
 
-            // ── Список записей ──
             _logListBox = new System.Windows.Controls.ListBox
             {
                 FontFamily = new FontFamily("Consolas"),
@@ -5203,7 +4588,6 @@ namespace TERMINAL
             System.Windows.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(
                 _logListBox, System.Windows.Controls.ScrollBarVisibility.Auto);
 
-            // Шаблон строки журнала
             var itemTemplate = new DataTemplate();
             var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
             factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty,
@@ -5223,7 +4607,6 @@ namespace TERMINAL
             System.Windows.Controls.Grid.SetRow(_logListBox, 1);
             root.Children.Add(_logListBox);
 
-            // ── Нижняя панель: счётчик ──
             var bottomPanel = new System.Windows.Controls.DockPanel { Margin = new Thickness(0, 6, 0, 0) };
 
             var counter = new System.Windows.Controls.TextBlock
@@ -5260,8 +4643,6 @@ namespace TERMINAL
 
             System.Windows.Controls.Grid.SetRow(bottomPanel, 2);
             root.Children.Add(bottomPanel);
-
-            // ── Обработчики ──
 
             btnCopyAll.Click += (s, ev) =>
             {
@@ -5317,11 +4698,7 @@ namespace TERMINAL
 
             closeBtn.Click += (s, ev) => _logWindow.Close();
 
-            // ── Фильтрация ──
-            _logFilterBox.TextChanged += (s, ev) =>
-            {
-                ApplyLogFilter();
-            };
+            _logFilterBox.TextChanged += (s, ev) => ApplyLogFilter();
 
             _logWindow.Content = root;
             _logWindow.Closed += (s, ev) =>
@@ -5332,15 +4709,9 @@ namespace TERMINAL
             };
 
             _logWindow.Show();
-
-            // Первый прогон фильтра — чтобы сразу применить, если что-то было введено
             ApplyLogFilter();
         }
 
-        /// <summary>
-        /// Применяет фильтр по тексту к содержимому списка.
-        /// Использует CollectionView — не пересоздаёт коллекцию.
-        /// </summary>
         private void ApplyLogFilter()
         {
             if (_logListBox == null) return;
@@ -5367,16 +4738,12 @@ namespace TERMINAL
 
             view.Refresh();
 
-            // Прокрутка к концу
             if (_logListBox.Items.Count > 0)
             {
                 try { _logListBox.ScrollIntoView(_logListBox.Items[_logListBox.Items.Count - 1]); }
                 catch { }
             }
         }
-
-
-
 
         private static string GetAppVersion()
         {
@@ -5394,11 +4761,6 @@ namespace TERMINAL
             ShowChangelogWindow();
         }
 
-        /// <summary>
-        /// Открывает модальное окно с историей изменений.
-        /// Текст changelog зашит прямо здесь — при желании можно вынести
-        /// в отдельный .txt/.md рядом с exe и читать File.ReadAllText.
-        /// </summary>
         private void ShowChangelogWindow()
         {
             var dlg = new Window
@@ -5420,7 +4782,6 @@ namespace TERMINAL
             root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
 
-            // ── Заголовок ──
             var header = new System.Windows.Controls.TextBlock
             {
                 Text = "История изменений",
@@ -5432,7 +4793,6 @@ namespace TERMINAL
             System.Windows.Controls.Grid.SetRow(header, 0);
             root.Children.Add(header);
 
-            // ── Прокручиваемый текст changelog ──
             var scroller = new System.Windows.Controls.ScrollViewer
             {
                 VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
@@ -5460,10 +4820,8 @@ namespace TERMINAL
                 Cursor = System.Windows.Input.Cursors.Arrow
             };
 
-            // Запрещаем выделять текст, чтобы TextBox вёл себя как обычный лейбл
             changelogText.PreviewMouseDown += (s, ev) =>
             {
-                // Разрешаем скролл колёсиком, но не даём ставить каретку/выделять
                 if (ev.ChangedButton == System.Windows.Input.MouseButton.Left)
                     ev.Handled = true;
             };
@@ -5472,7 +4830,6 @@ namespace TERMINAL
             System.Windows.Controls.Grid.SetRow(scroller, 1);
             root.Children.Add(scroller);
 
-            // ── Кнопка «Закрыть» ──
             var closeBtn = new System.Windows.Controls.Button
             {
                 Content = "Закрыть",
@@ -5494,31 +4851,27 @@ namespace TERMINAL
             dlg.ShowDialog();
         }
 
-        /// <summary>
-        /// Возвращает текст changelog. Хранится прямо в коде, чтобы не тащить
-        /// отдельный файл рядом с exe.
-        ///
-        /// Формат — свободный. Самое новое — сверху.
-        /// </summary>
         private static string GetChangelogText()
         {
             return
         @"═══════════════════════════════════════════════════════════════
  T.E.R.M.I.N.A.L. — история изменений
 ═══════════════════════════════════════════════════════════════
-v1.1.01
+v1.0.80
+  • Глобальные настройки (диапазон, таймеры, КОСА) перенесены
+    в шапку пакетного режима и применяются ко всем активным
+    заданиям.
+  • Удалён обычный СТАРТ — кнопка СТАРТ всегда запускает пакет.
+  • Удалён автоСтарт — его роль выполняет задание в пакете с
+    нужным временем стабилизации.
+  • У каждого задания своё время стабилизации (0 = без выдержки,
+    но с проверкой допуска).
+  • У каждого задания свой стартовый шаг (для «Градуировка»).
+
+v1.0.79
   • Добавлен Changelog с описанием изменений в каждой версии программы
   • Добавлен журнал операций, в котором можно посмотреть все логи событий
   • Добавлены подписи SID клиентов через макрос, можно подписать каждый клиент либо вручную, либо через макрос
-  • Перекомпановка внешнего вида программы
-  • Добавлен выбор режима Градуировка/Жамкать прямо в пакетный режим
-  • 
-  • 
-  • 
-  • 
-  • 
-
-
 
 v1.0.78
   • СКТБ ЭлПа: каждая строка (Платина / ПДА / ПТК) скрывается
@@ -5591,7 +4944,6 @@ v1.0.00
 ";
         }
 
-
         private void SetExternalButtonsEnabled(bool enabled)
         {
             if (!Dispatcher.CheckAccess())
@@ -5610,9 +4962,7 @@ v1.0.00
         {
             if (_isRunning || _batchRunning)
             {
-                string mode =
-                    _batchRunning ? "пакетный режим" :
-                    (_isCalibrationMode ? "«Градуировка»" : "«Жамкать»");
+                string mode = _batchRunning ? "пакетный режим" : "«Градуировка»";
 
                 var result = MessageBox.Show(
                     $"Сейчас идёт {mode}.\n\n" +
@@ -5629,7 +4979,6 @@ v1.0.00
                     return;
                 }
 
-                // Пользователь согласился — просим фоновые циклы свернуться
                 _stopRequested = true;
                 _batchStopRequested = true;
                 _pauseRequested = false;
@@ -5637,7 +4986,6 @@ v1.0.00
 
             base.OnClosing(e);
         }
-
 
         protected override void OnClosed(EventArgs e)
         {
@@ -5666,8 +5014,6 @@ v1.0.00
                 lock (_clientsLock)
                 {
                     foreach (var c in _connectedClients) { try { c.TcpClient.Close(); } catch { } }
-                    // _connectedClients.Clear() убран — окно закрывается,
-                    // WPF может бросить исключение при попытке обновить закрытый ItemsControl
                 }
                 try { _broadcastServer?.Stop(); } catch { }
             }
