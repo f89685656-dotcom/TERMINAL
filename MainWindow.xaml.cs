@@ -166,6 +166,8 @@ namespace TERMINAL
             if (ClientsList != null)
                 ClientsList.ItemsSource = _connectedClients;
 
+            UpdateKosaBadge();
+
             RenumberBatchJobs();
             UpdateStartButtonMode();
         }

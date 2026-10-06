@@ -540,6 +540,7 @@ namespace TERMINAL
                     item.KosaCounterText = _batchKosaEnabled ? "0/3" : "0/1";
             }
 
+            UpdateKosaBadge();
             SaveSettings();
         }
 
@@ -557,6 +558,7 @@ namespace TERMINAL
             if (int.TryParse(val, out int v) && v > 0)
             {
                 _batchKosaTimerSeconds = v;
+                UpdateKosaBadge();
                 SaveSettings();
             }
         }
@@ -807,7 +809,21 @@ namespace TERMINAL
             BroadcastPort = isWork ? 9990 : 9999;
         }
 
+        private void UpdateKosaBadge()
+        {
+            if (KosaBadge == null || KosaBadgeText == null) return;
 
+            if (_batchKosaEnabled)
+            {
+                KosaBadge.Visibility = Visibility.Visible;
+                KosaBadgeText.Text = $"КОСА 3× ({_batchKosaTimerSeconds} сек)";
+                KosaBadge.ToolTip = $"КОСА включена: 3 съёма на точку, пауза {_batchKosaTimerSeconds} сек";
+            }
+            else
+            {
+                KosaBadge.Visibility = Visibility.Collapsed;
+            }
+        }
 
     }
 }

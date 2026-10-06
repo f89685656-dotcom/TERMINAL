@@ -244,23 +244,37 @@
 
                 <!-- 2. Пакетный режим -->
                 <Border BorderBrush="LightGray" BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="10,8"
-                        Background="#FFF8F8F8"
-                        Margin="0,0,0,8"
-                        HorizontalAlignment="Stretch">
+                            CornerRadius="6"
+                            Padding="10,8"
+                            Background="#FFF8F8F8"
+                            Margin="0,0,0,8"
+                            HorizontalAlignment="Stretch">
                     <StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Пакетный режим"
-                                       FontSize="13" FontWeight="Bold"
-                                       Foreground="#FF505050"
-                                       VerticalAlignment="Center"/>
+                                   FontSize="13" FontWeight="Bold"
+                                   Foreground="#FF505050"
+                                   VerticalAlignment="Center"/>
+                            <Border x:Name="KosaBadge"
+                                    CornerRadius="3"
+                                    Padding="6,1"
+                                    Margin="8,0,0,0"
+                                    Background="#FFE0A050"
+                                    VerticalAlignment="Center"
+                                    Visibility="Collapsed"
+                                    ToolTip="КОСА включена — 3 съёма на точку">
+                                <TextBlock x:Name="KosaBadgeText"
+                                   Text="КОСА 3×"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="White"/>
+                            </Border>
                             <TextBlock Text=" — если есть активные задания, СТАРТ запустит пакет"
-                                       FontSize="11"
-                                       Foreground="Gray"
-                                       VerticalAlignment="Center"
-                                       Margin="8,0,0,0"/>
+                                   FontSize="11"
+                                   Foreground="Gray"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,0,0"/>
                         </StackPanel>
 
                         <!-- Шапка пакета: общие настройки для всех заданий -->
