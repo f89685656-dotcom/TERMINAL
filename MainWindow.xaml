@@ -661,14 +661,14 @@
                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
 
                                                     <ComboBox Grid.Column="6"
-                                                              SelectedValue="{Binding ModeLabel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                              FontSize="11"
-                                                              Height="22"
-                                                              Padding="2,0"
-                                                              VerticalContentAlignment="Center"
-                                                              Margin="0,0,5,0"
-                                                              IsEnabled="{Binding IsEditable}"
-                                                              ToolTip="Режим для этой температуры">
+                                                                SelectedIndex="{Binding ModeIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                FontSize="11"
+                                                                Height="22"
+                                                                Padding="2,0"
+                                                                VerticalContentAlignment="Center"
+                                                                Margin="0,0,5,0"
+                                                                IsEnabled="{Binding IsEditable}"
+                                                                ToolTip="Режим для этой температуры">
                                                         <ComboBoxItem Content="Градуировка"/>
                                                         <ComboBoxItem Content="Жамкать"/>
                                                     </ComboBox>

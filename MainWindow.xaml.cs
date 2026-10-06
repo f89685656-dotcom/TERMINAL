@@ -393,17 +393,35 @@ namespace TERMINAL
                 _isCalibrationMode = value;
                 OnPropertyChanged(nameof(IsCalibrationMode));
                 OnPropertyChanged(nameof(ModeLabel));
+                OnPropertyChanged(nameof(ModeIndex));
             }
         }
 
+        /// <summary>
+        /// 0 — Градуировка, 1 — Жамкать. Привязан к ComboBox.SelectedIndex.
+        /// </summary>
+        public int ModeIndex
+        {
+            get => _isCalibrationMode ? 0 : 1;
+            set
+            {
+                bool newVal = value == 0;
+                if (_isCalibrationMode != newVal)
+                {
+                    _isCalibrationMode = newVal;
+                    OnPropertyChanged(nameof(IsCalibrationMode));
+                    OnPropertyChanged(nameof(ModeLabel));
+                    OnPropertyChanged(nameof(ModeIndex));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Текст для отображения/логов. Оставлен для удобства, в XAML не используется.
+        /// </summary>
         public string ModeLabel
         {
             get => _isCalibrationMode ? "Градуировка" : "Жамкать";
-            set
-            {
-                bool newVal = value != "Жамкать";
-                IsCalibrationMode = newVal;
-            }
         }
 
         // ── Числовые значения, вычисленные из текстовых полей ──
@@ -1065,6 +1083,9 @@ namespace TERMINAL
                 StartButton.Content = "СТАРТ (обычный)";
                 StartButton.Background = StartButtonNormalBrush;
             }
+            int pumpCount = _batchJobs.Count(j => j.IsEnabled && !j.IsCalibrationMode);
+            if (isBatch && pumpCount > 0)
+                StartButton.Content = "СТАРТ (пакет: смешанный)";
         }
 
         private void ParamBox_TextChanged(object sender,
@@ -1233,9 +1254,6 @@ namespace TERMINAL
                 _batchJobs[i].PropertyChanged -= BatchJob_PropertyChanged;
                 _batchJobs[i].PropertyChanged += BatchJob_PropertyChanged;
             }
-
-            BatchList.ItemsSource = null;
-            BatchList.ItemsSource = _batchJobs;
         }
 
         private void BatchJob_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1495,6 +1513,7 @@ namespace TERMINAL
             {
                 _isRunning = false;
                 _pauseRequested = false;
+                _batchRunDoneSignal?.TrySetResult(true);
             }
         }
 
