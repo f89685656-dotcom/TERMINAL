@@ -112,6 +112,7 @@ namespace TERMINAL
                 _capabilities.Clear();
                 foreach (var c in caps) _capabilities.Add(c);
             }
+            OnPropertyChanged(nameof(RoleLabel));
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -413,7 +414,7 @@ namespace TERMINAL
         private DateTime _totalTimerStart = DateTime.MinValue;
 
         private TcpListener? _broadcastServer;
-        private readonly List<ConnectedClient> _connectedClients = new();
+        private readonly ObservableCollection<ConnectedClient> _connectedClients = new();
         private readonly object _clientsLock = new();
         private readonly CancellationTokenSource _cts = new();
 
@@ -562,6 +563,9 @@ namespace TERMINAL
 
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
+
+            if (ClientsList != null)
+                ClientsList.ItemsSource = _connectedClients;   // ← ДОБАВЛЕНО
 
             RenumberBatchJobs();
         }
@@ -1745,7 +1749,7 @@ namespace TERMINAL
 
         private void RefreshClientsUi()
         {
-            List<ConnectedClient> snapshot;
+            List<ConnectedClient> toMarkOffline = new();
             List<ConnectedClient> toRemove = new();
 
             lock (_clientsLock)
@@ -1756,7 +1760,7 @@ namespace TERMINAL
                     if (!c.IsOffline &&
                         (now - c.LastActivityAt).TotalSeconds >= ClientDeadThresholdSeconds)
                     {
-                        c.SetStatusOffline();
+                        toMarkOffline.Add(c);
                     }
 
                     if (c.DisconnectedAt.HasValue &&
@@ -1765,12 +1769,14 @@ namespace TERMINAL
                         toRemove.Add(c);
                     }
                 }
-                foreach (var c in toRemove) _connectedClients.Remove(c);
-                snapshot = _connectedClients.ToList();
+
+                foreach (var c in toRemove)
+                    _connectedClients.Remove(c);
             }
 
-            ClientsList.ItemsSource = null;
-            ClientsList.ItemsSource = snapshot;
+            // SetStatusOffline внутри дёргает Dispatcher — вызываем вне lock
+            foreach (var c in toMarkOffline)
+                c.SetStatusOffline();
         }
 
         private async Task HandleClientAsync(TcpClient client)
@@ -1833,25 +1839,38 @@ namespace TERMINAL
                     connectedClient.IsSelected = false;
                 connectedClient.SetStatusReady();
 
+                ConnectedClient? existing;
                 lock (_clientsLock)
                 {
-                    var existing = _connectedClients.FirstOrDefault(c => c.Sid == sid);
+                    existing = _connectedClients.FirstOrDefault(c => c.Sid == sid);
                     if (existing != null)
                     {
                         existing.TcpClient = client;
                         existing.ConnectedAt = DateTime.Now;
                         existing.LastActivityAt = DateTime.Now;
-                        existing.SetStatusAlive();
                         connectedClient = existing;
-                    }
-                    else
-                    {
-                        _connectedClients.Add(connectedClient);
                     }
                 }
 
-                if (Dispatcher.CheckAccess()) RefreshClientsUi();
-                else Dispatcher.Invoke(() => RefreshClientsUi());
+                if (existing != null)
+                {
+                    existing.SetStatusAlive();
+                }
+                else
+                {
+                    // Добавление в ObservableCollection — строго в UI-потоке,
+                    // иначе WPF + lock дают дедлок
+                    Dispatcher.Invoke(() =>
+                    {
+                        lock (_clientsLock)
+                        {
+                            if (!_connectedClients.Any(c => c.Sid == sid))
+                                _connectedClients.Add(connectedClient);
+                        }
+                    });
+                }
+
+                // RefreshClientsUi() больше не нужен — ObservableCollection сама обновит UI
 
                 var buffer = new StringBuilder();
                 byte[] buf = new byte[512];
@@ -1896,10 +1915,9 @@ namespace TERMINAL
                     lock (_clientsLock)
                         sameClient = connectedClient.TcpClient == client;
 
-                    if (sameClient) connectedClient.SetStatusOffline();
-
-                    if (Dispatcher.CheckAccess()) RefreshClientsUi();
-                    else Dispatcher.Invoke(() => RefreshClientsUi());
+                    // Вне lock — SetStatusOffline дёргает Dispatcher
+                    if (sameClient)
+                        connectedClient.SetStatusOffline();
                 }
             }
         }
@@ -1922,14 +1940,8 @@ namespace TERMINAL
                         .Select(x => x.Trim())
                         .Where(x => x.Length > 0);
 
-                    client.SetCapabilities(caps);
+                    client.SetCapabilities(caps);   // внутри уведомит RoleLabel
 
-                    if (Dispatcher.CheckAccess())
-                        RefreshClientsUi();
-                    else
-                        Dispatcher.Invoke(() => RefreshClientsUi());
-
-                    // Датчики (ATM/FURNACE_TEMP) не участвуют в TAKE_POINT/SAVE/CLEAR
                     if (client.IsSensorClient)
                         client.IsSelected = false;
                 }
@@ -2007,7 +2019,7 @@ namespace TERMINAL
                     _connectedClients.Remove(c);
                 }
             }
-            RefreshClientsUi();
+            // RefreshClientsUi() убран
         }
 
         private void DisconnectClient_Click(object sender, RoutedEventArgs e)
@@ -2020,7 +2032,7 @@ namespace TERMINAL
                     try { client.TcpClient.Close(); } catch { }
                     _connectedClients.Remove(client);
                 }
-                RefreshClientsUi();
+                // RefreshClientsUi() убран
             }
         }
 
@@ -5212,8 +5224,8 @@ namespace TERMINAL
 ═══════════════════════════════════════════════════════════════
 v1.0.79
   • Добавлен Changelog с описанием изменений в каждой версии программы
-  • 
-  • 
+  • Добавлен журнал операций, в котором можно посмотреть все логи событий
+  • Добавлены подписи SID клиентов через макрос, можно подписать каждый клиент либо вручную, либо через макрос
   • 
   • 
   • 
@@ -5370,7 +5382,8 @@ v1.0.00
                 lock (_clientsLock)
                 {
                     foreach (var c in _connectedClients) { try { c.TcpClient.Close(); } catch { } }
-                    _connectedClients.Clear();
+                    // _connectedClients.Clear() убран — окно закрывается,
+                    // WPF может бросить исключение при попытке обновить закрытый ItemsControl
                 }
                 try { _broadcastServer?.Stop(); } catch { }
             }
