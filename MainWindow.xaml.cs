@@ -334,6 +334,10 @@ namespace TERMINAL
         private Brush _statusColor = Brushes.Gray;
         private bool _isEnabled = true;
         private bool _isEditable = true;
+        private bool _isCalibrationMode = true;
+
+        // ── НОВОЕ: количество циклов для «Жамкать» ──
+        private string _cyclesText = "10";
 
         public string IndexText { get; set; } = "";
 
@@ -347,6 +351,13 @@ namespace TERMINAL
         {
             get => _stabilizationMinutesText;
             set { _stabilizationMinutesText = value; OnPropertyChanged(nameof(StabilizationMinutesText)); }
+        }
+
+        // ── НОВОЕ: текстовое поле «Циклов» (для UI) ──
+        public string CyclesText
+        {
+            get => _cyclesText;
+            set { _cyclesText = value; OnPropertyChanged(nameof(CyclesText)); }
         }
 
         public string StatusText
@@ -373,8 +384,36 @@ namespace TERMINAL
             set { _isEditable = value; OnPropertyChanged(nameof(IsEditable)); }
         }
 
+        public bool IsCalibrationMode
+        {
+            get => _isCalibrationMode;
+            set
+            {
+                if (_isCalibrationMode == value) return;
+                _isCalibrationMode = value;
+                OnPropertyChanged(nameof(IsCalibrationMode));
+                OnPropertyChanged(nameof(ModeLabel));
+            }
+        }
+
+        public string ModeLabel
+        {
+            get => _isCalibrationMode ? "Градуировка" : "Жамкать";
+            set
+            {
+                bool newVal = value != "Жамкать";
+                IsCalibrationMode = newVal;
+            }
+        }
+
+        // ── Числовые значения, вычисленные из текстовых полей ──
+
         public float SetPoint { get; set; }
+
         public int StabilizationMinutes { get; set; } = 120;
+
+        // ── НОВОЕ: количество циклов (для «Жамкать») ──
+        public int Cycles { get; set; } = 10;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged(string name) =>
@@ -390,6 +429,25 @@ namespace TERMINAL
         public string TimeText => Time.ToString("HH:mm:ss");
         public string DisplayText => $"[{TimeText}] {Message}";
     }
+
+    public class InverseBoolToVisibilityConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter,
+                              System.Globalization.CultureInfo culture)
+        {
+            bool b = value is bool v && v;
+            return b
+                ? System.Windows.Visibility.Collapsed
+                : System.Windows.Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter,
+                                  System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
 
     public partial class MainWindow : Window
     {
@@ -754,6 +812,8 @@ namespace TERMINAL
             public string SetPoint { get; set; } = "25";
             public string StabilizationMinutes { get; set; } = "120";
             public bool IsEnabled { get; set; } = true;
+            public bool IsCalibrationMode { get; set; } = true;
+            public string Cycles { get; set; } = "10";   // НОВОЕ
         }
 
         private void LoadSettings()
@@ -792,12 +852,11 @@ namespace TERMINAL
                     {
                         _batchJobs.Add(new TemperatureJob
                         {
-                            SetPointText = string.IsNullOrWhiteSpace(dto.SetPoint)
-                                ? "25" : dto.SetPoint,
-                            StabilizationMinutesText =
-                                string.IsNullOrWhiteSpace(dto.StabilizationMinutes)
-                                    ? "120" : dto.StabilizationMinutes,
-                            IsEnabled = dto.IsEnabled
+                            SetPointText = string.IsNullOrWhiteSpace(dto.SetPoint) ? "25" : dto.SetPoint,
+                            StabilizationMinutesText = string.IsNullOrWhiteSpace(dto.StabilizationMinutes) ? "120" : dto.StabilizationMinutes,
+                            IsEnabled = dto.IsEnabled,
+                            IsCalibrationMode = dto.IsCalibrationMode,
+                            CyclesText = string.IsNullOrWhiteSpace(dto.Cycles) ? "10" : dto.Cycles   // НОВОЕ
                         });
                     }
                 }
@@ -902,7 +961,9 @@ namespace TERMINAL
                     {
                         SetPoint = j.SetPointText,
                         StabilizationMinutes = j.StabilizationMinutesText,
-                        IsEnabled = j.IsEnabled
+                        IsEnabled = j.IsEnabled,
+                        IsCalibrationMode = j.IsCalibrationMode,
+                        Cycles = j.CyclesText   // НОВОЕ
                     }).ToList(),
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
@@ -1125,7 +1186,9 @@ namespace TERMINAL
             {
                 SetPointText = "25",
                 StabilizationMinutesText = "120",
-                IsEnabled = true
+                CyclesText = "10",           // НОВОЕ
+                IsEnabled = true,
+                IsCalibrationMode = true
             };
             _batchJobs.Add(job);
             RenumberBatchJobs();
@@ -1179,8 +1242,11 @@ namespace TERMINAL
         {
             if (!_uiLoaded) return;
 
-            if (e.PropertyName == nameof(TemperatureJob.IsEnabled))
+            if (e.PropertyName == nameof(TemperatureJob.IsEnabled) ||
+                e.PropertyName == nameof(TemperatureJob.IsCalibrationMode))
+            {
                 UpdateStartButtonMode();
+            }
 
             SaveSettings();
         }
@@ -1203,6 +1269,7 @@ namespace TERMINAL
                 var job = _batchJobs[i];
                 if (!job.IsEnabled) continue;
 
+                // 1) уставка
                 if (!float.TryParse(job.SetPointText?.Replace(',', '.'),
                     NumberStyles.Float, CultureInfo.InvariantCulture, out float sp))
                 {
@@ -1210,6 +1277,7 @@ namespace TERMINAL
                     return;
                 }
 
+                // 2) время стабилизации — нужно всегда
                 if (!int.TryParse(job.StabilizationMinutesText?.Trim(), out int mins) || mins <= 0)
                 {
                     MessageBox.Show($"Задание #{i + 1}: некорректное время стабилизации " +
@@ -1219,6 +1287,23 @@ namespace TERMINAL
 
                 job.SetPoint = sp;
                 job.StabilizationMinutes = mins;
+
+                // 3) НОВОЕ: количество циклов — только для «Жамкать»
+                if (!job.IsCalibrationMode)
+                {
+                    if (!int.TryParse(job.CyclesText?.Trim(), out int cycles) || cycles <= 0)
+                    {
+                        MessageBox.Show($"Задание #{i + 1}: некорректное число циклов " +
+                                        $"«{job.CyclesText}» (нужно положительное число)");
+                        return;
+                    }
+                    job.Cycles = cycles;
+                }
+                else
+                {
+                    // для «Градуировка» циклы не используются, но сбросим на всякий случай
+                    job.Cycles = 0;
+                }
             }
 
             int enabledCount = _batchJobs.Count(j => j.IsEnabled);
@@ -1302,20 +1387,25 @@ namespace TERMINAL
                         return;
                     }
 
-                    // 3) Запуск «Градуировка» и ожидание завершения
+                    // 3) Запуск нужного режима и ожидание завершения
                     job.StatusText = "Идёт съём данных";
                     job.StatusColor = Brushes.Blue;
 
-                    SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «Градуировка» " +
+                    string modeName = job.IsCalibrationMode ? "Градуировка" : "Жамкать";
+                    SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» " +
                               $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(
                         TaskCreationOptions.RunContinuationsAsynchronously);
 
-                    // Запускаем градуировку в UI-потоке (fire-and-forget).
-                    // Сигнал о завершении взводится в самом конце RunCalibrationModeAsync,
-                    // в блоке finally — там же, где сохранение файла и очистка данных.
-                    _ = Dispatcher.InvokeAsync(() => RunCalibrationModeAsync());
+                    if (job.IsCalibrationMode)
+                    {
+                        _ = Dispatcher.InvokeAsync(() => RunCalibrationModeAsync());
+                    }
+                    else
+                    {
+                        _ = Dispatcher.InvokeAsync(() => RunPumpForBatchAsync(job.Cycles));
+                    }
 
                     await _batchRunDoneSignal.Task;
                     _batchRunDoneSignal = null;
@@ -1354,6 +1444,60 @@ namespace TERMINAL
                 UpdateStartButtonMode();
             }
         }
+
+        /// <summary>
+        /// Запускает «Жамкать» с указанным числом циклов в контексте пакетного режима.
+        /// Не читает ParamBox и не блокирует UI — всё управление снаружи.
+        /// </summary>
+        private async Task RunPumpForBatchAsync(int cycles)
+        {
+            if (_selectedTargetPressure == null)
+            {
+                MessageBox.Show("Не выбран диапазон давлений для «Жамкать»");
+                return;
+            }
+
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
+            {
+                MessageBox.Show($"Шаги не заданы для «{_selectedTargetPressure}»");
+                return;
+            }
+
+            bool noConnection;
+            lock (_streamLock) { noConnection = (_stream == null); }
+            if (noConnection)
+            {
+                MessageBox.Show("Нет соединения с прибором.");
+                return;
+            }
+
+            double maxPressure = steps.Max();
+            string unitsCode = GetUnitsCode(_selectedTargetPressure);
+            string unitsLabel = GetUnitsLabel(_selectedTargetPressure);
+            double atmoThreshold = GetAtmosphereThreshold(unitsCode);
+
+            _isRunning = true;
+            _stopRequested = false;
+            _pauseRequested = false;
+
+            _totalTimerStart = DateTime.Now;
+
+            try
+            {
+                await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold);
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = $"Ошибка: {ex.Message}";
+                StatusText.Foreground = Brushes.Red;
+            }
+            finally
+            {
+                _isRunning = false;
+                _pauseRequested = false;
+            }
+        }
+
 
         private async Task<bool> WaitForBatchStabilizationAsync(
     int requiredMinutes, int jobIndex, int totalJobs)

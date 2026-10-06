@@ -1,6 +1,7 @@
 ﻿<Window x:Class="TERMINAL.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:TERMINAL"
         Title="T.E.R.M.I.N.A.L."
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
@@ -9,7 +10,11 @@
         Loaded="Window_Loaded">
 
     <Window.Resources>
+        <!-- Стандартный: bool → Visibility -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
+        <!-- Наш инверсный: true → Collapsed, false → Visible -->
+        <local:InverseBoolToVisibilityConverter x:Key="BoolToVisibilityInverse"/>
         <!-- Стиль кнопок -->
         <Style x:Key="ActionButtonStyle" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
@@ -740,13 +745,27 @@
                                                 </Grid.Style>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <!-- 0: чекбокс -->
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <!-- 1: индекс -->
                                                     <ColumnDefinition Width="38"/>
+                                                    <!-- 2: уставка -->
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <!-- 3: °C -->
                                                     <ColumnDefinition Width="38"/>
+                                                    <!-- 4: минуты -->
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <!-- 5: мин -->
+                                                    <ColumnDefinition Width="90"/>
+                                                    <!-- 6: режим -->
+                                                    <ColumnDefinition Width="38"/>
+                                                    <!-- 7: НОВОЕ: циклы -->
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <!-- 8: НОВОЕ: "цикл" -->
                                                     <ColumnDefinition Width="*"/>
+                                                    <!-- 9: статус -->
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <!-- 10: крестик -->
                                                 </Grid.ColumnDefinitions>
 
                                                 <CheckBox Grid.Column="0"
@@ -777,29 +796,65 @@
                                                            Margin="3,0,5,0"/>
 
                                                 <TextBox Grid.Column="4"
-                                                         Text="{Binding StabilizationMinutesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         FontSize="12"
-                                                         Padding="3,1"
-                                                         HorizontalContentAlignment="Center"
-                                                         VerticalContentAlignment="Center"
-                                                         ToolTip="Время стабилизации, мин"/>
+                                                            Text="{Binding StabilizationMinutesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                            FontSize="12"
+                                                            Padding="3,1"
+                                                            HorizontalContentAlignment="Center"
+                                                            VerticalContentAlignment="Center"
+                                                            IsEnabled="{Binding IsEditable}"
+                                                            Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"
+                                                            ToolTip="Время стабилизации, мин"/>
 
                                                 <TextBlock Grid.Column="5"
-                                                           Text="мин"
-                                                           FontSize="10"
-                                                           Foreground="#FF505050"
-                                                           VerticalAlignment="Center"
-                                                           Margin="3,0,5,0"/>
+                                                            Text="мин"
+                                                            FontSize="10"
+                                                            Foreground="#FF505050"
+                                                            VerticalAlignment="Center"
+                                                            Margin="3,0,5,0"
+                                                            Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
 
-                                                <TextBlock Grid.Column="6"
-                                                           Text="{Binding StatusText}"
-                                                           FontSize="10"
-                                                           Foreground="{Binding StatusColor}"
-                                                           VerticalAlignment="Center"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           Margin="0,0,5,0"/>
+                                                <!-- НОВОЕ: выбор режима для задания -->
+                                                <ComboBox Grid.Column="6"
+                                                        SelectedValue="{Binding ModeLabel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                        FontSize="10"
+                                                        Height="20"
+                                                        Padding="2,0"
+                                                        VerticalContentAlignment="Center"
+                                                        Margin="0,0,5,0"
+                                                        IsEnabled="{Binding IsEditable}"
+                                                        ToolTip="Режим для этой температуры">
+                                                    <ComboBoxItem Content="Градуировка"/>
+                                                    <ComboBoxItem Content="Жамкать"/>
+                                                </ComboBox>
 
-                                                <Button Grid.Column="7"
+                                                <!-- НОВОЕ: поле циклов (видно только для «Жамкать») -->
+                                                <TextBox Grid.Column="7"
+                                                        Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                        FontSize="12"
+                                                        Padding="3,1"
+                                                        HorizontalContentAlignment="Center"
+                                                        VerticalContentAlignment="Center"
+                                                        IsEnabled="{Binding IsEditable}"
+                                                        Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
+                                                        ToolTip="Количество циклов накачки/сброса"/>
+
+                                                <TextBlock Grid.Column="8"
+                                                        Text="цикл"
+                                                        FontSize="10"
+                                                        Foreground="#FF505050"
+                                                        VerticalAlignment="Center"
+                                                        Margin="3,0,5,0"
+                                                        Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
+
+                                                <TextBlock Grid.Column="9"
+                                                        Text="{Binding StatusText}"
+                                                        FontSize="10"
+                                                        Foreground="{Binding StatusColor}"
+                                                        VerticalAlignment="Center"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        Margin="0,0,5,0"/>
+
+                                                <Button Grid.Column="10"
                                                         Content="✕"
                                                         FontSize="10"
                                                         Width="20" Height="20"
