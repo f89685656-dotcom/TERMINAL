@@ -127,6 +127,7 @@ namespace TERMINAL
 
         public string DisplayText => $"SID: {Sid}";
 
+
         public void SetStatusReady()
         {
             RunOnUI(() =>
@@ -4672,6 +4673,209 @@ namespace TERMINAL
                 ? $"v{v.Major}.{v.Minor}.{v.Build}"
                 : $"v{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
         }
+
+        private void VersionText_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            ShowChangelogWindow();
+        }
+
+        /// <summary>
+        /// Открывает модальное окно с историей изменений.
+        /// Текст changelog зашит прямо здесь — при желании можно вынести
+        /// в отдельный .txt/.md рядом с exe и читать File.ReadAllText.
+        /// </summary>
+        private void ShowChangelogWindow()
+        {
+            var dlg = new Window
+            {
+                Title = "История изменений — T.E.R.M.I.N.A.L.",
+                Width = 640,
+                Height = 520,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.CanResize,
+                WindowStyle = WindowStyle.SingleBorderWindow,
+                Background = new SolidColorBrush(Color.FromRgb(0xF7, 0xF7, 0xF7)),
+                MinWidth = 420,
+                MinHeight = 320
+            };
+
+            var root = new System.Windows.Controls.Grid { Margin = new Thickness(12) };
+            root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+
+            // ── Заголовок ──
+            var header = new System.Windows.Controls.TextBlock
+            {
+                Text = "История изменений",
+                FontSize = 18,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x40, 0x40, 0x40)),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            System.Windows.Controls.Grid.SetRow(header, 0);
+            root.Children.Add(header);
+
+            // ── Прокручиваемый текст changelog ──
+            var scroller = new System.Windows.Controls.ScrollViewer
+            {
+                VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled,
+                Padding = new Thickness(4),
+                Background = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+                BorderThickness = new Thickness(1)
+            };
+
+            var changelogText = new System.Windows.Controls.TextBox
+            {
+                Text = GetChangelogText(),
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap,
+                AcceptsReturn = true,
+                BorderThickness = new Thickness(0),
+                Background = Brushes.Transparent,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 12.5,
+                Padding = new Thickness(8),
+                VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled,
+                HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled,
+                IsReadOnlyCaretVisible = false,
+                Cursor = System.Windows.Input.Cursors.Arrow
+            };
+
+            // Запрещаем выделять текст, чтобы TextBox вёл себя как обычный лейбл
+            changelogText.PreviewMouseDown += (s, ev) =>
+            {
+                // Разрешаем скролл колёсиком, но не даём ставить каретку/выделять
+                if (ev.ChangedButton == System.Windows.Input.MouseButton.Left)
+                    ev.Handled = true;
+            };
+
+            scroller.Content = changelogText;
+            System.Windows.Controls.Grid.SetRow(scroller, 1);
+            root.Children.Add(scroller);
+
+            // ── Кнопка «Закрыть» ──
+            var closeBtn = new System.Windows.Controls.Button
+            {
+                Content = "Закрыть",
+                Width = 110,
+                Height = 30,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 10, 0, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0x50, 0x90, 0xD0)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+            closeBtn.Click += (s, ev) => dlg.Close();
+
+            System.Windows.Controls.Grid.SetRow(closeBtn, 2);
+            root.Children.Add(closeBtn);
+
+            dlg.Content = root;
+            dlg.ShowDialog();
+        }
+
+        /// <summary>
+        /// Возвращает текст changelog. Хранится прямо в коде, чтобы не тащить
+        /// отдельный файл рядом с exe.
+        ///
+        /// Формат — свободный. Самое новое — сверху.
+        /// </summary>
+        private static string GetChangelogText()
+        {
+            return
+        @"═══════════════════════════════════════════════════════════════
+ T.E.R.M.I.N.A.L. — история изменений
+═══════════════════════════════════════════════════════════════
+v1.0.79
+  • Добавлен Changelog с описанием изменений в каждой версии программы
+  • 
+  • 
+  • 
+  • 
+  • 
+  • 
+  • 
+  • 
+  • 
+
+
+
+v1.0.78
+  • СКТБ ЭлПа: каждая строка (Платина / ПДА / ПТК) скрывается
+    отдельно, если соответствующий источник не отвечает дольше
+    5 секунд.
+  • СКТБ ЭлПа: общий индикатор в заголовке теперь зелёный, если
+    активен хотя бы один прибор (Платина / ПДА / ПТК), и
+    красный, если молчат все три.
+  • Удалено неиспользуемое поле _timerActive.
+
+v1.0.77
+  • Пакетный режим по температурам для «Градуировки»:
+    список заданий (уставка °C + время стабилизации, мин),
+    кнопки «+ Добавить» / «Очистить», сохранение в settings.json.
+  • Кнопка СТАРТ автоматически превращается в «СТАРТ (пакет)»,
+    если есть активные задания.
+  • АвтоСтарт отключён в пакетном режиме.
+
+v1.0.76
+  • Добавлен автоСтарт: запуск «Градуировка» после 120 мин
+    стабилизации, «Жамкать» — после 30 мин.
+  • Таймер стабилизации с грейс-периодом 60 сек при выходе
+    температуры за допуск ±0.1 °C.
+
+v1.0.75
+  • Поддержка клиентов-датчиков KalibratorGUI с CAPS ATM и
+    FURNACE_TEMP (ПДА и ПТК в карточке СКТБ ЭлПа).
+  • Роли клиентов отображаются в списке подключённых.
+
+v1.0.74
+  • Считывание платины по USB HID (VID 0xFFFF, PID 0x0009).
+  • Отображение температуры платины в карточке СКТБ ЭлПа.
+
+v1.0.73
+  • Подключение к АГК (192.168.0.159:8888), опрос
+    get_units / get_press / get_point / get_status.
+  • Управление штоками: set_mode=control / vent / stop,
+    set_point, set_cal_stocks=start.
+
+v1.0.72
+  • Подключение к печи ST-351 по Modbus TCP
+    (192.168.0.167:502).
+  • Запись/чтение уставки (рег. 201/202), чтение текущей
+    температуры (рег. 205), режим manual/idle (рег. 200).
+
+v1.0.71
+  • Broadcast-сервер для KalibratorGUI (порты 9990 — рабочая
+    версия, 9999 — тестовая).
+  • Ожидание DONE_OK/DONE_FAIL от клиентов, пауза 3 сек
+    после каждого съёма.
+
+v1.0.70
+  • Режим «Жамкать»: циклическая накачка до максимума и сброс
+    до атмосферы, счётчик циклов.
+
+v1.0.60
+  • Режим «Градуировка»: проход по точкам диапазона с
+    ожиданием стабилизации давления и съёмом данных.
+  • КОСА: три съёма на точку с паузой (сек) и продлением
+    таймера на +30 сек при срыве давления.
+
+v1.0.50
+  • Выбор диапазона давлений (кгс/см² и МПа), таблица шагов,
+    короткие и длинные таймеры.
+  • Выбор единиц измерения на АГК, парсинг ответов.
+
+v1.0.00
+  • Первый запуск. Базовый каркас окна, подключение к АГК,
+    СТАРТ/ПАУЗА/СТОП, сохранение и очистка данных.
+";
+        }
+
 
         private void SetExternalButtonsEnabled(bool enabled)
         {
