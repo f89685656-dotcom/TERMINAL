@@ -1,5 +1,6 @@
 ﻿using HidSharp;
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -15,6 +16,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -86,14 +88,6 @@ namespace TERMINAL
                 _logWindow.Activate();
                 return;
             }
-
-            // ── Счётчик создаём первым, т.к. его используют команды контекстного меню ──
-            var counter = new System.Windows.Controls.TextBlock
-            {
-                FontSize = 11,
-                Foreground = Brushes.Gray,
-                VerticalAlignment = VerticalAlignment.Center
-            };
 
             _logWindow = new Window
             {
@@ -212,7 +206,7 @@ namespace TERMINAL
             System.Windows.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(
                 _logListBox, System.Windows.Controls.ScrollBarVisibility.Auto);
 
-            // ── Контекстное меню для строки журнала ──
+            // ── Контекстное меню ──
             var ctxMenu = new System.Windows.Controls.ContextMenu();
 
             var miCopyLine = new System.Windows.Controls.MenuItem
@@ -226,7 +220,7 @@ namespace TERMINAL
                     try
                     {
                         Clipboard.SetText(entry.DisplayText);
-                        counter.Text = "Строка скопирована";
+                        if (_logCounterText != null) _logCounterText.Text = "Строка скопирована";
                     }
                     catch
                     {
@@ -257,7 +251,8 @@ namespace TERMINAL
                     try
                     {
                         Clipboard.SetText(sb.ToString());
-                        counter.Text = $"Скопировано строк: {to - from + 1}";
+                        if (_logCounterText != null)
+                            _logCounterText.Text = $"Скопировано строк: {to - from + 1}";
                     }
                     catch
                     {
@@ -282,7 +277,8 @@ namespace TERMINAL
                 try
                 {
                     Clipboard.SetText(sb.ToString());
-                    counter.Text = $"Скопировано строк: {_logEntries.Count}";
+                    if (_logCounterText != null)
+                        _logCounterText.Text = $"Скопировано строк: {_logEntries.Count}";
                 }
                 catch
                 {
@@ -291,7 +287,6 @@ namespace TERMINAL
             };
             ctxMenu.Items.Add(miCopyAll);
 
-            // Привязываем меню и логику выбора строки по правому клику
             _logListBox.ContextMenu = ctxMenu;
             _logListBox.PreviewMouseRightButtonDown += (s, ev) =>
             {
@@ -304,17 +299,33 @@ namespace TERMINAL
                 }
             };
 
+            // ── ItemTemplate с подсветкой ──
             var itemTemplate = new DataTemplate();
             var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
             factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty,
                 new System.Windows.Data.Binding(nameof(LogEntry.DisplayText)));
             factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty,
                 new System.Windows.Data.Binding(nameof(LogEntry.Color)));
+            factory.SetBinding(System.Windows.Controls.TextBlock.BackgroundProperty,
+                new System.Windows.Data.Binding(nameof(LogEntry.Background)));
             factory.SetValue(System.Windows.Controls.TextBlock.FontFamilyProperty,
                 new FontFamily("Consolas"));
             factory.SetValue(System.Windows.Controls.TextBlock.FontSizeProperty, 12.0);
             factory.SetValue(System.Windows.Controls.TextBlock.TextWrappingProperty,
                 TextWrapping.NoWrap);
+            factory.SetValue(System.Windows.Controls.TextBlock.PaddingProperty,
+                new Thickness(2, 1, 2, 1));
+
+            var dimTrigger = new DataTrigger
+            {
+                Binding = new System.Windows.Data.Binding(nameof(LogEntry.IsDimmed)),
+                Value = true
+            };
+
+            dimTrigger.Setters.Add(new Setter(
+                System.Windows.Controls.TextBlock.OpacityProperty, 0.35));
+            itemTemplate.Triggers.Add(dimTrigger);
+
             itemTemplate.VisualTree = factory;
 
             _logListBox.ItemTemplate = itemTemplate;
@@ -323,18 +334,27 @@ namespace TERMINAL
             System.Windows.Controls.Grid.SetRow(_logListBox, 1);
             root.Children.Add(_logListBox);
 
+            // ── Нижняя панель со счётчиком ──
             var bottomPanel = new System.Windows.Controls.DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+
+            _logCounterText = new System.Windows.Controls.TextBlock
+            {
+                FontSize = 11,
+                Foreground = Brushes.Gray,
+                VerticalAlignment = VerticalAlignment.Center
+            };
 
             void UpdateCounter()
             {
-                counter.Text = $"Записей: {_logEntries.Count} (максимум {LogMaxEntries})";
+                if (_logCounterText != null)
+                    _logCounterText.Text = $"Записей: {_logEntries.Count} (максимум {LogMaxEntries})";
             }
 
             _logEntries.CollectionChanged += (s, ev) => UpdateCounter();
             UpdateCounter();
 
-            System.Windows.Controls.DockPanel.SetDock(counter, System.Windows.Controls.Dock.Left);
-            bottomPanel.Children.Add(counter);
+            System.Windows.Controls.DockPanel.SetDock(_logCounterText, System.Windows.Controls.Dock.Left);
+            bottomPanel.Children.Add(_logCounterText);
 
             var closeBtn = new System.Windows.Controls.Button
             {
@@ -362,7 +382,8 @@ namespace TERMINAL
                 try
                 {
                     Clipboard.SetText(sb.ToString());
-                    counter.Text = "Скопировано в буфер обмена";
+                    if (_logCounterText != null)
+                        _logCounterText.Text = "Скопировано в буфер обмена";
                 }
                 catch
                 {
@@ -388,7 +409,8 @@ namespace TERMINAL
                         sb.AppendLine(entry.DisplayText);
 
                     File.WriteAllText(sfd.FileName, sb.ToString(), Encoding.UTF8);
-                    counter.Text = $"Сохранено: {Path.GetFileName(sfd.FileName)}";
+                    if (_logCounterText != null)
+                        _logCounterText.Text = $"Сохранено: {Path.GetFileName(sfd.FileName)}";
                 }
                 catch (Exception ex)
                 {
@@ -415,6 +437,7 @@ namespace TERMINAL
                 _logWindow = null;
                 _logListBox = null;
                 _logFilterBox = null;
+                _logCounterText = null;
             };
 
             _logWindow.Show();
@@ -425,35 +448,70 @@ namespace TERMINAL
         {
             if (_logListBox == null) return;
 
-            var view = System.Windows.Data.CollectionViewSource
-                .GetDefaultView(_logEntries);
-
             string filter = _logFilterBox?.Text?.Trim() ?? "";
 
-            if (string.IsNullOrEmpty(filter))
+            // Сбросим подсветку и приглушение
+            foreach (var entry in _logEntries)
             {
-                view.Filter = null;
+                entry.Background = Brushes.Transparent;
+                entry.IsDimmed = false;
+            }
+
+            if (!string.IsNullOrEmpty(filter))
+            {
+                int matchCount = 0;
+                LogEntry? firstMatch = null;
+
+                foreach (var entry in _logEntries)
+                {
+                    bool match = entry.Message.IndexOf(filter,
+                        StringComparison.OrdinalIgnoreCase) >= 0
+                        || entry.DisplayText.IndexOf(filter,
+                        StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    if (match)
+                    {
+                        entry.Background = new SolidColorBrush(
+                            Color.FromRgb(0xFF, 0xF4, 0x80));
+                        matchCount++;
+                        if (firstMatch == null) firstMatch = entry;
+                    }
+                    else
+                    {
+                        entry.IsDimmed = true;
+                    }
+                }
+
+                UpdateLogCounterText($"Найдено: {matchCount} из {_logEntries.Count}");
+
+                if (firstMatch != null)
+                {
+                    try { _logListBox.ScrollIntoView(firstMatch); }
+                    catch { }
+                }
             }
             else
             {
-                view.Filter = obj =>
+                UpdateLogCounterText(
+                    $"Записей: {_logEntries.Count} (максимум {LogMaxEntries})");
+
+                if (_logListBox.Items.Count > 0)
                 {
-                    if (obj is LogEntry entry)
-                        return entry.Message.IndexOf(filter,
-                            StringComparison.OrdinalIgnoreCase) >= 0;
-                    return false;
-                };
-            }
-
-            view.Refresh();
-
-            if (_logListBox.Items.Count > 0)
-            {
-                try { _logListBox.ScrollIntoView(_logListBox.Items[_logListBox.Items.Count - 1]); }
-                catch { }
+                    try
+                    {
+                        _logListBox.ScrollIntoView(
+                            _logListBox.Items[_logListBox.Items.Count - 1]);
+                    }
+                    catch { }
+                }
             }
         }
 
+        private void UpdateLogCounterText(string text)
+        {
+            if (_logCounterText == null) return;
+            _logCounterText.Text = text;
+        }
         private static string GetAppVersion()
         {
             var asm = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();

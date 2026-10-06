@@ -141,6 +141,7 @@ namespace TERMINAL
         private System.Windows.Controls.ListBox? _logListBox = null;
         private System.Windows.Controls.TextBox? _logFilterBox = null;
         private const int LogMaxEntries = 5000;
+        private System.Windows.Controls.TextBlock? _logCounterText = null;
 
         public MainWindow()
         {
