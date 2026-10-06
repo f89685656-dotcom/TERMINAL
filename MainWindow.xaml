@@ -1191,51 +1191,70 @@
                                     <Grid.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Отключить"
-                                                      Click="DisconnectClient_Click"
-                                                      Tag="{Binding}"/>
+                                  Click="DisconnectClient_Click"
+                                  Tag="{Binding}"/>
                                         </ContextMenu>
                                     </Grid.ContextMenu>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
+                                        <!-- чекбокс -->
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
+                                        <!-- кружок -->
+                                        <ColumnDefinition Width="240"/>
+                                        <!-- SID -->
+                                        <ColumnDefinition Width="200"/>
+                                        <!-- ручное имя -->
+                                        <ColumnDefinition Width="200"/>
+                                        <!-- роль (авто) -->
                                         <ColumnDefinition Width="*"/>
+                                        <!-- статус -->
                                     </Grid.ColumnDefinitions>
 
                                     <CheckBox Grid.Column="0"
-                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                              VerticalAlignment="Center"
-                                              Margin="0,0,8,0"/>
+                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          Margin="0,0,8,0"/>
 
                                     <Ellipse Grid.Column="1"
-                                             Width="12" Height="12"
-                                             Fill="{Binding StatusColor}"
-                                             VerticalAlignment="Center"
-                                             Margin="0,0,8,0"/>
+                         Width="12" Height="12"
+                         Fill="{Binding StatusColor}"
+                         VerticalAlignment="Center"
+                         Margin="0,0,8,0"/>
 
                                     <TextBlock Grid.Column="2"
-                                               Text="{Binding DisplayText}"
-                                               FontFamily="Consolas"
-                                               FontSize="12"
-                                               VerticalAlignment="Center"/>
+                           Text="{Binding DisplayText}"
+                           FontFamily="Consolas"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           Margin="0,0,8,0"/>
 
-                                    <!-- Пометка роли (Атм.давл/Темп. в печке) -->
-                                    <TextBlock Grid.Column="3"
-                                               Text="{Binding RoleLabel}"
-                                               FontSize="11"
-                                               FontStyle="Italic"
-                                               Foreground="#FF2E6B4A"
-                                               VerticalAlignment="Center"
-                                               Margin="12,0,0,0"/>
+                                    <!-- Ручное имя: пустое поле с подсказкой -->
+                                    <TextBox Grid.Column="3"
+                         Text="{Binding CustomName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="12"
+                         Padding="3,1"
+                         VerticalContentAlignment="Center"
+                         Margin="0,0,8,0"
+                         ToolTip="Введите произвольное имя клиента"/>
 
+                                    <!-- Роль (авто): только для датчиков, у остальных пусто -->
                                     <TextBlock Grid.Column="4"
-                                               Text="{Binding StatusText}"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="Black"
-                                               VerticalAlignment="Center"
-                                               Margin="15,0,0,0"/>
+                           Text="{Binding RoleLabel}"
+                           FontSize="11"
+                           FontStyle="Italic"
+                           Foreground="#FF2E6B4A"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           Margin="0,0,8,0"/>
+
+                                    <TextBlock Grid.Column="5"
+                           Text="{Binding StatusText}"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="Black"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

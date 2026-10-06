@@ -127,6 +127,19 @@ namespace TERMINAL
 
         public string DisplayText => $"SID: {Sid}";
 
+        // ── Ручное/клиентское имя ──
+        private string _customName = "";
+        public string CustomName
+        {
+            get => _customName;
+            set
+            {
+                if (_customName == value) return;
+                _customName = value ?? "";
+                OnPropertyChanged(nameof(CustomName));
+            }
+        }
+
 
         public void SetStatusReady()
         {
@@ -1902,6 +1915,11 @@ namespace TERMINAL
                     if (client.IsSensorClient)
                         client.IsSelected = false;
                 }
+            }
+            else if (line.StartsWith("NAME "))
+            {
+                string name = line.Substring(5).Trim();
+                client.CustomName = name;
             }
             else if (line.StartsWith("STATUS_BUSY")) client.SetStatusWaiting();
             else if (line.StartsWith("DONE_OK"))
