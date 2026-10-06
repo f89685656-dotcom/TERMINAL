@@ -316,15 +316,55 @@
                                            VerticalAlignment="Center" Margin="3,0,0,0"/>
                             </StackPanel>
 
+                            <!-- ── Пресеты пакета ── -->
+                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,6" VerticalAlignment="Center">
+                                <TextBlock Text="Пресет:"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,4,0"/>
+
+                                <ComboBox x:Name="BatchPresetCombo"
+                                          Width="220" Height="22" FontSize="11"
+                                          Padding="3,1" VerticalContentAlignment="Center"
+                                          DisplayMemberPath="DisplayText"
+                                          Margin="0,0,4,0"/>
+
+                                <Button x:Name="LoadPresetButton"
+                                            Content="Загрузить"
+                                            Style="{StaticResource ActionButtonStyle}"
+                                            Height="22" FontSize="10"
+                                            Padding="8,1"
+                                            Background="#FF5090D0"
+                                            Margin="0,0,4,0"
+                                            Click="LoadPreset_Click"/>
+
+                                <Button x:Name="SavePresetButton"
+                                            Content="Сохранить как…"
+                                            Style="{StaticResource ActionButtonStyle}"
+                                            Height="22" FontSize="10"
+                                            Padding="8,1"
+                                            Background="#FF80B080"
+                                            Margin="0,0,4,0"
+                                            Click="SavePreset_Click"/>
+
+                                <Button x:Name="DeletePresetButton"
+                                            Content="Удалить"
+                                            Style="{StaticResource ActionButtonStyle}"
+                                            Height="22" FontSize="10"
+                                            Padding="8,1"
+                                            Background="#FFD08080"
+                                            Click="DeletePreset_Click"/>
+                            </WrapPanel>
+
                         </WrapPanel>
 
                         <Border x:Name="BatchPanel"
-                                BorderBrush="#FFDDDDDD" BorderThickness="1"
-                                CornerRadius="4"
-                                Padding="6"
-                                Background="White"
-                                MinHeight="80"
-                                HorizontalAlignment="Stretch">
+                                            BorderBrush="#FFDDDDDD" BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6"
+                                            Background="White"
+                                            MinHeight="80"
+                                            HorizontalAlignment="Stretch">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>

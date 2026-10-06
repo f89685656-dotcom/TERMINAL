@@ -126,6 +126,7 @@ namespace TERMINAL
         private bool _batchRunning = false;
         private bool _batchStopRequested = false;
         private TaskCompletionSource<bool>? _batchRunDoneSignal;
+        private readonly ObservableCollection<BatchPreset> _batchPresets = new();
 
         private static readonly Brush StartButtonBatchBrush =
             new SolidColorBrush(Color.FromRgb(0x2E, 0x8B, 0x8B));

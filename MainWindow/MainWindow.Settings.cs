@@ -88,6 +88,12 @@ namespace TERMINAL
                         });
                     }
                 }
+                if (_loadedSettings.BatchPresets != null && _loadedSettings.BatchPresets.Count > 0)
+                {
+                    _batchPresets.Clear();
+                    foreach (var p in _loadedSettings.BatchPresets)
+                        _batchPresets.Add(p);
+                }
             }
             catch
             {
@@ -142,6 +148,16 @@ namespace TERMINAL
                 UpdateMaxMinFromRange();
             }
 
+            RefreshPresetCombo();
+
+            if (_loadedSettings != null &&
+                _loadedSettings.LastUsedPresetIndex >= 0 &&
+                _loadedSettings.LastUsedPresetIndex < _batchPresets.Count &&
+                BatchPresetCombo != null)
+            {
+                BatchPresetCombo.SelectedIndex = _loadedSettings.LastUsedPresetIndex;
+            }
+
             UpdateStartButtonMode();
         }
 
@@ -159,6 +175,23 @@ namespace TERMINAL
 
                 var s = new Settings
                 {
+
+                    BatchPresets = _batchPresets.Select(p => new BatchPreset
+                    {
+                        Name = p.Name,
+                        CreatedAt = p.CreatedAt,
+                        Jobs = p.Jobs.Select(j => new BatchJobDto
+                        {
+                            SetPoint = j.SetPoint,
+                            StabilizationMinutes = j.StabilizationMinutes,
+                            IsEnabled = j.IsEnabled,
+                            IsCalibrationMode = j.IsCalibrationMode,
+                            Cycles = j.Cycles,
+                            StartStep = j.StartStep
+                        }).ToList()
+                    }).ToList(),
+                    LastUsedPresetIndex = BatchPresetCombo?.SelectedIndex ?? -1,
+
                     BatchTargetPressureIndex = BatchTargetPressureCombo.SelectedIndex,
                     BatchTimerSetIndex = BatchTimerSetCombo.SelectedIndex,
                     SavePath = SavePathBox.Text,
@@ -309,16 +342,8 @@ namespace TERMINAL
             public double WindowTop { get; set; } = double.NaN;
             public double WindowWidth { get; set; } = double.NaN;
             public double WindowHeight { get; set; } = double.NaN;
-        }
-
-        private class BatchJobDto
-        {
-            public string SetPoint { get; set; } = "25";
-            public string StabilizationMinutes { get; set; } = "120";
-            public bool IsEnabled { get; set; } = true;
-            public bool IsCalibrationMode { get; set; } = true;
-            public string Cycles { get; set; } = "10";
-            public string StartStep { get; set; } = "1";
+            public List<BatchPreset> BatchPresets { get; set; } = new();
+            public int LastUsedPresetIndex { get; set; } = -1;
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");

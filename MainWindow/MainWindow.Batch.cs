@@ -963,5 +963,216 @@ namespace TERMINAL
             else                                                // > 1 °C
                 BatchDeltaText.Foreground = new SolidColorBrush(Color.FromRgb(0xD0, 0x50, 0x50));  // красный
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // ПРЕСЕТЫ ПАКЕТА
+        // ═══════════════════════════════════════════════════════════════════
+        private void RefreshPresetCombo()
+        {
+            if (BatchPresetCombo == null) return;
+
+            BatchPresetCombo.ItemsSource = _batchPresets;
+            if (_batchPresets.Count > 0)
+                BatchPresetCombo.SelectedIndex = 0;
+        }
+
+        private void LoadPreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (_batchRunning) return;
+            if (BatchPresetCombo?.SelectedItem is not BatchPreset preset) return;
+
+            // Подтверждение, если текущий список не пуст
+            if (_batchJobs.Count > 0)
+            {
+                var r = MessageBox.Show(
+                    $"Заменить текущий список заданий ({_batchJobs.Count} шт.) " +
+                    $"на пресет «{preset.Name}» ({preset.Jobs.Count} шт.)?",
+                    "Загрузка пресета",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (r != MessageBoxResult.Yes) return;
+            }
+
+            foreach (var j in _batchJobs)
+                j.PropertyChanged -= BatchJob_PropertyChanged;
+
+            _batchJobs.Clear();
+
+            foreach (var dto in preset.Jobs)
+            {
+                _batchJobs.Add(new TemperatureJob
+                {
+                    SetPointText = dto.SetPoint,
+                    StabilizationMinutesText = dto.StabilizationMinutes,
+                    IsEnabled = dto.IsEnabled,
+                    IsCalibrationMode = dto.IsCalibrationMode,
+                    CyclesText = dto.Cycles,
+                    StartStepText = dto.StartStep
+                });
+            }
+
+            RenumberBatchJobs();
+            SaveSettings();
+            UpdateStartButtonMode();
+            AppendLog($"Загружен пресет «{preset.Name}» ({preset.Jobs.Count} заданий)", Brushes.Green);
+        }
+
+        private void SavePreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (_batchRunning) return;
+            if (_batchJobs.Count == 0)
+            {
+                MessageBox.Show("Список заданий пуст — нечего сохранять.");
+                return;
+            }
+
+            // Простой диалог ввода имени
+            var dlg = new Window
+            {
+                Title = "Сохранить пресет",
+                Width = 400,
+                Height = 160,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStyle = WindowStyle.ToolWindow
+            };
+
+            var grid = new System.Windows.Controls.Grid { Margin = new Thickness(15) };
+            grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+
+            var lbl = new System.Windows.Controls.TextBlock
+            {
+                Text = "Имя пресета:",
+                FontSize = 12,
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            System.Windows.Controls.Grid.SetRow(lbl, 0);
+            grid.Children.Add(lbl);
+
+            var nameBox = new System.Windows.Controls.TextBox
+            {
+                Height = 26,
+                FontSize = 12,
+                Padding = new Thickness(4, 2, 4, 2),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Text = $"Пресет {DateTime.Now:yyyy-MM-dd HH-mm}"
+            };
+            System.Windows.Controls.Grid.SetRow(nameBox, 1);
+            grid.Children.Add(nameBox);
+
+            var btnPanel = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 10, 0, 0)
+            };
+
+            var okBtn = new System.Windows.Controls.Button
+            {
+                Content = "Сохранить",
+                Width = 100,
+                Height = 28,
+                Background = new SolidColorBrush(Color.FromRgb(0x50, 0x90, 0xD0)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0),
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+            var cancelBtn = new System.Windows.Controls.Button
+            {
+                Content = "Отмена",
+                Width = 80,
+                Height = 28,
+                Background = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+            btnPanel.Children.Add(okBtn);
+            btnPanel.Children.Add(cancelBtn);
+            System.Windows.Controls.Grid.SetRow(btnPanel, 2);
+            grid.Children.Add(btnPanel);
+
+            bool ok = false;
+            okBtn.Click += (s, ev) => { ok = true; dlg.Close(); };
+            cancelBtn.Click += (s, ev) => dlg.Close();
+
+            dlg.Content = grid;
+            nameBox.Focus();
+            nameBox.SelectAll();
+            dlg.ShowDialog();
+
+            if (!ok) return;
+
+            string name = nameBox.Text?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                MessageBox.Show("Имя пресета не может быть пустым.");
+                return;
+            }
+
+            // Проверим, нет ли пресета с таким именем
+            var existing = _batchPresets.FirstOrDefault(p =>
+                string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            if (existing != null)
+            {
+                var r = MessageBox.Show(
+                    $"Пресет «{name}» уже существует. Перезаписать?",
+                    "Подтверждение",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (r != MessageBoxResult.Yes) return;
+
+                _batchPresets.Remove(existing);
+            }
+
+            // Снимок текущего списка
+            var preset = new BatchPreset
+            {
+                Name = name,
+                CreatedAt = DateTime.Now,
+                Jobs = _batchJobs.Select(j => new BatchJobDto
+                {
+                    SetPoint = j.SetPointText,
+                    StabilizationMinutes = j.StabilizationMinutesText,
+                    IsEnabled = j.IsEnabled,
+                    IsCalibrationMode = j.IsCalibrationMode,
+                    Cycles = j.CyclesText,
+                    StartStep = j.StartStepText
+                }).ToList()
+            };
+
+            // Добавляем в начало и обрезаем до 10
+            _batchPresets.Insert(0, preset);
+            while (_batchPresets.Count > 10)
+                _batchPresets.RemoveAt(_batchPresets.Count - 1);
+
+            RefreshPresetCombo();
+            BatchPresetCombo.SelectedItem = preset;
+            SaveSettings();
+            AppendLog($"Сохранён пресет «{name}» ({preset.Jobs.Count} заданий)", Brushes.Green);
+        }
+
+        private void DeletePreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (_batchRunning) return;
+            if (BatchPresetCombo?.SelectedItem is not BatchPreset preset) return;
+
+            var r = MessageBox.Show(
+                $"Удалить пресет «{preset.Name}»?",
+                "Подтверждение",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (r != MessageBoxResult.Yes) return;
+
+            _batchPresets.Remove(preset);
+            RefreshPresetCombo();
+            SaveSettings();
+            AppendLog($"Удалён пресет «{preset.Name}»", Brushes.Gray);
+        }
     }
 }
