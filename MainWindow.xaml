@@ -58,14 +58,18 @@
         <Style x:Key="TableCellTextStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="LineHeight" Value="14"/>
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
         </Style>
 
         <!-- Стиль текста заголовка шапки -->
         <Style x:Key="TableHeaderTextStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Foreground" Value="#FF505050"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="LineHeight" Value="11"/>
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
         </Style>
 
         <!-- Стиль Border-обёртки ячейки с вертикальной линией справа -->
@@ -84,7 +88,7 @@
 
         <!-- Короткие единицы -->
         <DataTemplate x:Key="ShortUnitsTemplate">
-            <Grid Margin="0,2">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="32"/>
                     <ColumnDefinition Width="60"/>
@@ -136,7 +140,7 @@
 
         <!-- Длинные единицы -->
         <DataTemplate x:Key="LongUnitsTemplate">
-            <Grid Margin="0,2">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="32"/>
                     <ColumnDefinition Width="60"/>
@@ -337,7 +341,7 @@
                                       MaxHeight="480">
                             <StackPanel>
 
-                                <Grid x:Name="StepsHeaderShort" Margin="0,0,0,4">
+                                <Grid x:Name="StepsHeaderShort" Margin="0,0,0,2">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32"/>
                                         <ColumnDefinition Width="60"/>
@@ -417,6 +421,7 @@
                                     <ItemsControl.ItemContainerStyle>
                                         <Style TargetType="ContentPresenter">
                                             <Setter Property="HorizontalAlignment" Value="Left"/>
+                                            <Setter Property="Margin" Value="0"/>
                                         </Style>
                                     </ItemsControl.ItemContainerStyle>
                                 </ItemsControl>
@@ -578,7 +583,7 @@
                                 Background="White">
                             <Grid>
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
@@ -619,7 +624,7 @@
                                                         <!-- 7: циклы -->
                                                         <ColumnDefinition Width="40"/>
                                                         <!-- 8: цикл -->
-                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
                                                         <!-- 9: статус -->
                                                         <ColumnDefinition Width="Auto"/>
                                                         <!-- 10: крестик -->

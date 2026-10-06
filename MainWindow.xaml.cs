@@ -638,7 +638,7 @@ namespace TERMINAL
             ApplyLoadedSettingsToUi();
 
             if (BatchList != null)
-                BatchList.ItemsSource = _batchJobs;
+                BatchList.ItemsSource = _batchJobs;   // ← привязка ЗДЕСЬ
 
             if (ClientsList != null)
                 ClientsList.ItemsSource = _connectedClients;   // ← ДОБАВЛЕНО
@@ -1207,6 +1207,7 @@ namespace TERMINAL
             {
                 SetPointText = "25",
                 StabilizationMinutesText = "120",
+
                 CyclesText = "10",           // НОВОЕ
                 IsEnabled = true,
                 IsCalibrationMode = true
@@ -1250,10 +1251,10 @@ namespace TERMINAL
             for (int i = 0; i < _batchJobs.Count; i++)
             {
                 _batchJobs[i].IndexText = (i + 1) + ".";
-
                 _batchJobs[i].PropertyChanged -= BatchJob_PropertyChanged;
                 _batchJobs[i].PropertyChanged += BatchJob_PropertyChanged;
             }
+            // ItemsSource перепривязывать не нужно — привязка сделана в конструкторе
         }
 
         private void BatchJob_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -5389,8 +5390,8 @@ v1.0.79
   • Добавлен Changelog с описанием изменений в каждой версии программы
   • Добавлен журнал операций, в котором можно посмотреть все логи событий
   • Добавлены подписи SID клиентов через макрос, можно подписать каждый клиент либо вручную, либо через макрос
-  • 
-  • 
+  • Перекомпановка внешнего вида программы
+  • Добавлен выбор режима Градуировка/Жамкать прямо в пакетный режим
   • 
   • 
   • 
