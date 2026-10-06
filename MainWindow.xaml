@@ -602,16 +602,27 @@
                                                     </Grid.Style>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
+                                                        <!-- 0: чекбокс -->
                                                         <ColumnDefinition Width="Auto"/>
+                                                        <!-- 1: индекс -->
                                                         <ColumnDefinition Width="50"/>
+                                                        <!-- 2: уставка -->
                                                         <ColumnDefinition Width="Auto"/>
+                                                        <!-- 3: °C -->
                                                         <ColumnDefinition Width="50"/>
-                                                        <ColumnDefinition Width="Auto"/>
+                                                        <!-- 4: минуты -->
+                                                        <ColumnDefinition Width="34"/>
+                                                        <!-- 5: мин -->
                                                         <ColumnDefinition Width="110"/>
+                                                        <!-- 6: режим -->
                                                         <ColumnDefinition Width="50"/>
-                                                        <ColumnDefinition Width="Auto"/>
+                                                        <!-- 7: циклы -->
+                                                        <ColumnDefinition Width="40"/>
+                                                        <!-- 8: цикл -->
                                                         <ColumnDefinition Width="*"/>
+                                                        <!-- 9: статус -->
                                                         <ColumnDefinition Width="Auto"/>
+                                                        <!-- 10: крестик -->
                                                     </Grid.ColumnDefinitions>
 
                                                     <CheckBox Grid.Column="0"
@@ -649,7 +660,6 @@
                                                              HorizontalContentAlignment="Center"
                                                              VerticalContentAlignment="Center"
                                                              IsEnabled="{Binding IsEditable}"
-                                                             Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"
                                                              ToolTip="Время стабилизации, мин"/>
 
                                                     <TextBlock Grid.Column="5"
@@ -657,13 +667,11 @@
                                                                FontSize="10"
                                                                Foreground="#FF505050"
                                                                VerticalAlignment="Center"
-                                                               Margin="3,0,5,0"
-                                                               Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
-
+                                                               Margin="3,0,5,0"/>
                                                     <ComboBox Grid.Column="6"
                                                                 SelectedIndex="{Binding ModeIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                 FontSize="11"
-                                                                Height="22"
+                                                                Height="20"
                                                                 Padding="2,0"
                                                                 VerticalContentAlignment="Center"
                                                                 Margin="0,0,5,0"
@@ -674,22 +682,22 @@
                                                     </ComboBox>
 
                                                     <TextBox Grid.Column="7"
-                                                             Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                             FontSize="12"
-                                                             Padding="3,1"
-                                                             HorizontalContentAlignment="Center"
-                                                             VerticalContentAlignment="Center"
-                                                             IsEnabled="{Binding IsEditable}"
-                                                             Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
-                                                             ToolTip="Количество циклов накачки/сброса"/>
+                                                                Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                FontSize="12"
+                                                                Padding="3,1"
+                                                                HorizontalContentAlignment="Center"
+                                                                VerticalContentAlignment="Center"
+                                                                IsEnabled="{Binding IsEditable}"
+                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
+                                                                ToolTip="Количество циклов накачки/сброса"/>
 
                                                     <TextBlock Grid.Column="8"
-                                                               Text="цикл"
-                                                               FontSize="10"
-                                                               Foreground="#FF505050"
-                                                               VerticalAlignment="Center"
-                                                               Margin="3,0,5,0"
-                                                               Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
+                                                                Text="цикл"
+                                                                FontSize="10"
+                                                                Foreground="#FF505050"
+                                                                VerticalAlignment="Center"
+                                                                Margin="3,0,5,0"
+                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
 
                                                     <TextBlock Grid.Column="9"
                                                                Text="{Binding StatusText}"
