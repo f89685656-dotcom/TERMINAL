@@ -5,16 +5,18 @@
         Title="T.E.R.M.I.N.A.L."
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        MinWidth="900" MinHeight="700"
+        MinWidth="1100" MinHeight="700"
         WindowStartupLocation="Manual"
         Loaded="Window_Loaded">
 
     <Window.Resources>
-        <!-- Стандартный: bool → Visibility -->
+
+        <!-- Стандартный конвертер: bool → Visibility -->
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
-        <!-- Наш инверсный: true → Collapsed, false → Visible -->
+        <!-- Инверсный конвертер: true → Collapsed, false → Visible -->
         <local:InverseBoolToVisibilityConverter x:Key="BoolToVisibilityInverse"/>
+
         <!-- Стиль кнопок -->
         <Style x:Key="ActionButtonStyle" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
@@ -195,7 +197,9 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ROW 0: панель настроек -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ROW 0: панель настроек                                         -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
         <Border Grid.Row="0"
                 BorderBrush="LightGray" BorderThickness="1"
                 CornerRadius="6" Padding="10,6"
@@ -282,15 +286,17 @@
             </WrapPanel>
         </Border>
 
-        <!-- ROW 1: три колонки -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ROW 1: левая колонка (кнопки + таблица шагов) + правая         -->
+        <!--        (пакетный режим сверху + три карточки приборов снизу)    -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="1" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Колонка 0: СТАРТ/ПАУЗА + Таблица давлений -->
+            <!-- ─────────────── КОЛОНКА 0: СТАРТ/ПАУЗА + таблица ─────────────── -->
             <StackPanel Grid.Column="0"
                         HorizontalAlignment="Left" VerticalAlignment="Top"
                         Margin="0,0,10,0">
@@ -537,636 +543,646 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- Колонка 1: Карточка ST-351 -->
-            <Border Grid.Column="1"
-                    BorderBrush="LightGray" BorderThickness="1"
-                    CornerRadius="6"
-                    Padding="10,8"
-                    Background="#FFF8F8F8"
-                    Width="320"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Margin="0,0,10,0">
-                <StackPanel Orientation="Vertical">
+            <!-- ─────────────── КОЛОНКА 1: пакет + три карточки ─────────────── -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <Ellipse x:Name="FurnaceStatusEllipse"
-                                 Width="10" Height="10"
-                                 Fill="Red"
-                                 VerticalAlignment="Center"
-                                 Margin="0,0,6,0"/>
-                        <Border Width="40" Height="40"
-                                CornerRadius="4"
-                                Background="White"
-                                BorderBrush="#FFDDDDDD"
-                                BorderThickness="1"
-                                Margin="0,0,8,0"
-                                VerticalAlignment="Center">
-                            <Image Source="/Images/ST_351.png"
-                                   Stretch="Uniform"
-                                   Margin="2"/>
-                        </Border>
-                        <TextBlock Text="Печь ST-351"
-                                   FontSize="13" FontWeight="Bold"
-                                   Foreground="#FF505050"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
+                <!-- ─────── Строка 0: Пакетный режим ─────── -->
+                <Border Grid.Row="0"
+                        BorderBrush="LightGray" BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,8"
+                        Background="#FFF8F8F8"
+                        Margin="0,0,0,10">
+                    <StackPanel>
 
-                    <Border CornerRadius="4"
-                            Padding="8,3"
-                            Margin="0,0,0,5"
-                            Background="#FF2E6B4A">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Text="Уставка:"
-                                       FontSize="12"
-                                       Foreground="#FFCCEEDD"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"/>
-                            <TextBox Grid.Column="1"
-                                     x:Name="FurnaceSetPointBox"
-                                     Width="70" Height="24" FontSize="15"
-                                     FontWeight="Bold"
-                                     Text="25"
-                                     Padding="4,1"
-                                     Background="Transparent"
-                                     BorderBrush="#FF6A9F88"
-                                     BorderThickness="1"
-                                     Foreground="White"
-                                     CaretBrush="White"
-                                     HorizontalAlignment="Right"
-                                     HorizontalContentAlignment="Center"
-                                     VerticalContentAlignment="Center"
-                                     TextChanged="FurnaceSetPointBox_TextChanged"/>
-                            <TextBlock Grid.Column="2"
-                                       Text="°C"
-                                       FontSize="12"
-                                       Foreground="#FFCCEEDD"
-                                       VerticalAlignment="Center"
-                                       Margin="5,0,0,0"/>
-                        </Grid>
-                    </Border>
-
-                    <Grid Margin="0,0,0,6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0"
-                                x:Name="ReadFurnaceSetPointButton"
-                                Content="Читать уставку"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="28" FontSize="11"
-                                Padding="4,2"
-                                Background="#FF6A9FD8"
-                                Click="ReadFurnaceSetPoint_Click"/>
-                        <Button Grid.Column="1"
-                                x:Name="TestFurnaceButton"
-                                Content="Записать уставку"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="28" FontSize="11"
-                                Padding="4,2" Margin="5,0,0,0"
-                                Background="#FFB0A050"
-                                Click="TestWriteFurnace_Click"/>
-                    </Grid>
-
-                    <Border CornerRadius="4"
-                            Padding="8,5"
-                            Margin="0,0,0,6"
-                            Background="#FF2E4A6B">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Text="Текущая:"
-                                       FontSize="12"
-                                       Foreground="#FFCCDDEE"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"/>
-                            <TextBlock Grid.Column="1"
-                                       x:Name="FurnaceCurrentTempText"
-                                       Text="— °C"
-                                       FontSize="20"
-                                       FontWeight="Bold"
-                                       Foreground="White"
-                                       HorizontalAlignment="Right"
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Пакетный режим"
+                                       FontSize="13" FontWeight="Bold"
+                                       Foreground="#FF505050"
                                        VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
+                            <TextBlock Text=" — если есть активные задания, СТАРТ запустит пакет"
+                                       FontSize="11"
+                                       Foreground="Gray"
+                                       VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                        </StackPanel>
 
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0"
-                                x:Name="FurnaceRunButton"
-                                Content="Запуск"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="28" FontSize="11"
-                                Padding="4,2"
-                                Background="#FF80B080"
-                                Click="FurnaceRun_Click"/>
-                        <Button Grid.Column="1"
-                                x:Name="FurnaceStopButton"
-                                Content="Стоп"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="28" FontSize="11"
-                                Padding="4,2" Margin="5,0,0,0"
-                                Background="#FFD08080"
-                                Click="FurnaceStop_Click"/>
-                    </Grid>
+                        <Border x:Name="BatchPanel"
+                                BorderBrush="#FFDDDDDD" BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="6"
+                                Background="White">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
 
-                    <TextBlock Text="Время стабилизации температуры:"
-                               FontSize="12"
-                               Foreground="#FF505050"
-                               Margin="0,8,0,2"/>
+                                <ScrollViewer Grid.Row="0"
+                                              MaxHeight="200"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl x:Name="BatchList">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,2">
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Opacity" Value="1.0"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                                    <Setter Property="Opacity" Value="0.45"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="50"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="50"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="110"/>
+                                                        <ColumnDefinition Width="50"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
 
-                    <Border CornerRadius="4"
-                            Padding="8,4"
-                            Background="#FF3A3A3A">
-                        <TextBlock x:Name="StabilizationTimerText"
-                                   Text="00:00:00"
-                                   FontSize="20"
-                                   FontWeight="Bold"
-                                   Foreground="#FF80FF80"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
-                    </Border>
+                                                    <CheckBox Grid.Column="0"
+                                                              IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,5,0"
+                                                              ToolTip="Снять галочку, чтобы пропустить задание"/>
 
-                    <Button x:Name="ResetStabilizationTimerButton"
-                            Content="Сброс таймера стабилизации"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Height="28" FontSize="11"
-                            Padding="4,2" Margin="0,5,0,0"
-                            Background="#FF808080"
-                            Click="ResetStabilizationTimer_Click"/>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding IndexText}"
+                                                               FontSize="11"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,5,0"/>
 
-                    <!-- Пакетный режим -->
-                    <TextBlock Text="Пакетный режим"
-                               FontSize="12" FontWeight="Bold"
-                               Foreground="#FF505050"
-                               Margin="0,8,0,2"/>
+                                                    <TextBox Grid.Column="2"
+                                                             Text="{Binding SetPointText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             FontSize="12"
+                                                             Padding="3,1"
+                                                             HorizontalContentAlignment="Center"
+                                                             VerticalContentAlignment="Center"
+                                                             IsEnabled="{Binding IsEditable}"
+                                                             ToolTip="Температура уставки, °C"/>
 
-                    <TextBlock Text="если есть активные задания — СТАРТ запустит пакет"
-                               FontSize="10"
-                               Foreground="Gray"
-                               TextWrapping="Wrap"
-                               Margin="0,0,0,4"/>
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="°C"
+                                                               FontSize="10"
+                                                               Foreground="#FF505050"
+                                                               VerticalAlignment="Center"
+                                                               Margin="3,0,5,0"/>
 
-                    <Border x:Name="BatchPanel"
-                            BorderBrush="LightGray" BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="6"
-                            Background="White">
-                        <StackPanel>
-                            <ScrollViewer MaxHeight="180"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsControl x:Name="BatchList">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,2">
-                                                <Grid.Style>
-                                                    <Style TargetType="Grid">
-                                                        <Setter Property="Opacity" Value="1.0"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsEnabled}" Value="False">
-                                                                <Setter Property="Opacity" Value="0.45"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Grid.Style>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <!-- 0: чекбокс -->
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <!-- 1: индекс -->
-                                                    <ColumnDefinition Width="38"/>
-                                                    <!-- 2: уставка -->
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <!-- 3: °C -->
-                                                    <ColumnDefinition Width="38"/>
-                                                    <!-- 4: минуты -->
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <!-- 5: мин -->
-                                                    <ColumnDefinition Width="90"/>
-                                                    <!-- 6: режим -->
-                                                    <ColumnDefinition Width="38"/>
-                                                    <!-- 7: НОВОЕ: циклы -->
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <!-- 8: НОВОЕ: "цикл" -->
-                                                    <ColumnDefinition Width="*"/>
-                                                    <!-- 9: статус -->
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <!-- 10: крестик -->
-                                                </Grid.ColumnDefinitions>
+                                                    <TextBox Grid.Column="4"
+                                                             Text="{Binding StabilizationMinutesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             FontSize="12"
+                                                             Padding="3,1"
+                                                             HorizontalContentAlignment="Center"
+                                                             VerticalContentAlignment="Center"
+                                                             IsEnabled="{Binding IsEditable}"
+                                                             Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"
+                                                             ToolTip="Время стабилизации, мин"/>
 
-                                                <CheckBox Grid.Column="0"
-                                                          IsChecked="{Binding IsEnabled, Mode=TwoWay}"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,5,0"
-                                                          ToolTip="Снять галочку, чтобы пропустить задание"/>
+                                                    <TextBlock Grid.Column="5"
+                                                               Text="мин"
+                                                               FontSize="10"
+                                                               Foreground="#FF505050"
+                                                               VerticalAlignment="Center"
+                                                               Margin="3,0,5,0"
+                                                               Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
 
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding IndexText}"
-                                                           FontSize="11"
-                                                           VerticalAlignment="Center"
-                                                           Margin="0,0,5,0"/>
+                                                    <ComboBox Grid.Column="6"
+                                                              SelectedValue="{Binding ModeLabel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              FontSize="11"
+                                                              Height="22"
+                                                              Padding="2,0"
+                                                              VerticalContentAlignment="Center"
+                                                              Margin="0,0,5,0"
+                                                              IsEnabled="{Binding IsEditable}"
+                                                              ToolTip="Режим для этой температуры">
+                                                        <ComboBoxItem Content="Градуировка"/>
+                                                        <ComboBoxItem Content="Жамкать"/>
+                                                    </ComboBox>
 
-                                                <TextBox Grid.Column="2"
-                                                         Text="{Binding SetPointText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         FontSize="12"
-                                                         Padding="3,1"
-                                                         HorizontalContentAlignment="Center"
-                                                         VerticalContentAlignment="Center"
-                                                         ToolTip="Температура уставки, °C"/>
+                                                    <TextBox Grid.Column="7"
+                                                             Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             FontSize="12"
+                                                             Padding="3,1"
+                                                             HorizontalContentAlignment="Center"
+                                                             VerticalContentAlignment="Center"
+                                                             IsEnabled="{Binding IsEditable}"
+                                                             Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
+                                                             ToolTip="Количество циклов накачки/сброса"/>
 
-                                                <TextBlock Grid.Column="3"
-                                                           Text="°C"
-                                                           FontSize="10"
-                                                           Foreground="#FF505050"
-                                                           VerticalAlignment="Center"
-                                                           Margin="3,0,5,0"/>
+                                                    <TextBlock Grid.Column="8"
+                                                               Text="цикл"
+                                                               FontSize="10"
+                                                               Foreground="#FF505050"
+                                                               VerticalAlignment="Center"
+                                                               Margin="3,0,5,0"
+                                                               Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
 
-                                                <TextBox Grid.Column="4"
-                                                            Text="{Binding StabilizationMinutesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                            FontSize="12"
-                                                            Padding="3,1"
-                                                            HorizontalContentAlignment="Center"
-                                                            VerticalContentAlignment="Center"
-                                                            IsEnabled="{Binding IsEditable}"
-                                                            Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"
-                                                            ToolTip="Время стабилизации, мин"/>
+                                                    <TextBlock Grid.Column="9"
+                                                               Text="{Binding StatusText}"
+                                                               FontSize="10"
+                                                               Foreground="{Binding StatusColor}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Margin="0,0,5,0"/>
 
-                                                <TextBlock Grid.Column="5"
-                                                            Text="мин"
+                                                    <Button Grid.Column="10"
+                                                            Content="✕"
                                                             FontSize="10"
-                                                            Foreground="#FF505050"
-                                                            VerticalAlignment="Center"
-                                                            Margin="3,0,5,0"
-                                                            Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
+                                                            Width="20" Height="20"
+                                                            Padding="0"
+                                                            Background="#FFD08080"
+                                                            Foreground="White"
+                                                            BorderThickness="0"
+                                                            Click="RemoveBatchJob_Click"
+                                                            Tag="{Binding}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
 
-                                                <!-- НОВОЕ: выбор режима для задания -->
-                                                <ComboBox Grid.Column="6"
-                                                        SelectedValue="{Binding ModeLabel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                        FontSize="10"
-                                                        Height="20"
-                                                        Padding="2,0"
-                                                        VerticalContentAlignment="Center"
-                                                        Margin="0,0,5,0"
-                                                        IsEnabled="{Binding IsEditable}"
-                                                        ToolTip="Режим для этой температуры">
-                                                    <ComboBoxItem Content="Градуировка"/>
-                                                    <ComboBoxItem Content="Жамкать"/>
-                                                </ComboBox>
+                                <Grid Grid.Row="1" Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0"
+                                            x:Name="AddBatchJobButton"
+                                            Content="+ Добавить"
+                                            Style="{StaticResource ActionButtonStyle}"
+                                            Height="24" FontSize="10"
+                                            Padding="3,1"
+                                            Background="#FF80B080"
+                                            Click="AddBatchJob_Click"/>
+                                    <Button Grid.Column="1"
+                                            x:Name="ClearBatchButton"
+                                            Content="Очистить"
+                                            Style="{StaticResource ActionButtonStyle}"
+                                            Height="24" FontSize="10"
+                                            Padding="3,1" Margin="5,0,0,0"
+                                            Background="#FFB0A050"
+                                            Click="ClearBatch_Click"/>
+                                </Grid>
 
-                                                <!-- НОВОЕ: поле циклов (видно только для «Жамкать») -->
-                                                <TextBox Grid.Column="7"
-                                                        Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                        FontSize="12"
-                                                        Padding="3,1"
-                                                        HorizontalContentAlignment="Center"
-                                                        VerticalContentAlignment="Center"
-                                                        IsEnabled="{Binding IsEditable}"
-                                                        Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
-                                                        ToolTip="Количество циклов накачки/сброса"/>
+                                <TextBlock x:Name="BatchProgressText"
+                                           Grid.Row="2"
+                                           Text=""
+                                           FontSize="10"
+                                           Foreground="#FF5050A0"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0"/>
+                            </Grid>
+                        </Border>
 
-                                                <TextBlock Grid.Column="8"
-                                                        Text="цикл"
-                                                        FontSize="10"
-                                                        Foreground="#FF505050"
-                                                        VerticalAlignment="Center"
-                                                        Margin="3,0,5,0"
-                                                        Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
+                    </StackPanel>
+                </Border>
 
-                                                <TextBlock Grid.Column="9"
-                                                        Text="{Binding StatusText}"
-                                                        FontSize="10"
-                                                        Foreground="{Binding StatusColor}"
-                                                        VerticalAlignment="Center"
-                                                        TextTrimming="CharacterEllipsis"
-                                                        Margin="0,0,5,0"/>
+                <!-- ─────── Строка 1: три карточки приборов в ряд ─────── -->
+                <WrapPanel Grid.Row="1" Orientation="Horizontal">
 
-                                                <Button Grid.Column="10"
-                                                        Content="✕"
-                                                        FontSize="10"
-                                                        Width="20" Height="20"
-                                                        Padding="0"
-                                                        Background="#FFD08080"
-                                                        Foreground="White"
-                                                        BorderThickness="0"
-                                                        Click="RemoveBatchJob_Click"
-                                                        Tag="{Binding}"/>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                    <!-- Карточка ST-351 -->
+                    <Border BorderBrush="LightGray" BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10,8"
+                            Background="#FFF8F8F8"
+                            Width="320"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Top">
+                        <StackPanel Orientation="Vertical">
 
-                            <Grid Margin="0,5,0,0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Ellipse x:Name="FurnaceStatusEllipse"
+                                         Width="10" Height="10"
+                                         Fill="Red"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,6,0"/>
+                                <Border Width="40" Height="40"
+                                        CornerRadius="4"
+                                        Background="White"
+                                        BorderBrush="#FFDDDDDD"
+                                        BorderThickness="1"
+                                        Margin="0,0,8,0"
+                                        VerticalAlignment="Center">
+                                    <Image Source="/Images/ST_351.png"
+                                           Stretch="Uniform"
+                                           Margin="2"/>
+                                </Border>
+                                <TextBlock Text="Печь ST-351"
+                                           FontSize="13" FontWeight="Bold"
+                                           Foreground="#FF505050"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <Border CornerRadius="4"
+                                    Padding="8,3"
+                                    Margin="0,0,0,5"
+                                    Background="#FF2E6B4A">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="Уставка:"
+                                               FontSize="12"
+                                               Foreground="#FFCCEEDD"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <TextBox Grid.Column="1"
+                                             x:Name="FurnaceSetPointBox"
+                                             Width="70" Height="24" FontSize="15"
+                                             FontWeight="Bold"
+                                             Text="25"
+                                             Padding="4,1"
+                                             Background="Transparent"
+                                             BorderBrush="#FF6A9F88"
+                                             BorderThickness="1"
+                                             Foreground="White"
+                                             CaretBrush="White"
+                                             HorizontalAlignment="Right"
+                                             HorizontalContentAlignment="Center"
+                                             VerticalContentAlignment="Center"
+                                             TextChanged="FurnaceSetPointBox_TextChanged"/>
+                                    <TextBlock Grid.Column="2"
+                                               Text="°C"
+                                               FontSize="12"
+                                               Foreground="#FFCCEEDD"
+                                               VerticalAlignment="Center"
+                                               Margin="5,0,0,0"/>
+                                </Grid>
+                            </Border>
+
+                            <Grid Margin="0,0,0,6">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Button Grid.Column="0"
-                                        x:Name="AddBatchJobButton"
-                                        Content="+ Добавить"
+                                        x:Name="ReadFurnaceSetPointButton"
+                                        Content="Читать уставку"
                                         Style="{StaticResource ActionButtonStyle}"
-                                        Height="24" FontSize="10"
-                                        Padding="3,1"
-                                        Background="#FF80B080"
-                                        Click="AddBatchJob_Click"/>
+                                        Height="28" FontSize="11"
+                                        Padding="4,2"
+                                        Background="#FF6A9FD8"
+                                        Click="ReadFurnaceSetPoint_Click"/>
                                 <Button Grid.Column="1"
-                                        x:Name="ClearBatchButton"
-                                        Content="Очистить"
+                                        x:Name="TestFurnaceButton"
+                                        Content="Записать уставку"
                                         Style="{StaticResource ActionButtonStyle}"
-                                        Height="24" FontSize="10"
-                                        Padding="3,1" Margin="5,0,0,0"
+                                        Height="28" FontSize="11"
+                                        Padding="4,2" Margin="5,0,0,0"
                                         Background="#FFB0A050"
-                                        Click="ClearBatch_Click"/>
+                                        Click="TestWriteFurnace_Click"/>
                             </Grid>
 
-                            <TextBlock x:Name="BatchProgressText"
-                                       Text=""
-                                       FontSize="10"
-                                       Foreground="#FF5050A0"
-                                       TextWrapping="Wrap"
-                                       Margin="0,4,0,0"/>
+                            <Border CornerRadius="4"
+                                    Padding="8,5"
+                                    Margin="0,0,0,6"
+                                    Background="#FF2E4A6B">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="Текущая:"
+                                               FontSize="12"
+                                               Foreground="#FFCCDDEE"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="1"
+                                               x:Name="FurnaceCurrentTempText"
+                                               Text="— °C"
+                                               FontSize="20"
+                                               FontWeight="Bold"
+                                               Foreground="White"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        x:Name="FurnaceRunButton"
+                                        Content="Запуск"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Height="28" FontSize="11"
+                                        Padding="4,2"
+                                        Background="#FF80B080"
+                                        Click="FurnaceRun_Click"/>
+                                <Button Grid.Column="1"
+                                        x:Name="FurnaceStopButton"
+                                        Content="Стоп"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Height="28" FontSize="11"
+                                        Padding="4,2" Margin="5,0,0,0"
+                                        Background="#FFD08080"
+                                        Click="FurnaceStop_Click"/>
+                            </Grid>
+
+                            <TextBlock Text="Время стабилизации температуры:"
+                                       FontSize="12"
+                                       Foreground="#FF505050"
+                                       Margin="0,8,0,2"/>
+
+                            <Border CornerRadius="4"
+                                    Padding="8,4"
+                                    Background="#FF3A3A3A">
+                                <TextBlock x:Name="StabilizationTimerText"
+                                           Text="00:00:00"
+                                           FontSize="20"
+                                           FontWeight="Bold"
+                                           Foreground="#FF80FF80"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <Button x:Name="ResetStabilizationTimerButton"
+                                    Content="Сброс таймера стабилизации"
+                                    Style="{StaticResource ActionButtonStyle}"
+                                    Height="28" FontSize="11"
+                                    Padding="4,2" Margin="0,5,0,0"
+                                    Background="#FF808080"
+                                    Click="ResetStabilizationTimer_Click"/>
+
                         </StackPanel>
                     </Border>
 
-                </StackPanel>
-            </Border>
+                    <!-- Карточка АГК -->
+                    <Border BorderBrush="LightGray" BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10,8"
+                            Background="#FFF8F8F8"
+                            Width="260"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Top">
+                        <StackPanel Orientation="Vertical">
 
-            <!-- Колонка 2: АГК + СКТБ ЭлПА -->
-            <StackPanel Grid.Column="2"
-                        Orientation="Vertical"
-                        HorizontalAlignment="Left" VerticalAlignment="Top">
-
-                <!-- Карточка АГК -->
-                <Border BorderBrush="LightGray" BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="10,8"
-                        Background="#FFF8F8F8"
-                        Width="260"
-                        HorizontalAlignment="Left"
-                        Margin="0,0,0,10">
-                    <StackPanel Orientation="Vertical">
-
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Ellipse x:Name="AgkStatusEllipse"
-                                     Width="10" Height="10"
-                                     Fill="Red"
-                                     VerticalAlignment="Center"
-                                     Margin="0,0,6,0"/>
-                            <Border Width="40" Height="40"
-                                    CornerRadius="4"
-                                    Background="White"
-                                    BorderBrush="#FFDDDDDD"
-                                    BorderThickness="1"
-                                    Margin="0,0,8,0"
-                                    VerticalAlignment="Center">
-                                <Image Source="Images/AGK.png"
-                                       Stretch="Uniform"
-                                       Margin="2"/>
-                            </Border>
-                            <TextBlock Text="АГК"
-                                       FontSize="13" FontWeight="Bold"
-                                       Foreground="#FF505050"
-                                       VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <Border CornerRadius="4"
-                                Padding="8,5"
-                                Margin="0,0,0,5"
-                                Background="#FF2E4A6B">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Text="Давление:"
-                                           FontSize="12"
-                                           Foreground="#FFCCDDEE"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1"
-                                           x:Name="AgkPressureText"
-                                           Text="—"
-                                           FontSize="16"
-                                           FontWeight="Bold"
-                                           Foreground="White"
-                                           HorizontalAlignment="Right"
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Ellipse x:Name="AgkStatusEllipse"
+                                         Width="10" Height="10"
+                                         Fill="Red"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,6,0"/>
+                                <Border Width="40" Height="40"
+                                        CornerRadius="4"
+                                        Background="White"
+                                        BorderBrush="#FFDDDDDD"
+                                        BorderThickness="1"
+                                        Margin="0,0,8,0"
+                                        VerticalAlignment="Center">
+                                    <Image Source="Images/AGK.png"
+                                           Stretch="Uniform"
+                                           Margin="2"/>
+                                </Border>
+                                <TextBlock Text="АГК"
+                                           FontSize="13" FontWeight="Bold"
+                                           Foreground="#FF505050"
                                            VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
-
-                        <Border CornerRadius="4"
-                                Padding="8,5"
-                                Background="#FF2E6B4A">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Text="Уставка:"
-                                           FontSize="12"
-                                           Foreground="#FFCCEEDD"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1"
-                                           x:Name="AgkSetPointText"
-                                           Text="—"
-                                           FontSize="16"
-                                           FontWeight="Bold"
-                                           Foreground="White"
-                                           HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
-
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0"
-                                    x:Name="StopButton" Content="СТОП"
-                                    Style="{StaticResource ActionButtonStyle}"
-                                    Height="34" FontSize="13"
-                                    Padding="6,4" Background="#FFD05050"
-                                    Click="StopButton_Click"/>
-                            <Button Grid.Column="1"
-                                    x:Name="VentButton" Content="СБРОС"
-                                    Style="{StaticResource ActionButtonStyle}"
-                                    Height="34" FontSize="13"
-                                    Padding="6,4" Margin="8,0,0,0"
-                                    Background="#FF5080D0"
-                                    Click="VentButton_Click"/>
-                        </Grid>
-
-                        <Button x:Name="CalibrateStocksButton"
-                                Content="Калибровка штоков"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="34" FontSize="12"
-                                Padding="6,4" Margin="0,8,0,0"
-                                Background="#FF6A4FA0"
-                                Click="CalibrateStocksButton_Click"/>
-
-                        <Border CornerRadius="4"
-                                Padding="8,5"
-                                Margin="0,8,0,0"
-                                Background="#FF2E2E2E">
-                            <StackPanel Orientation="Vertical">
-                                <TextBlock Text="Статус АГК:"
-                                           FontSize="11"
-                                           Foreground="#FFAAAAAA"
-                                           Margin="0,0,0,2"/>
-                                <TextBlock x:Name="AgkStatusTextBox"
-                                           Text="—"
-                                           FontSize="12"
-                                           FontFamily="Consolas"
-                                           Foreground="#FF80FF80"
-                                           TextWrapping="Wrap"
-                                           MaxHeight="60"/>
                             </StackPanel>
-                        </Border>
 
-                    </StackPanel>
-                </Border>
+                            <Border CornerRadius="4"
+                                    Padding="8,5"
+                                    Margin="0,0,0,5"
+                                    Background="#FF2E4A6B">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="Давление:"
+                                               FontSize="12"
+                                               Foreground="#FFCCDDEE"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="1"
+                                               x:Name="AgkPressureText"
+                                               Text="—"
+                                               FontSize="16"
+                                               FontWeight="Bold"
+                                               Foreground="White"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
 
-                <!-- Карточка СКТБ ЭлПА -->
+                            <Border CornerRadius="4"
+                                    Padding="8,5"
+                                    Background="#FF2E6B4A">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="Уставка:"
+                                               FontSize="12"
+                                               Foreground="#FFCCEEDD"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="1"
+                                               x:Name="AgkSetPointText"
+                                               Text="—"
+                                               FontSize="16"
+                                               FontWeight="Bold"
+                                               Foreground="White"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
 
-                <Border
-                    BorderBrush="LightGray" BorderThickness="1"
-                    CornerRadius="6"
-                    Padding="10,8"
-                    Background="#FFF8F8F8"
-                    Width="260"
-                    HorizontalAlignment="Left">
-                    <StackPanel Orientation="Vertical">
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        x:Name="StopButton" Content="СТОП"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Height="34" FontSize="13"
+                                        Padding="6,4" Background="#FFD05050"
+                                        Click="StopButton_Click"/>
+                                <Button Grid.Column="1"
+                                        x:Name="VentButton" Content="СБРОС"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Height="34" FontSize="13"
+                                        Padding="6,4" Margin="8,0,0,0"
+                                        Background="#FF5080D0"
+                                        Click="VentButton_Click"/>
+                            </Grid>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Ellipse x:Name="PlatinaStatusEllipse"
-                     Width="10" Height="10"
-                     Fill="Red"
-                     VerticalAlignment="Center"
-                     Margin="0,0,6,0"/>
-                            <TextBlock Text="СКТБ ЭлПА"
-                       FontSize="13" FontWeight="Bold"
-                       Foreground="#FF505050"
-                       VerticalAlignment="Center"/>
+                            <Button x:Name="CalibrateStocksButton"
+                                    Content="Калибровка штоков"
+                                    Style="{StaticResource ActionButtonStyle}"
+                                    Height="34" FontSize="12"
+                                    Padding="6,4" Margin="0,8,0,0"
+                                    Background="#FF6A4FA0"
+                                    Click="CalibrateStocksButton_Click"/>
+
+                            <Border CornerRadius="4"
+                                    Padding="8,5"
+                                    Margin="0,8,0,0"
+                                    Background="#FF2E2E2E">
+                                <StackPanel Orientation="Vertical">
+                                    <TextBlock Text="Статус АГК:"
+                                               FontSize="11"
+                                               Foreground="#FFAAAAAA"
+                                               Margin="0,0,0,2"/>
+                                    <TextBlock x:Name="AgkStatusTextBox"
+                                               Text="—"
+                                               FontSize="12"
+                                               FontFamily="Consolas"
+                                               Foreground="#FF80FF80"
+                                               TextWrapping="Wrap"
+                                               MaxHeight="60"/>
+                                </StackPanel>
+                            </Border>
+
                         </StackPanel>
+                    </Border>
 
-                        <!-- Платина -->
-                        <Border x:Name="PlatinaRowBorder" CornerRadius="4" Padding="8,5" Background="#FF2E4A6B" Margin="0,0,0,5">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0"
-                         x:Name="PlatinaRowEllipse"
-                         Width="8" Height="8"
-                         Fill="Red"
-                         VerticalAlignment="Center"
-                         Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1"
-                           Text="Платина:"
-                           FontSize="12"
-                           Foreground="#FFCCDDEE"
-                           VerticalAlignment="Center"
-                           Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="2"
-                           x:Name="PlatinaTempText"
-                           Text="— °C"
-                           FontSize="16"
-                           FontWeight="Bold"
-                           Foreground="White"
-                           HorizontalAlignment="Right"
-                           VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
+                    <!-- Карточка СКТБ ЭлПа -->
+                    <Border BorderBrush="LightGray" BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10,8"
+                            Background="#FFF8F8F8"
+                            Width="260"
+                            VerticalAlignment="Top">
+                        <StackPanel Orientation="Vertical">
 
-                        <!-- ПДА -->
-                        <Border x:Name="PdaRowBorder" CornerRadius="4" Padding="8,5" Background="#FF2E4A6B" Margin="0,0,0,5">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0"
-                         x:Name="PdaStatusEllipse"
-                         Width="8" Height="8"
-                         Fill="Red"
-                         VerticalAlignment="Center"
-                         Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1"
-                           Text="ПДА:"
-                           FontSize="12"
-                           Foreground="#FFCCDDEE"
-                           VerticalAlignment="Center"
-                           Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="2"
-                           x:Name="PdaPressureText"
-                           Text="— мм рт. ст."
-                           FontSize="16"
-                           FontWeight="Bold"
-                           Foreground="White"
-                           HorizontalAlignment="Right"
-                           VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Ellipse x:Name="PlatinaStatusEllipse"
+                                         Width="10" Height="10"
+                                         Fill="Red"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,6,0"/>
+                                <TextBlock Text="СКТБ ЭлПА"
+                                           FontSize="13" FontWeight="Bold"
+                                           Foreground="#FF505050"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
 
-                        <!-- ПТК -->
-                        <Border x:Name="PtkRowBorder" CornerRadius="4" Padding="8,5" Background="#FF2E4A6B">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0"
-                         x:Name="PtkStatusEllipse"
-                         Width="8" Height="8"
-                         Fill="Red"
-                         VerticalAlignment="Center"
-                         Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1"
-                           Text="ПТК:"
-                           FontSize="12"
-                           Foreground="#FFCCDDEE"
-                           VerticalAlignment="Center"
-                           Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="2"
-                           x:Name="PtkTempText"
-                           Text="— °C"
-                           FontSize="16"
-                           FontWeight="Bold"
-                           Foreground="White"
-                           HorizontalAlignment="Right"
-                           VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </Border>
+                            <Border x:Name="PlatinaRowBorder" CornerRadius="4" Padding="8,5" Background="#FF2E4A6B" Margin="0,0,0,5">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0"
+                                             x:Name="PlatinaRowEllipse"
+                                             Width="8" Height="8"
+                                             Fill="Red"
+                                             VerticalAlignment="Center"
+                                             Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="Платина:"
+                                               FontSize="12"
+                                               Foreground="#FFCCDDEE"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="2"
+                                               x:Name="PlatinaTempText"
+                                               Text="— °C"
+                                               FontSize="16"
+                                               FontWeight="Bold"
+                                               Foreground="White"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
 
-            </StackPanel>
+                            <Border x:Name="PdaRowBorder" CornerRadius="4" Padding="8,5" Background="#FF2E4A6B" Margin="0,0,0,5">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0"
+                                             x:Name="PdaStatusEllipse"
+                                             Width="8" Height="8"
+                                             Fill="Red"
+                                             VerticalAlignment="Center"
+                                             Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="ПДА:"
+                                               FontSize="12"
+                                               Foreground="#FFCCDDEE"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="2"
+                                               x:Name="PdaPressureText"
+                                               Text="— мм рт. ст."
+                                               FontSize="16"
+                                               FontWeight="Bold"
+                                               Foreground="White"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <Border x:Name="PtkRowBorder" CornerRadius="4" Padding="8,5" Background="#FF2E4A6B">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0"
+                                             x:Name="PtkStatusEllipse"
+                                             Width="8" Height="8"
+                                             Fill="Red"
+                                             VerticalAlignment="Center"
+                                             Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="ПТК:"
+                                               FontSize="12"
+                                               Foreground="#FFCCDDEE"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="2"
+                                               x:Name="PtkTempText"
+                                               Text="— °C"
+                                               FontSize="16"
+                                               FontWeight="Bold"
+                                               Foreground="White"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                </WrapPanel>
+
+            </Grid>
 
         </Grid>
 
-        <!-- ROW 2: Путь сохранения + кнопки данных -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ROW 2: Путь сохранения + кнопки данных                         -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="2" Margin="0,0,0,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -1219,7 +1235,9 @@
             </StackPanel>
         </Grid>
 
-        <!-- ROW 3: Клиенты -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ROW 3: Клиенты                                                 -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="3" Margin="0,0,0,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -1246,70 +1264,62 @@
                                     <Grid.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Отключить"
-                                  Click="DisconnectClient_Click"
-                                  Tag="{Binding}"/>
+                                                      Click="DisconnectClient_Click"
+                                                      Tag="{Binding}"/>
                                         </ContextMenu>
                                     </Grid.ContextMenu>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
-                                        <!-- чекбокс -->
                                         <ColumnDefinition Width="Auto"/>
-                                        <!-- кружок -->
                                         <ColumnDefinition Width="240"/>
-                                        <!-- SID -->
                                         <ColumnDefinition Width="200"/>
-                                        <!-- ручное имя -->
                                         <ColumnDefinition Width="200"/>
-                                        <!-- роль (авто) -->
                                         <ColumnDefinition Width="*"/>
-                                        <!-- статус -->
                                     </Grid.ColumnDefinitions>
 
                                     <CheckBox Grid.Column="0"
-                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                          VerticalAlignment="Center"
-                          Margin="0,0,8,0"/>
+                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,8,0"/>
 
                                     <Ellipse Grid.Column="1"
-                         Width="12" Height="12"
-                         Fill="{Binding StatusColor}"
-                         VerticalAlignment="Center"
-                         Margin="0,0,8,0"/>
+                                             Width="12" Height="12"
+                                             Fill="{Binding StatusColor}"
+                                             VerticalAlignment="Center"
+                                             Margin="0,0,8,0"/>
 
                                     <TextBlock Grid.Column="2"
-                           Text="{Binding DisplayText}"
-                           FontFamily="Consolas"
-                           FontSize="12"
-                           VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"
-                           Margin="0,0,8,0"/>
+                                               Text="{Binding DisplayText}"
+                                               FontFamily="Consolas"
+                                               FontSize="12"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,0,8,0"/>
 
-                                    <!-- Ручное имя: пустое поле с подсказкой -->
                                     <TextBox Grid.Column="3"
-                         Text="{Binding CustomName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="12"
-                         Padding="3,1"
-                         VerticalContentAlignment="Center"
-                         Margin="0,0,8,0"
-                         ToolTip="Введите произвольное имя клиента"/>
+                                             Text="{Binding CustomName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="12"
+                                             Padding="3,1"
+                                             VerticalContentAlignment="Center"
+                                             Margin="0,0,8,0"
+                                             ToolTip="Введите произвольное имя клиента"/>
 
-                                    <!-- Роль (авто): только для датчиков, у остальных пусто -->
                                     <TextBlock Grid.Column="4"
-                           Text="{Binding RoleLabel}"
-                           FontSize="11"
-                           FontStyle="Italic"
-                           Foreground="#FF2E6B4A"
-                           VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"
-                           Margin="0,0,8,0"/>
+                                               Text="{Binding RoleLabel}"
+                                               FontSize="11"
+                                               FontStyle="Italic"
+                                               Foreground="#FF2E6B4A"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,0,8,0"/>
 
                                     <TextBlock Grid.Column="5"
-                           Text="{Binding StatusText}"
-                           FontSize="12"
-                           FontWeight="SemiBold"
-                           Foreground="Black"
-                           VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"/>
+                                               Text="{Binding StatusText}"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="Black"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -1318,7 +1328,9 @@
             </Border>
         </Grid>
 
-        <!-- ROW 4: Статус + версия -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ROW 4: Статус + версия                                         -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="4" Margin="0,6,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -1328,33 +1340,33 @@
             </Grid.ColumnDefinitions>
 
             <Button x:Name="ShowLogButton"
-            Grid.Column="0"
-            Content="Журнал"
-            Style="{StaticResource ActionButtonStyle}"
-            Height="24" FontSize="11"
-            Padding="8,2"
-            Background="#FF808080"
-            VerticalAlignment="Bottom"
-            Margin="0,0,8,0"
-            Click="ShowLogButton_Click"/>
+                    Grid.Column="0"
+                    Content="Журнал"
+                    Style="{StaticResource ActionButtonStyle}"
+                    Height="24" FontSize="11"
+                    Padding="8,2"
+                    Background="#FF808080"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,8,0"
+                    Click="ShowLogButton_Click"/>
 
             <TextBlock x:Name="StatusText" Grid.Column="1"
-               Text="Готов" Foreground="Gray"
-               FontSize="12"
-               VerticalAlignment="Bottom"
-               TextTrimming="CharacterEllipsis"/>
+                       Text="Готов" Foreground="Gray"
+                       FontSize="12"
+                       VerticalAlignment="Bottom"
+                       TextTrimming="CharacterEllipsis"/>
 
             <TextBlock x:Name="VersionText" Grid.Column="3"
-               Text="v0.0.0"
-               Foreground="Gray"
-               FontSize="12"
-               FontWeight="SemiBold"
-               VerticalAlignment="Bottom"
-               Margin="10,0,0,0"
-               Cursor="Hand"
-               TextDecorations="Underline"
-               ToolTip="Показать историю изменений"
-               MouseLeftButtonUp="VersionText_MouseLeftButtonUp"/>
+                       Text="v0.0.0"
+                       Foreground="Gray"
+                       FontSize="12"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Bottom"
+                       Margin="10,0,0,0"
+                       Cursor="Hand"
+                       TextDecorations="Underline"
+                       ToolTip="Показать историю изменений"
+                       MouseLeftButtonUp="VersionText_MouseLeftButtonUp"/>
         </Grid>
     </Grid>
 </Window>
