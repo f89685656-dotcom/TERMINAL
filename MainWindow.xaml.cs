@@ -19,6 +19,7 @@ using System.Windows.Threading;
 
 namespace TERMINAL
 {
+
     public class ConnectedClient : INotifyPropertyChanged
     {
         private bool _isSelected = true;
@@ -379,6 +380,16 @@ namespace TERMINAL
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    public class LogEntry
+    {
+        public DateTime Time { get; set; }
+        public string Message { get; set; } = "";
+        public Brush Color { get; set; } = Brushes.Black;
+
+        public string TimeText => Time.ToString("HH:mm:ss");
+        public string DisplayText => $"[{TimeText}] {Message}";
+    }
+
     public partial class MainWindow : Window
     {
         private TcpClient? _client;
@@ -521,6 +532,13 @@ namespace TERMINAL
         private DateTime _lastAgkStatusRequest = DateTime.MinValue;
         private int _agkStatusFailCount = 0;
         private const int AgkStatusRequestIntervalMs = 1000;
+
+        // ── Журнал событий ──
+        private readonly ObservableCollection<LogEntry> _logEntries = new();
+        private Window? _logWindow = null;
+        private System.Windows.Controls.ListBox? _logListBox = null;
+        private System.Windows.Controls.TextBox? _logFilterBox = null;
+        private const int LogMaxEntries = 5000;
 
         public MainWindow()
         {
@@ -4341,59 +4359,67 @@ namespace TERMINAL
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            if (VersionText != null)
-                VersionText.Text = GetAppVersion();
-
-            AskForStartupMode();
-
-            StartBroadcastServer();
-
-            _ = Task.Run(ConnectToDeviceLoopAsync);
-
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            _timer.Tick += Timer_Tick;
-            _timer.Start();
-
-            await Task.Delay(500);
-            await RefreshFurnaceSetPointAsync();
-
-            _furnaceTempTimer = new DispatcherTimer
+            try
             {
-                Interval = TimeSpan.FromSeconds(1)
-            };
-            _furnaceTempTimer.Tick += async (s, e) =>
-            {
+                if (VersionText != null)
+                    VersionText.Text = GetAppVersion();
+
+                AppendLog($"Программа запущена, версия {GetAppVersion()}", Brushes.Green);
+
+                AskForStartupMode();
+                StartBroadcastServer();
+
+                _ = Task.Run(ConnectToDeviceLoopAsync);
+
+                _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _timer.Tick += Timer_Tick;
+                _timer.Start();
+
+                await Task.Delay(500);
+                await RefreshFurnaceSetPointAsync();
+
+                _furnaceTempTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(1)
+                };
+                _furnaceTempTimer.Tick += async (s, e) =>
+                {
+                    await RefreshFurnaceCurrentTempAsync();
+                    await RefreshFurnaceSetPointAsync();
+                    UpdateStabilizationTimer();
+                };
+                _furnaceTempTimer.Start();
+
                 await RefreshFurnaceCurrentTempAsync();
                 await RefreshFurnaceSetPointAsync();
                 UpdateStabilizationTimer();
-            };
-            _furnaceTempTimer.Start();
 
-            await RefreshFurnaceCurrentTempAsync();
-            await RefreshFurnaceSetPointAsync();
-            UpdateStabilizationTimer();
+                _platinaTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(1)
+                };
+                _platinaTimer.Tick += async (s, e) => await RefreshPlatinaAsync();
+                _platinaTimer.Start();
 
-            _platinaTimer = new DispatcherTimer
+                await RefreshPlatinaAsync();
+
+                _sensorUiTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(1)
+                };
+                _sensorUiTimer.Tick += (s, e) => RefreshSensorUiFromClients();
+                _sensorUiTimer.Start();
+
+                RefreshSensorUiFromClients();
+                UpdateSktbPanelVisibility();
+
+                UpdateAutoStartInfo();
+                UpdateStartButtonMode();
+            }
+            catch (Exception ex)
             {
-                Interval = TimeSpan.FromSeconds(1)
-            };
-            _platinaTimer.Tick += async (s, e) => await RefreshPlatinaAsync();
-            _platinaTimer.Start();
-
-            await RefreshPlatinaAsync();
-
-            _sensorUiTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            };
-            _sensorUiTimer.Tick += (s, e) => RefreshSensorUiFromClients();
-            _sensorUiTimer.Start();
-
-            RefreshSensorUiFromClients();
-            UpdateSktbPanelVisibility();
-
-            UpdateAutoStartInfo();
-            UpdateStartButtonMode();
+                AppendLog($"Ошибка инициализации окна: {ex.Message}", Brushes.OrangeRed);
+            }
         }
 
         private async Task ConnectToDeviceLoopAsync()
@@ -4661,25 +4687,400 @@ namespace TERMINAL
             if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatus(text, running)); return; }
             StatusText.Text = text;
             StatusText.Foreground = running ? Brushes.Green : Brushes.Gray;
+
+            AppendLog(text, running ? Brushes.Green : Brushes.Gray);
         }
 
         private void SetStatusSuccess(string text)
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusSuccess(text)); return; }
             StatusText.Text = text; StatusText.Foreground = Brushes.Green;
+            AppendLog(text, Brushes.Green);
         }
 
         private void SetStatusWarning(string text)
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusWarning(text)); return; }
             StatusText.Text = text; StatusText.Foreground = Brushes.Goldenrod;
+            AppendLog(text, Brushes.Goldenrod);
         }
 
         private void SetStatusError(string text)
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatusError(text)); return; }
             StatusText.Text = text; StatusText.Foreground = Brushes.OrangeRed;
+            AppendLog(text, Brushes.OrangeRed);
         }
+
+
+
+        // ═══════════════════════════════════════════════════════════════════
+        // ЖУРНАЛ СОБЫТИЙ
+        // ═══════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Добавляет запись в журнал. Вызывается из всех SetStatus*-методов.
+        /// </summary>
+        private void AppendLog(string message, Brush color)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => AppendLog(message, color));
+                return;
+            }
+
+            if (string.IsNullOrEmpty(message)) return;
+
+            // Не плодим дубликаты подряд (одинаковые сообщения в пределах 1 сек)
+            if (_logEntries.Count > 0)
+            {
+                var last = _logEntries[_logEntries.Count - 1];
+                if (last.Message == message
+                    && (DateTime.Now - last.Time).TotalSeconds < 1.0)
+                {
+                    // Обновляем только время — не хотим засорять лог
+                    last.Time = DateTime.Now;
+                    OnPropertyChangedForLogList();
+                    return;
+                }
+            }
+
+            _logEntries.Add(new LogEntry
+            {
+                Time = DateTime.Now,
+                Message = message,
+                Color = color
+            });
+
+            // Ограничиваем размер
+            while (_logEntries.Count > LogMaxEntries)
+                _logEntries.RemoveAt(0);
+
+            // Автопрокрутка к последней строке, если окно открыто
+            if (_logListBox != null && _logListBox.Items.Count > 0)
+            {
+                try
+                {
+                    _logListBox.ScrollIntoView(
+                        _logListBox.Items[_logListBox.Items.Count - 1]);
+                }
+                catch { }
+            }
+        }
+
+        private void OnPropertyChangedForLogList()
+        {
+            if (_logListBox == null) return;
+            try
+            {
+                var items = _logListBox.Items;
+                if (items.Count > 0)
+                    _logListBox.ScrollIntoView(items[items.Count - 1]);
+            }
+            catch { }
+        }
+
+        private void ShowLogButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_logWindow != null && _logWindow.IsVisible)
+            {
+                _logWindow.Activate();
+                return;
+            }
+
+            _logWindow = new Window
+            {
+                Title = "Журнал событий — T.E.R.M.I.N.A.L.",
+                Width = 900,
+                Height = 520,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.CanResize,
+                Background = new SolidColorBrush(Color.FromRgb(0xF7, 0xF7, 0xF7)),
+                MinWidth = 480,
+                MinHeight = 300
+            };
+
+            var root = new System.Windows.Controls.Grid { Margin = new Thickness(10) };
+            root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+
+            // ── Верхняя панель: фильтр + кнопки ──
+            var topPanel = new System.Windows.Controls.DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+
+            var btnClear = new System.Windows.Controls.Button
+            {
+                Content = "Очистить",
+                Width = 100,
+                Height = 26,
+                Margin = new Thickness(6, 0, 0, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0xB0, 0xA0, 0x50)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+            System.Windows.Controls.DockPanel.SetDock(btnClear, System.Windows.Controls.Dock.Right);
+            topPanel.Children.Add(btnClear);
+
+            var btnSave = new System.Windows.Controls.Button
+            {
+                Content = "Сохранить в файл",
+                Width = 150,
+                Height = 26,
+                Margin = new Thickness(6, 0, 0, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0x50, 0x90, 0xD0)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+            System.Windows.Controls.DockPanel.SetDock(btnSave, System.Windows.Controls.Dock.Right);
+            topPanel.Children.Add(btnSave);
+
+            var btnCopyAll = new System.Windows.Controls.Button
+            {
+                Content = "Копировать всё",
+                Width = 130,
+                Height = 26,
+                Margin = new Thickness(6, 0, 0, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0x80, 0xB0, 0x80)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+            System.Windows.Controls.DockPanel.SetDock(btnCopyAll, System.Windows.Controls.Dock.Right);
+            topPanel.Children.Add(btnCopyAll);
+
+            var filterPanel = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal
+            };
+
+            var filterLabel = new System.Windows.Controls.TextBlock
+            {
+                Text = "Фильтр:",
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0),
+                FontSize = 12
+            };
+            filterPanel.Children.Add(filterLabel);
+
+            _logFilterBox = new System.Windows.Controls.TextBox
+            {
+                Width = 260,
+                Height = 26,
+                FontSize = 12,
+                Padding = new Thickness(4, 2, 4, 2),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                ToolTip = "Показать только строки, содержащие этот текст"
+            };
+            filterPanel.Children.Add(_logFilterBox);
+
+            var filterHint = new System.Windows.Controls.TextBlock
+            {
+                Text = "(пусто — показывать всё)",
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 0, 0),
+                FontSize = 11,
+                Foreground = Brushes.Gray
+            };
+            filterPanel.Children.Add(filterHint);
+
+            System.Windows.Controls.DockPanel.SetDock(filterPanel, System.Windows.Controls.Dock.Left);
+            topPanel.Children.Add(filterPanel);
+
+            System.Windows.Controls.Grid.SetRow(topPanel, 0);
+            root.Children.Add(topPanel);
+
+            // ── Список записей ──
+            _logListBox = new System.Windows.Controls.ListBox
+            {
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 12,
+                Background = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+                BorderThickness = new Thickness(1),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
+            };
+            System.Windows.Controls.ScrollViewer.SetVerticalScrollBarVisibility(
+                _logListBox, System.Windows.Controls.ScrollBarVisibility.Auto);
+            System.Windows.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(
+                _logListBox, System.Windows.Controls.ScrollBarVisibility.Auto);
+
+            // Шаблон строки журнала
+            var itemTemplate = new DataTemplate();
+            var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+            factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty,
+                new System.Windows.Data.Binding(nameof(LogEntry.DisplayText)));
+            factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty,
+                new System.Windows.Data.Binding(nameof(LogEntry.Color)));
+            factory.SetValue(System.Windows.Controls.TextBlock.FontFamilyProperty,
+                new FontFamily("Consolas"));
+            factory.SetValue(System.Windows.Controls.TextBlock.FontSizeProperty, 12.0);
+            factory.SetValue(System.Windows.Controls.TextBlock.TextWrappingProperty,
+                TextWrapping.NoWrap);
+            itemTemplate.VisualTree = factory;
+
+            _logListBox.ItemTemplate = itemTemplate;
+            _logListBox.ItemsSource = _logEntries;
+
+            System.Windows.Controls.Grid.SetRow(_logListBox, 1);
+            root.Children.Add(_logListBox);
+
+            // ── Нижняя панель: счётчик ──
+            var bottomPanel = new System.Windows.Controls.DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+
+            var counter = new System.Windows.Controls.TextBlock
+            {
+                FontSize = 11,
+                Foreground = Brushes.Gray,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            void UpdateCounter()
+            {
+                counter.Text = $"Записей: {_logEntries.Count} (максимум {LogMaxEntries})";
+            }
+
+            _logEntries.CollectionChanged += (s, ev) => UpdateCounter();
+            UpdateCounter();
+
+            System.Windows.Controls.DockPanel.SetDock(counter, System.Windows.Controls.Dock.Left);
+            bottomPanel.Children.Add(counter);
+
+            var closeBtn = new System.Windows.Controls.Button
+            {
+                Content = "Закрыть",
+                Width = 100,
+                Height = 26,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Background = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+            System.Windows.Controls.DockPanel.SetDock(closeBtn, System.Windows.Controls.Dock.Right);
+            bottomPanel.Children.Add(closeBtn);
+
+            System.Windows.Controls.Grid.SetRow(bottomPanel, 2);
+            root.Children.Add(bottomPanel);
+
+            // ── Обработчики ──
+
+            btnCopyAll.Click += (s, ev) =>
+            {
+                var sb = new StringBuilder();
+                foreach (var entry in _logEntries)
+                    sb.AppendLine(entry.DisplayText);
+
+                try
+                {
+                    Clipboard.SetText(sb.ToString());
+                    counter.Text = "Скопировано в буфер обмена";
+                }
+                catch
+                {
+                    MessageBox.Show("Не удалось скопировать в буфер обмена.");
+                }
+            };
+
+            btnSave.Click += (s, ev) =>
+            {
+                var sfd = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Текстовые файлы (*.txt)|*.txt|Все файлы (*.*)|*.*",
+                    FileName = $"TERMINAL_log_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt",
+                    Title = "Сохранить журнал"
+                };
+
+                if (sfd.ShowDialog() != true) return;
+
+                try
+                {
+                    var sb = new StringBuilder();
+                    foreach (var entry in _logEntries)
+                        sb.AppendLine(entry.DisplayText);
+
+                    File.WriteAllText(sfd.FileName, sb.ToString(), Encoding.UTF8);
+                    counter.Text = $"Сохранено: {Path.GetFileName(sfd.FileName)}";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка сохранения: {ex.Message}");
+                }
+            };
+
+            btnClear.Click += (s, ev) =>
+            {
+                if (MessageBox.Show("Очистить журнал?", "Подтверждение",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                    return;
+
+                _logEntries.Clear();
+            };
+
+            closeBtn.Click += (s, ev) => _logWindow.Close();
+
+            // ── Фильтрация ──
+            _logFilterBox.TextChanged += (s, ev) =>
+            {
+                ApplyLogFilter();
+            };
+
+            _logWindow.Content = root;
+            _logWindow.Closed += (s, ev) =>
+            {
+                _logWindow = null;
+                _logListBox = null;
+                _logFilterBox = null;
+            };
+
+            _logWindow.Show();
+
+            // Первый прогон фильтра — чтобы сразу применить, если что-то было введено
+            ApplyLogFilter();
+        }
+
+        /// <summary>
+        /// Применяет фильтр по тексту к содержимому списка.
+        /// Использует CollectionView — не пересоздаёт коллекцию.
+        /// </summary>
+        private void ApplyLogFilter()
+        {
+            if (_logListBox == null) return;
+
+            var view = System.Windows.Data.CollectionViewSource
+                .GetDefaultView(_logEntries);
+
+            string filter = _logFilterBox?.Text?.Trim() ?? "";
+
+            if (string.IsNullOrEmpty(filter))
+            {
+                view.Filter = null;
+            }
+            else
+            {
+                view.Filter = obj =>
+                {
+                    if (obj is LogEntry entry)
+                        return entry.Message.IndexOf(filter,
+                            StringComparison.OrdinalIgnoreCase) >= 0;
+                    return false;
+                };
+            }
+
+            view.Refresh();
+
+            // Прокрутка к концу
+            if (_logListBox.Items.Count > 0)
+            {
+                try { _logListBox.ScrollIntoView(_logListBox.Items[_logListBox.Items.Count - 1]); }
+                catch { }
+            }
+        }
+
+
+
 
         private static string GetAppVersion()
         {
