@@ -316,12 +316,25 @@ namespace TERMINAL
 
         private void RunExcelMacroButton_Click(object sender, RoutedEventArgs e)
         {
+            RunExcelMacroInternal(silent: false);
+        }
+
+        /// <summary>
+        /// Основная логика запуска Excel-макросов.
+        /// </summary>
+        /// <param name="silent">
+        /// true — тихий режим (автозапуск): ошибки только в журнал, без MessageBox.
+        /// false — обычный режим (кнопка): ошибки показываются MessageBox.
+        /// </param>
+        private void RunExcelMacroInternal(bool silent)
+        {
             // ─── 1. Данные из UI ────────────────────────────────────────────
             string dataFolder = SavePathBox.Text ?? "";
             if (string.IsNullOrWhiteSpace(dataFolder) || !Directory.Exists(dataFolder))
             {
-                MessageBox.Show("Папка сохранения не существует:\n" + dataFolder,
-                                "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                string msg = "Папка сохранения не существует:\n" + dataFolder;
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -346,34 +359,39 @@ namespace TERMINAL
 
                 if (csvPath == null)
                 {
-                    MessageBox.Show("CSV-файл не найден. Пробовал:\n" +
-                                    string.Join("\n", candidates),
-                                    "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    string msg = "CSV-файл не найден. Пробовал:\n" + string.Join("\n", candidates);
+                    AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
+                AppendLog($"Excel: использован свежий файл {Path.GetFileName(csvPath)}", Brushes.Gray);
                 StatusText.Text = $"Excel: использован свежий файл {Path.GetFileName(csvPath)}";
             }
 
+            // Количество датчиков (= CASE для первого макроса) — из выбранного клиента
             int sensorCount = GetSelectedClientCase();
             if (sensorCount < 1 || sensorCount > 10)
             {
-                MessageBox.Show("Количество датчиков (CASE) должно быть от 1 до 10.\n\n" +
-                                "Отметьте клиента галочкой и введите CASE рядом с SID.",
-                                "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                string msg = "Количество датчиков (CASE) должно быть от 1 до 10.\n\n" +
+                             "Отметьте клиента галочкой и введите CASE рядом с SID.";
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
+            // CASE для второго макроса — из активного задания пакета
             int caseForCopy = GetCurrentBatchCase();
-
             if (caseForCopy == 0)
             {
-                MessageBox.Show("Не удалось определить номер текущего задания пакета.\n" +
-                                "Убедитесь, что пакетный режим запущен.",
-                                "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                string msg = "Не удалось определить номер текущего задания пакета.\n" +
+                             "Убедитесь, что пакетный режим запущен.";
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
+            // Папка для второго макроса = родительская от "Данные"
             string parentFolder = dataFolder.EndsWith("Данные", StringComparison.OrdinalIgnoreCase)
                 ? dataFolder.Substring(0, dataFolder.Length - "Данные".Length).TrimEnd('\\')
                 : (Directory.GetParent(dataFolder)?.FullName ?? dataFolder);
@@ -393,12 +411,16 @@ namespace TERMINAL
                     addinPath = altPath;
                 else
                 {
-                    MessageBox.Show("Не найден файл надстройки IvanoFF.xlam.\n\n" +
-                                    "Проверьте путь:\n" + addinPath + "\n" + altPath,
-                                    "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    string msg = "Не найден файл надстройки IvanoFF.xlam.\n\n" +
+                                 "Проверьте путь:\n" + addinPath + "\n" + altPath;
+                    AppendLog($"Excel: {msg}", Brushes.Red);
+                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
             }
+
+            AppendLog($"Excel: запуск макросов для {Path.GetFileName(csvPath)} " +
+                      $"(датчиков={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
 
             // ─── 3. Запускаем Excel ─────────────────────────────────────────
             object? xlApp = null;
@@ -409,17 +431,18 @@ namespace TERMINAL
                 Type? excelType = Type.GetTypeFromProgID("Excel.Application");
                 if (excelType == null)
                 {
-                    MessageBox.Show("Excel не установлен на этой машине.",
-                                    "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                    string msg = "Excel не установлен на этой машине.";
+                    AppendLog($"Excel: {msg}", Brushes.Red);
+                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
                 dynamic xl = Activator.CreateInstance(excelType)!;
                 xlApp = xl;
-                xl.Visible = false;          // true ← для отладки
+                xl.Visible = true;          // ← для отладки; в релизе false
                 xl.DisplayAlerts = false;
 
-                // Создаём временную книгу (обход бага с AddIns)
+                // Создаём временную книгу — обход бага с AddIns
                 dynamic tempBook = xl.Workbooks.Add();
                 tempBook.Close(false);
 
@@ -452,6 +475,8 @@ namespace TERMINAL
                     newAddin.Installed = true;
                 }
 
+                AppendLog("Excel: надстройка IvanoFF загружена", Brushes.Gray);
+
                 // Открываем CSV
                 csvBook = xl.Workbooks.Open(csvPath);
                 dynamic wb = csvBook;
@@ -459,41 +484,60 @@ namespace TERMINAL
 
                 // ─── Пишем параметры в скрытые ячейки Z1, Z2, Z3 ─────────
                 dynamic sheet = wb.ActiveSheet;
-                sheet.Range("Z1").Value = sensorCount;      // количество датчиков
-                sheet.Range("Z2").Value = caseForCopy;      // CASE для второго макроса
-                sheet.Range("Z3").Value = parentFolder;     // путь без \Данные
+                sheet.Range("Z1").Value = sensorCount;
+                sheet.Range("Z2").Value = caseForCopy;
+                sheet.Range("Z3").Value = parentFolder;
 
-                // Скрываем значения — не обязательно, но чище
-                try
-                {
-                    sheet.Range("Z1:Z3").Font.Color = sheet.Range("Z1").Interior.Color;
-                }
-                catch { }
-
-                // ─── Вызываем макросы-обёртки ────────────────────────────
+                // ─── Макрос 1: Фильтр КОСА ────────────────────────────────
+                AppendLog("Excel: запуск макроса «Фильтр КОСА»", Brushes.Blue);
                 xl.Run("Filter_KOSA_GUI_Auto");
+                AppendLog("Excel: макрос «Фильтр КОСА» выполнен", Brushes.Green);
 
-                // Первый макрос сделал SaveAs — теперь активная книга другая.
-                // Записываем значения заново перед вторым макросом.
-                dynamic activeBook = xl.ActiveWorkbook;
-                dynamic activeSheet = activeBook.ActiveSheet;
-                activeSheet.Range("Z1").Value = sensorCount;
-                activeSheet.Range("Z2").Value = caseForCopy;
-                activeSheet.Range("Z3").Value = parentFolder;
-
+                // ─── Макрос 2: Universal Insert ───────────────────────────
+                AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
                 xl.Run("Universal_Insert_FULL_Auto");
+                AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
 
                 // Закрываем CSV
-                wb.Close(false);
+                try { wb.Close(false); } catch { }
                 csvBook = null;
 
+                AppendLog($"Excel: обработка завершена — {Path.GetFileName(csvPath)}", Brushes.Green);
                 StatusText.Text = $"Excel: обработка завершена — {Path.GetFileName(csvPath)}";
+            }
+            catch (System.Runtime.InteropServices.COMException comEx)
+            {
+                string msg = comEx.Message;
+                string friendly;
+
+                if (msg.Contains("Cannot run the macro"))
+                    friendly = "Макрос не найден в надстройке IvanoFF.xlam";
+                else if (msg.Contains("Unable to get the Add property"))
+                    friendly = "Не удалось загрузить надстройку IvanoFF.xlam";
+                else if (msg.Contains("method 'Run'"))
+                    friendly = "Ошибка вызова макроса (проверьте VBA)";
+                else
+                    friendly = $"Excel COM: {msg}";
+
+                AppendLog($"Excel: {friendly}", Brushes.OrangeRed);
+                if (!silent)
+                    MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Excel: ошибка — см. журнал";
+            }
+            catch (FileNotFoundException fnf)
+            {
+                string friendly = $"Файл не найден: {fnf.FileName}";
+                AppendLog($"Excel: {friendly}", Brushes.OrangeRed);
+                if (!silent)
+                    MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Excel: файл не найден";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка при работе с Excel:\n{ex.Message}",
-                                "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Excel: ошибка — см. диалог";
+                AppendLog($"Excel: {ex.GetType().Name} — {ex.Message}", Brushes.OrangeRed);
+                if (!silent)
+                    MessageBox.Show($"Ошибка: {ex.Message}", "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Excel: ошибка — см. журнал";
             }
             finally
             {
@@ -527,9 +571,9 @@ namespace TERMINAL
 
 
         /// <summary>
-        /// Возвращает номер текущего активного задания в пакете (1-based)
-        /// как реальный порядковый номер в _batchJobs (учитывая пропущенные).
-        /// Если пакет не запущен или активного задания нет — 0.
+        /// Возвращает CASE текущего активного задания пакета.
+        /// Берёт значение из поля CaseText активного задания.
+        /// Если пакет не запущен или активного нет — возвращает 0.
         /// </summary>
         private int GetCurrentBatchCase()
         {
@@ -538,14 +582,15 @@ namespace TERMINAL
             for (int i = 0; i < _batchJobs.Count; i++)
             {
                 var job = _batchJobs[i];
-
                 string st = job.StatusText ?? "";
+
+                // Активное задание определяется по статусу
                 if (st.Contains("запись") || st.Contains("стабилизация") ||
                     st.Contains("проверка") || st.Contains("Идёт съём"))
                 {
-                    // Возвращаем РЕАЛЬНЫЙ номер задания в списке (i + 1),
-                    // а не порядковый номер среди активных.
-                    return i + 1;
+                    if (int.TryParse(job.CaseText, out int c))
+                        return c;
+                    return 0;
                 }
             }
 

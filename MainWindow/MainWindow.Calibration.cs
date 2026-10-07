@@ -213,11 +213,26 @@ namespace TERMINAL
 
                             await ClearDataCoreAsync(silent: true);
                         }
+
                         else
                         {
                             SetStatusWarning(
                                 $"Файл не найден на диске: {_lastSavedFilePath} — очистка данных отменена");
                         }
+
+                        // ─── Автозапуск Excel-макросов (до смены уставки) ───
+                        if (programCompleted && !_stopRequested && _batchRunning)
+                        {
+                            try
+                            {
+                                RunExcelMacroInternal(silent: true);
+                            }
+                            catch (Exception ex)
+                            {
+                                AppendLog($"Автозапуск Excel: {ex.Message}", Brushes.OrangeRed);
+                            }
+                        }
+
                     }
                 }
 
