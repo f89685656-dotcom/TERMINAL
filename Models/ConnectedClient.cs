@@ -266,5 +266,17 @@ namespace TERMINAL.Models
                 StatusText = "Очистка не удалась";
             });
         }
+
+        private string _caseValue = "1";
+        public string CaseValue
+        {
+            get => _caseValue;
+            set
+            {
+                if (_caseValue == value) return;
+                _caseValue = value ?? "1";
+                OnPropertyChanged(nameof(CaseValue));
+            }
+        }
     }
 }

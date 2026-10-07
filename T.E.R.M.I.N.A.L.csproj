@@ -1,38 +1,40 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-    <ApplicationIcon>6.ico</ApplicationIcon>
-    <AssemblyName>TERMINAL</AssemblyName>
-    <Version>1.1.21</Version>
-    <PackageIcon>6.png</PackageIcon>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+		<ApplicationIcon>6.ico</ApplicationIcon>
+		<AssemblyName>TERMINAL</AssemblyName>
+		<Version>1.2.2</Version>
+		<PackageIcon>6.png</PackageIcon>
+		<Platforms>AnyCPU;x64</Platforms>
+		<PlatformTarget>x64</PlatformTarget>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <None Remove="Images\AGK.png" />
-    <None Remove="Images\ST_351.png" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Remove="Images\AGK.png" />
+		<None Remove="Images\ST_351.png" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Content Include="6.ico" />
-    <Content Include="Images\AGK.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Images\ST_351.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="TERMINAL.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="6.ico" />
+		<Content Include="Images\AGK.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="Images\ST_351.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="TERMINAL.ico">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="HidSharp" Version="2.6.4" />
-    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="HidSharp" Version="2.6.4" />
+		<PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
+	</ItemGroup>
 
 </Project>

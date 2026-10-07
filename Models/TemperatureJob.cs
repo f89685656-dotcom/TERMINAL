@@ -13,6 +13,18 @@ namespace TERMINAL.Models
         private bool _isEditable = true;
         private bool _isCalibrationMode = true;
         private string _cyclesText = "10";
+
+        private string _caseText = "1";
+        public string CaseText
+        {
+            get => _caseText;
+            set
+            {
+                if (_caseText == value) return;
+                _caseText = value ?? "1";
+                OnPropertyChanged(nameof(CaseText));
+            }
+        }
         private string _startStepText = "1";
 
         public string IndexText { get; set; } = "";

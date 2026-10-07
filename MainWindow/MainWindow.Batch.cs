@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -26,6 +27,7 @@ namespace TERMINAL
                 StabilizationMinutesText = "120",
                 CyclesText = "10",
                 StartStepText = "1",
+                CaseText = "1",
                 IsEnabled = true,
                 IsCalibrationMode = true
             };
@@ -1008,6 +1010,7 @@ namespace TERMINAL
                     IsCalibrationMode = dto.IsCalibrationMode,
                     CyclesText = dto.Cycles,
                     StartStepText = dto.StartStep
+
                 });
             }
 
@@ -1142,7 +1145,8 @@ namespace TERMINAL
                     IsEnabled = j.IsEnabled,
                     IsCalibrationMode = j.IsCalibrationMode,
                     Cycles = j.CyclesText,
-                    StartStep = j.StartStepText
+                    StartStep = j.StartStepText,
+                    Case = j.CaseText
                 }).ToList()
             };
 

@@ -11,6 +11,7 @@ namespace TERMINAL.Models
         public bool IsCalibrationMode { get; set; } = true;
         public string Cycles { get; set; } = "10";
         public string StartStep { get; set; } = "1";
+        public string Case { get; set; } = "1";
     }
 
     public class BatchPreset
@@ -18,6 +19,7 @@ namespace TERMINAL.Models
         public string Name { get; set; } = "";
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public List<BatchJobDto> Jobs { get; set; } = new();
+
 
         public string DisplayText => $"{Name}  ({Jobs.Count} заданий)";
     }
