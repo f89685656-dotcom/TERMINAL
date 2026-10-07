@@ -130,11 +130,18 @@ namespace TERMINAL
         private async Task RunCalibrationModeAsync(int startStep)
         {
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure!, out var steps))
-            { MessageBox.Show($"Для «{_selectedTargetPressure}» не заданы шаги."); return; }
+            {
+                MessageBox.Show($"Для «{_selectedTargetPressure}» не заданы шаги.");
+                return;
+            }
 
             bool noConnection;
             lock (_streamLock) { noConnection = (_stream == null); }
-            if (noConnection) { MessageBox.Show("Нет соединения с прибором."); return; }
+            if (noConnection)
+            {
+                MessageBox.Show("Нет соединения с прибором.");
+                return;
+            }
 
             if (startStep < 1 || startStep > steps.Length)
             {
@@ -212,27 +219,26 @@ namespace TERMINAL
                                 $"Файл подтверждён на диске: {Path.GetFileName(_lastSavedFilePath)}");
 
                             await ClearDataCoreAsync(silent: true);
-                        }
 
+                            // ─── Автозапуск Excel-макросов (до смены уставки) ───
+                            if (!_stopRequested && !_batchStopRequested)
+                            {
+                                try
+                                {
+                                    AppendLog("Excel: автозапуск после градуировки", Brushes.Blue);
+                                    RunExcelMacroInternal(silent: true);
+                                }
+                                catch (Exception ex)
+                                {
+                                    AppendLog($"Автозапуск Excel: {ex.Message}", Brushes.OrangeRed);
+                                }
+                            }
+                        }
                         else
                         {
                             SetStatusWarning(
                                 $"Файл не найден на диске: {_lastSavedFilePath} — очистка данных отменена");
                         }
-
-                        // ─── Автозапуск Excel-макросов (до смены уставки) ───
-                        if (programCompleted && !_stopRequested && _batchRunning)
-                        {
-                            try
-                            {
-                                RunExcelMacroInternal(silent: true);
-                            }
-                            catch (Exception ex)
-                            {
-                                AppendLog($"Автозапуск Excel: {ex.Message}", Brushes.OrangeRed);
-                            }
-                        }
-
                     }
                 }
 

@@ -357,10 +357,10 @@
                                                         <!-- 7 шаг/цикл -->
                                                         <ColumnDefinition Width="36"/>
                                                         <!-- 8 подпись -->
+                                                        <ColumnDefinition Width="90"/>
+                                                        <!-- 9 Точка -->
                                                         <ColumnDefinition Width="*"/>
-                                                        <!-- 9 StatusText -->
-                                                        <ColumnDefinition Width="50"/>
-                                                        <!-- 10 CASE -->
+                                                        <!-- 10 StatusText -->
                                                         <ColumnDefinition Width="Auto"/>
                                                         <!-- 11 ✕ -->
                                                     </Grid.ColumnDefinitions>
@@ -438,20 +438,12 @@
                                                                VerticalAlignment="Center" Margin="3,0,5,0"
                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
 
-                                                    <TextBlock Grid.Column="9"
-                                                               Text="{Binding StatusText}"
-                                                               FontSize="10"
-                                                               Foreground="{Binding StatusColor}"
-                                                               VerticalAlignment="Center"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               Margin="0,0,5,0"/>
-
-                                                    <!-- CASE -->
-                                                    <StackPanel Grid.Column="10"
+                                                    <!-- Точка -->
+                                                    <StackPanel Grid.Column="9"
                                                                 Orientation="Horizontal"
                                                                 VerticalAlignment="Center"
                                                                 Margin="0,0,5,0">
-                                                        <TextBlock Text="CASE:" FontSize="10"
+                                                        <TextBlock Text="Точка:" FontSize="10"
                                                                    Foreground="#FF505050"
                                                                    VerticalAlignment="Center"
                                                                    Margin="0,0,3,0"/>
@@ -460,8 +452,16 @@
                                                                  HorizontalContentAlignment="Center"
                                                                  VerticalContentAlignment="Center"
                                                                  IsEnabled="{Binding IsEditable}"
-                                                                 ToolTip="CASE: 1..10 или -1..-5"/>
+                                                                 ToolTip="Точка: 1..10 или -1..-5"/>
                                                     </StackPanel>
+
+                                                    <TextBlock Grid.Column="10"
+                                                               Text="{Binding StatusText}"
+                                                               FontSize="10"
+                                                               Foreground="{Binding StatusColor}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Margin="0,0,5,0"/>
 
                                                     <Button Grid.Column="11"
                                                             Content="✕" FontSize="10"
@@ -1156,7 +1156,7 @@
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
 
-                                    <TextBlock Grid.Column="5" Text="CASE:"
+                                    <TextBlock Grid.Column="5" Text="Точка:"
                                                FontSize="11" VerticalAlignment="Center"
                                                Margin="0,0,4,0"/>
 
@@ -1166,7 +1166,7 @@
                                              HorizontalContentAlignment="Center"
                                              VerticalContentAlignment="Center"
                                              Margin="0,0,6,0"
-                                             ToolTip="CASE: 1..10 или -1..-5"/>
+                                             ToolTip="Точка: 1..10 или -1..-5"/>
 
                                     <TextBlock Grid.Column="7" Text="{Binding StatusText}"
                                                FontSize="12" FontWeight="SemiBold"
