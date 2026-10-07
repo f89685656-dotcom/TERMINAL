@@ -1352,6 +1352,13 @@
                         Padding="4,3" Margin="6,0,0,0"
                         Background="#FFD08080"
                         Click="RemoveOffline_Click"/>
+                <Button x:Name="RunExcelMacroButton"
+                        Content="Открыть в Excel"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Height="28" Width="130" FontSize="12"
+                        Padding="4,3" Margin="6,0,0,0"
+                        Background="#FF6A4FA0"
+                        Click="RunExcelMacroButton_Click"/>
             </StackPanel>
         </Grid>
 
@@ -1384,8 +1391,8 @@
                                     <Grid.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Отключить"
-                                                      Click="DisconnectClient_Click"
-                                                      Tag="{Binding}"/>
+                      Click="DisconnectClient_Click"
+                      Tag="{Binding}"/>
                                         </ContextMenu>
                                     </Grid.ContextMenu>
                                     <Grid.ColumnDefinitions>
@@ -1394,52 +1401,72 @@
                                         <ColumnDefinition Width="*" MinWidth="160"/>
                                         <ColumnDefinition Width="*" MinWidth="120"/>
                                         <ColumnDefinition Width="*" MinWidth="120"/>
-                                        <ColumnDefinition Width="*" MinWidth="120"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*" MinWidth="100"/>
                                     </Grid.ColumnDefinitions>
 
                                     <CheckBox Grid.Column="0"
-                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                              VerticalAlignment="Center"
-                                              Margin="0,0,6,0"/>
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                          VerticalAlignment="Center"
+                                                          Margin="0,0,6,0"/>
 
                                     <Ellipse Grid.Column="1"
-                                             Width="12" Height="12"
-                                             Fill="{Binding StatusColor}"
-                                             VerticalAlignment="Center"
-                                             Margin="0,0,6,0"/>
+                                                         Width="12" Height="12"
+                                                         Fill="{Binding StatusColor}"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,6,0"/>
 
                                     <TextBlock Grid.Column="2"
-                                               Text="{Binding DisplayText}"
-                                               FontFamily="Consolas"
-                                               FontSize="12"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"
-                                               Margin="0,0,6,0"/>
+                                                       Text="{Binding DisplayText}"
+                                                       FontFamily="Consolas"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Margin="0,0,6,0"/>
 
                                     <TextBox Grid.Column="3"
-                                             Text="{Binding CustomName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             FontSize="12"
-                                             Padding="3,1"
-                                             VerticalContentAlignment="Center"
-                                             Margin="0,0,6,0"
-                                             ToolTip="Введите произвольное имя клиента"/>
+                                                         Text="{Binding CustomName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         FontSize="12"
+                                                         Padding="3,1"
+                                                         VerticalContentAlignment="Center"
+                                                         Margin="0,0,6,0"
+                                                         ToolTip="Введите произвольное имя клиента"/>
 
+                                    <!-- RoleLabel (Атм.давл./Темп. в печке) -->
                                     <TextBlock Grid.Column="4"
-                                               Text="{Binding RoleLabel}"
-                                               FontSize="11"
-                                               FontStyle="Italic"
-                                               Foreground="#FF2E6B4A"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"
-                                               Margin="0,0,6,0"/>
+                                                           Text="{Binding RoleLabel}"
+                                                           FontSize="11"
+                                                           FontStyle="Italic"
+                                                           Foreground="#FF2E6B4A"
+                                                           VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Margin="0,0,6,0"/>
 
+                                    <!-- CASE -->
                                     <TextBlock Grid.Column="5"
-                                               Text="{Binding StatusText}"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="Black"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
+                                                           Text="CASE:"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,4,0"/>
+
+                                    <TextBox Grid.Column="6"
+                                                             Width="40"
+                                                             Text="{Binding CaseValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             FontSize="12"
+                                                             Padding="3,1"
+                                                             HorizontalContentAlignment="Center"
+                                                             VerticalContentAlignment="Center"
+                                                             Margin="0,0,6,0"
+                                                             ToolTip="CASE: 1..10 или -1..-5"/>
+
+                                    <TextBlock Grid.Column="7"
+                                                               Text="{Binding StatusText}"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="Black"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

@@ -1,4 +1,5 @@
 ﻿using HidSharp;
+using SkiaSharp;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -9,6 +10,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -306,6 +308,241 @@ namespace TERMINAL
 
             base.OnClosed(e);
             Environment.Exit(0);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Работа с Excel
+        // ═══════════════════════════════════════════════════════════════════
+
+        private void RunExcelMacroButton_Click(object sender, RoutedEventArgs e)
+        {
+            // ─── 1. Данные из UI ────────────────────────────────────────────
+            string dataFolder = SavePathBox.Text ?? "";
+            if (string.IsNullOrWhiteSpace(dataFolder) || !Directory.Exists(dataFolder))
+            {
+                MessageBox.Show("Папка сохранения не существует:\n" + dataFolder,
+                                "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Уставка без плюса, без °C, без дробной части: "115.006" → "115"
+            string setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
+                .TrimStart('+').Replace(',', '.');
+            if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
+
+            string[] candidates =
+            {
+        Path.Combine(dataFolder, "+" + setpoint + ".csv"),
+        Path.Combine(dataFolder, setpoint + ".csv"),
+    };
+
+            string? csvPath = candidates.FirstOrDefault(File.Exists);
+
+            if (csvPath == null)
+            {
+                csvPath = Directory.GetFiles(dataFolder, "*.csv")
+                    .OrderByDescending(File.GetLastWriteTime)
+                    .FirstOrDefault();
+
+                if (csvPath == null)
+                {
+                    MessageBox.Show("CSV-файл не найден. Пробовал:\n" +
+                                    string.Join("\n", candidates),
+                                    "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                StatusText.Text = $"Excel: использован свежий файл {Path.GetFileName(csvPath)}";
+            }
+
+            int sensorCount = GetSelectedClientCase();
+            if (sensorCount < 1 || sensorCount > 10)
+            {
+                MessageBox.Show("Количество датчиков (CASE) должно быть от 1 до 10.\n\n" +
+                                "Отметьте клиента галочкой и введите CASE рядом с SID.",
+                                "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            int caseForCopy = GetCurrentBatchCase();
+            if (caseForCopy == 0)
+            {
+                MessageBox.Show("Не удалось определить номер текущего задания пакета.\n" +
+                                "Убедитесь, что пакетный режим запущен.",
+                                "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string parentFolder = dataFolder.EndsWith("Данные", StringComparison.OrdinalIgnoreCase)
+                ? dataFolder.Substring(0, dataFolder.Length - "Данные".Length).TrimEnd('\\')
+                : (Directory.GetParent(dataFolder)?.FullName ?? dataFolder);
+
+            // ─── 2. Путь к надстройке IvanoFF.xlam ─────────────────────────
+            string addinPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"Microsoft\AddIns\IvanoFF.xlam");
+
+            if (!File.Exists(addinPath))
+            {
+                string altPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    @"Microsoft\Excel\XLSTART\IvanoFF.xlam");
+
+                if (File.Exists(altPath))
+                    addinPath = altPath;
+                else
+                {
+                    MessageBox.Show("Не найден файл надстройки IvanoFF.xlam.\n\n" +
+                                    "Проверьте путь:\n" + addinPath + "\n" + altPath,
+                                    "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
+
+            // ─── 3. Запускаем Excel ─────────────────────────────────────────
+            object? xlApp = null;
+            object? csvBook = null;
+
+            try
+            {
+                Type? excelType = Type.GetTypeFromProgID("Excel.Application");
+                if (excelType == null)
+                {
+                    MessageBox.Show("Excel не установлен на этой машине.",
+                                    "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                dynamic xl = Activator.CreateInstance(excelType)!;
+                xlApp = xl;
+                xl.Visible = true;          // ← для отладки
+                xl.DisplayAlerts = false;
+
+                // Создаём временную книгу (обход бага с AddIns)
+                dynamic tempBook = xl.Workbooks.Add();
+                tempBook.Close(false);
+
+                // Загружаем надстройку
+                bool addinLoaded = false;
+                dynamic addins = xl.AddIns;
+
+                foreach (dynamic addin in addins)
+                {
+                    try
+                    {
+                        string name = addin.Name;
+                        string fullName = addin.FullName;
+
+                        if (name.IndexOf("IvanoFF", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            fullName.IndexOf("IvanoFF", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            addin.Installed = false;
+                            addin.Installed = true;
+                            addinLoaded = true;
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!addinLoaded)
+                {
+                    dynamic newAddin = addins.Add(addinPath);
+                    newAddin.Installed = true;
+                }
+
+                // Открываем CSV
+                csvBook = xl.Workbooks.Open(csvPath);
+                dynamic wb = csvBook;
+                wb.Activate();
+
+                // ─── Пишем параметры в скрытые ячейки Z1, Z2, Z3 ─────────
+                dynamic sheet = wb.ActiveSheet;
+                sheet.Range("Z1").Value = sensorCount;      // количество датчиков
+                sheet.Range("Z2").Value = caseForCopy;      // CASE для второго макроса
+                sheet.Range("Z3").Value = parentFolder;     // путь без \Данные
+
+                // Скрываем значения — не обязательно, но чище
+                try
+                {
+                    sheet.Range("Z1:Z3").Font.Color = sheet.Range("Z1").Interior.Color;
+                }
+                catch { }
+
+                // ─── Вызываем макросы-обёртки ────────────────────────────
+                xl.Run("Filter_KOSA_GUI_Auto");
+                xl.Run("Universal_Insert_FULL_Auto");
+
+                // Закрываем CSV
+                wb.Close(false);
+                csvBook = null;
+
+                StatusText.Text = $"Excel: обработка завершена — {Path.GetFileName(csvPath)}";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при работе с Excel:\n{ex.Message}",
+                                "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Excel: ошибка — см. диалог";
+            }
+            finally
+            {
+                if (csvBook != null)
+                {
+                    try { ((dynamic)csvBook).Close(false); } catch { }
+                }
+
+                if (xlApp != null)
+                {
+                    try { ((dynamic)xlApp).Quit(); } catch { }
+                    try { Marshal.ReleaseComObject(xlApp); } catch { }
+                    xlApp = null;
+                }
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+        }
+
+        /// <summary>
+        /// Возвращает CASE первого клиента с галочкой.
+        /// Если ни один не выбран или значение некорректное — 0.
+        /// </summary>
+        private int GetSelectedClientCase()
+        {
+            var client = _connectedClients.FirstOrDefault(c => c.IsSelected);
+            if (client == null) return 0;
+            return int.TryParse(client.CaseValue, out int c) ? c : 0;
+        }
+
+
+        /// <summary>
+        /// Возвращает номер текущего активного задания в пакете (1-based).
+        /// Ищет по _batchJobs, ориентируясь на StatusText.
+        /// Если пакет не запущен — 0.
+        /// </summary>
+        private int GetCurrentBatchCase()
+        {
+            if (!_batchRunning) return 0;
+
+            int activeCount = 0;
+            int totalActive = 0;
+
+            for (int i = 0; i < _batchJobs.Count; i++)
+            {
+                if (!_batchJobs[i].IsEnabled) continue;
+                totalActive++;
+
+                string st = _batchJobs[i].StatusText ?? "";
+                if (st.Contains("запись") || st.Contains("стабилизация") ||
+                    st.Contains("проверка") || st.Contains("Идёт съём"))
+                {
+                    activeCount = totalActive;
+                    return activeCount;
+                }
+            }
+
+            return 0;
         }
     }
 }
