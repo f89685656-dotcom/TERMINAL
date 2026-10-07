@@ -365,6 +365,7 @@ namespace TERMINAL
             }
 
             int caseForCopy = GetCurrentBatchCase();
+
             if (caseForCopy == 0)
             {
                 MessageBox.Show("Не удалось определить номер текущего задания пакета.\n" +
@@ -415,7 +416,7 @@ namespace TERMINAL
 
                 dynamic xl = Activator.CreateInstance(excelType)!;
                 xlApp = xl;
-                xl.Visible = true;          // ← для отладки
+                xl.Visible = false;          // true ← для отладки
                 xl.DisplayAlerts = false;
 
                 // Создаём временную книгу (обход бага с AddIns)
@@ -471,6 +472,15 @@ namespace TERMINAL
 
                 // ─── Вызываем макросы-обёртки ────────────────────────────
                 xl.Run("Filter_KOSA_GUI_Auto");
+
+                // Первый макрос сделал SaveAs — теперь активная книга другая.
+                // Записываем значения заново перед вторым макросом.
+                dynamic activeBook = xl.ActiveWorkbook;
+                dynamic activeSheet = activeBook.ActiveSheet;
+                activeSheet.Range("Z1").Value = sensorCount;
+                activeSheet.Range("Z2").Value = caseForCopy;
+                activeSheet.Range("Z3").Value = parentFolder;
+
                 xl.Run("Universal_Insert_FULL_Auto");
 
                 // Закрываем CSV
@@ -517,28 +527,25 @@ namespace TERMINAL
 
 
         /// <summary>
-        /// Возвращает номер текущего активного задания в пакете (1-based).
-        /// Ищет по _batchJobs, ориентируясь на StatusText.
-        /// Если пакет не запущен — 0.
+        /// Возвращает номер текущего активного задания в пакете (1-based)
+        /// как реальный порядковый номер в _batchJobs (учитывая пропущенные).
+        /// Если пакет не запущен или активного задания нет — 0.
         /// </summary>
         private int GetCurrentBatchCase()
         {
             if (!_batchRunning) return 0;
 
-            int activeCount = 0;
-            int totalActive = 0;
-
             for (int i = 0; i < _batchJobs.Count; i++)
             {
-                if (!_batchJobs[i].IsEnabled) continue;
-                totalActive++;
+                var job = _batchJobs[i];
 
-                string st = _batchJobs[i].StatusText ?? "";
+                string st = job.StatusText ?? "";
                 if (st.Contains("запись") || st.Contains("стабилизация") ||
                     st.Contains("проверка") || st.Contains("Идёт съём"))
                 {
-                    activeCount = totalActive;
-                    return activeCount;
+                    // Возвращаем РЕАЛЬНЫЙ номер задания в списке (i + 1),
+                    // а не порядковый номер среди активных.
+                    return i + 1;
                 }
             }
 
