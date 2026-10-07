@@ -290,10 +290,7 @@ namespace TERMINAL
             _logListBox.ContextMenu = ctxMenu;
             _logListBox.PreviewMouseRightButtonDown += (s, ev) =>
             {
-                var item = ItemsControl.ContainerFromElement(
-                    _logListBox, (DependencyObject)ev.OriginalSource) as ListBoxItem;
-
-                if (item != null)
+                if (ItemsControl.ContainerFromElement(_logListBox, (DependencyObject)ev.OriginalSource) is ListBoxItem item)
                 {
                     item.IsSelected = true;
                 }
@@ -464,10 +461,8 @@ namespace TERMINAL
 
                 foreach (var entry in _logEntries)
                 {
-                    bool match = entry.Message.IndexOf(filter,
-                        StringComparison.OrdinalIgnoreCase) >= 0
-                        || entry.DisplayText.IndexOf(filter,
-                        StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool match = entry.Message.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                              || entry.DisplayText.Contains(filter, StringComparison.OrdinalIgnoreCase);
 
                     if (match)
                     {
@@ -499,8 +494,7 @@ namespace TERMINAL
                 {
                     try
                     {
-                        _logListBox.ScrollIntoView(
-                            _logListBox.Items[_logListBox.Items.Count - 1]);
+                        _logListBox.ScrollIntoView(_logListBox.Items[^1]);
                     }
                     catch { }
                 }

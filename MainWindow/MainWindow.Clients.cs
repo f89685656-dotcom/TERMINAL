@@ -1,18 +1,10 @@
-﻿using System;
-using System.IO;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
+﻿using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
-using TERMINAL.Models;
 using System.Windows.Threading;
+using TERMINAL.Models;
 
 namespace TERMINAL
 {
@@ -122,7 +114,7 @@ namespace TERMINAL
 
                 if (hello.StartsWith("HELLO "))
                 {
-                    string rest = hello.Substring(6).Trim();
+                    string rest = hello[6..].Trim();
                     int capsIdx = rest.IndexOf(" CAPS ", StringComparison.Ordinal);
                     if (capsIdx >= 0)
                     {

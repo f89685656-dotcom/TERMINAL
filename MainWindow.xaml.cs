@@ -115,7 +115,7 @@ namespace TERMINAL
 
         private ObservableCollection<StepItem> _stepItems = new();
 
-        private bool _uiLoaded = false;
+        private readonly bool _uiLoaded = false;
 
         // ── Общие настройки пакета ──
         private bool _batchKosaEnabled = false;
@@ -135,7 +135,7 @@ namespace TERMINAL
 
         private Settings? _loadedSettings = null;
 
-        private DateTime _lastAgkStatusRequest = DateTime.MinValue;
+        private readonly DateTime _lastAgkStatusRequest = DateTime.MinValue;
         private const int AgkStatusRequestIntervalMs = 1000;
 
         // ── Журнал событий ──
@@ -318,7 +318,6 @@ namespace TERMINAL
         {
             RunExcelMacroInternal(silent: false);
         }
-
         /// <summary>
         /// Основная логика запуска Excel-макросов.
         /// </summary>
@@ -439,7 +438,7 @@ namespace TERMINAL
 
                 dynamic xl = Activator.CreateInstance(excelType)!;
                 xlApp = xl;
-                xl.Visible = true;          // ← для отладки; в релизе false
+                xl.Visible = false;          // ← true для отладки; в релизе false
                 xl.DisplayAlerts = false;
 
                 // Создаём временную книгу — обход бага с AddIns
@@ -457,8 +456,8 @@ namespace TERMINAL
                         string name = addin.Name;
                         string fullName = addin.FullName;
 
-                        if (name.IndexOf("IvanoFF", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            fullName.IndexOf("IvanoFF", StringComparison.OrdinalIgnoreCase) >= 0)
+                        if (name.Contains("IvanoFF", StringComparison.OrdinalIgnoreCase) ||
+                            fullName.Contains("IvanoFF", StringComparison.OrdinalIgnoreCase))
                         {
                             addin.Installed = false;
                             addin.Installed = true;
@@ -493,10 +492,25 @@ namespace TERMINAL
                 xl.Run("Filter_KOSA_GUI_Auto");
                 AppendLog("Excel: макрос «Фильтр КОСА» выполнен", Brushes.Green);
 
+                // ─── ВАЖНО: первый макрос делает SaveAs,
+                //     активная книга меняется — пишем Z1/Z2/Z3 ЗАНОВО ────
+                try
+                {
+                    dynamic activeBook = xl.ActiveWorkbook;
+                    dynamic activeSheet = activeBook.ActiveSheet;
+                    activeSheet.Range("Z1").Value = sensorCount;
+                    activeSheet.Range("Z2").Value = caseForCopy;
+                    activeSheet.Range("Z3").Value = parentFolder;
+                    AppendLog("Excel: параметры Z1/Z2/Z3 перезаписаны в новую книгу", Brushes.Gray);
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"Excel: не удалось перезаписать Z1/Z2/Z3 — {ex.Message}", Brushes.OrangeRed);
+                }
+
                 // ─── Макрос 2: Universal Insert ───────────────────────────
                 AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
                 xl.Run("Universal_Insert_FULL_Auto");
-                AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
 
                 // Закрываем CSV
                 try { wb.Close(false); } catch { }
@@ -583,17 +597,14 @@ namespace TERMINAL
             {
                 var job = _batchJobs[i];
                 string st = job.StatusText ?? "";
-
-                // Активное задание определяется по статусу
                 if (st.Contains("запись") || st.Contains("стабилизация") ||
                     st.Contains("проверка") || st.Contains("Идёт съём"))
                 {
-                    if (int.TryParse(job.CaseText, out int c))
+                    if (int.TryParse(job.CaseText, out int c) && c != 0)
                         return c;
-                    return 0;
+                    return i + 1;   // fallback — реальный номер задания
                 }
             }
-
             return 0;
         }
     }
