@@ -565,6 +565,37 @@ namespace TERMINAL
                 // ─── Макрос 2: Universal Insert ───────────────────────────
                 AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
                 xl.Run("Universal_Insert_FULL_Auto");
+
+                try
+                {
+                    var sensors = new List<TERMINAL.Models.SensorSummary>();
+                    foreach (dynamic ws in xl.ActiveWorkbook.Sheets)
+                    {
+                        string wsName = ws.Name;
+                        if (wsName == "TERMINAL" || wsName == "БЧХ" ||
+                            wsName == "ТЧХ" || wsName == "Проверка" ||
+                            wsName == "ChangeLog" || wsName == "Данные")
+                            continue;
+
+                        SensorSummary s = TERMINAL.Services.SummaryService.ReadSensorFromOpenWorkbook(
+                            (object)xl.ActiveWorkbook);
+                        sensors.Add(s);
+
+                        AppendLog($"Прочитан датчик №{s.Number}: " +
+                                  $"опис.град={s.GradDescription}, " +
+                                  $"проверок={s.CheckDescriptions.Count(x => x.HasValue)}, " +
+                                  $"гист.град={s.GradHysteresis.Values.GetLength(0)}x{s.GradHysteresis.Values.GetLength(1)}, " +
+                                  $"погр={s.Errors.Values.GetLength(0)}x{s.Errors.Values.GetLength(1)}",
+                                  Brushes.Green);
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"Ошибка чтения: {ex.Message}", Brushes.Red);
+                }
+
+
                 AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
 
                 // Закрываем CSV
@@ -661,6 +692,22 @@ namespace TERMINAL
                 }
             }
             return 0;
+        }
+
+        private void SummaryButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new TERMINAL.Windows.SummaryWindow();
+                win.Owner = this;
+                win.Show();   // Show() — не блокирует главное окно
+                              // ShowDialog() — блокирует, пока не закроют
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось открыть окно сводки:\n{ex.Message}",
+                                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
     }

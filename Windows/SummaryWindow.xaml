@@ -1,0 +1,89 @@
+﻿<Window x:Class="TERMINAL.Windows.SummaryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Сводка данных" Width="1200" Height="800"
+        MinWidth="800" MinHeight="500"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- toolbar -->
+            <RowDefinition Height="Auto"/>
+            <!-- заголовок сводки -->
+            <RowDefinition Height="2*"/>
+            <!-- сводка -->
+            <RowDefinition Height="Auto"/>
+            <!-- заголовок деталей -->
+            <RowDefinition Height="Auto"/>
+            <!-- вкладки -->
+            <RowDefinition Height="3*"/>
+            <!-- детали -->
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button x:Name="OpenCsvButton" Content="Открыть CSV"
+                    Width="110" Height="28" Margin="0,0,6,0"
+                    Click="OpenCsv_Click"/>
+            <Button x:Name="SaveCsvButton" Content="Сохранить CSV"
+                    Width="120" Height="28" Margin="0,0,6,0"
+                    Click="SaveCsv_Click"/>
+            <Button x:Name="RefreshButton" Content="Обновить"
+                    Width="100" Height="28" Margin="0,0,6,0"
+                    Click="Refresh_Click"/>
+            <Button x:Name="PrintButton" Content="Печать"
+                    Width="100" Height="28" Margin="0,0,6,0"
+                    Click="Print_Click"/>
+
+            <TextBlock x:Name="BatchNameText" VerticalAlignment="Center"
+                       FontSize="12" Margin="20,0,0,0"/>
+        </StackPanel>
+
+        <!-- Заголовок сводки -->
+        <TextBlock Grid.Row="1" Text="Сводка по датчикам"
+                   FontSize="14" FontWeight="Bold" Margin="0,0,0,4"/>
+
+        <!-- DataGrid сводки -->
+        <DataGrid Grid.Row="2" x:Name="SummaryGrid"
+          AutoGenerateColumns="False"
+          IsReadOnly="True"
+          CanUserSortColumns="True"
+          SelectionChanged="SummaryGrid_SelectionChanged"
+          GridLinesVisibility="All"
+          HeadersVisibility="Column"
+          RowHeight="22"
+          FontSize="12">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="№" Binding="{Binding Number}" Width="50"/>
+                <DataGridTextColumn Header="Опис.град." Binding="{Binding GradDescription, StringFormat=0.0000}" Width="90"/>
+                <DataGridTextColumn Header="Пров.1" Binding="{Binding Check1, StringFormat=0.0000}" Width="80"/>
+                <DataGridTextColumn Header="Пров.2" Binding="{Binding Check2, StringFormat=0.0000}" Width="80"/>
+                <DataGridTextColumn Header="Пров.3" Binding="{Binding Check3, StringFormat=0.0000}" Width="80"/>
+                <DataGridTextColumn Header="Пров.4" Binding="{Binding Check4, StringFormat=0.0000}" Width="80"/>
+                <DataGridTextColumn Header="Пров.5" Binding="{Binding Check5, StringFormat=0.0000}" Width="80"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Заголовок деталей -->
+        <TextBlock Grid.Row="3" x:Name="DetailHeaderText"
+                   Text="Детали: —"
+                   FontSize="14" FontWeight="Bold" Margin="0,10,0,4"/>
+
+        <!-- Вкладки -->
+        <TabControl Grid.Row="4" x:Name="DetailTabs"
+                    SelectionChanged="DetailTabs_SelectionChanged"
+                    Height="30">
+            <TabItem Header="Гистерезис"/>
+            <TabItem Header="Проверка"/>
+            <TabItem Header="Погрешность"/>
+        </TabControl>
+
+        <!-- Область деталей -->
+        <ScrollViewer Grid.Row="5"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+            <ContentControl x:Name="DetailContent"/>
+        </ScrollViewer>
+    </Grid>
+</Window>
