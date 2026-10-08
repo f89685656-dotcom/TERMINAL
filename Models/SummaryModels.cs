@@ -28,4 +28,15 @@ namespace TERMINAL.Models
         public List<double> ColumnHeaders { get; set; } = new();   // температуры
         public double?[,] Values { get; set; } = new double?[0, 0];
     }
+    public class SummaryRow
+    {
+        public int Number { get; set; }
+        public double? GradDescription { get; set; }
+        public double? Check1 { get; set; }
+        public double? Check2 { get; set; }
+        public double? Check3 { get; set; }
+        public double? Check4 { get; set; }
+        public double? Check5 { get; set; }
+        public SensorSummary Source { get; set; } = null!;
+    }
 }
