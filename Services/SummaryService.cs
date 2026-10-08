@@ -9,7 +9,7 @@ namespace TERMINAL.Services
     public static class SummaryService
     {
         /// <summary>
-        /// Читает ВСЕ .xlsx файлы из папки.
+        /// Читает ВСЕ .xlsm файлы из папки.
         /// Каждый файл = один датчик.
         /// </summary>
         public static SummaryBatch ReadAllSensorsFromFolder(string dataFolder, string batchName)
@@ -20,12 +20,12 @@ namespace TERMINAL.Services
                 SavedAt = DateTime.Now
             };
 
-            var files = Directory.GetFiles(dataFolder, "*.xlsx")
+            var files = Directory.GetFiles(dataFolder, "*.xlsm")
                 .OrderBy(f => f)
                 .ToList();
 
             if (files.Count == 0)
-                throw new Exception($"В папке нет .xlsx файлов:\n{dataFolder}");
+                throw new Exception($"В папке нет .xlsm файлов:\n{dataFolder}");
 
             object? xlApp = null;
 
@@ -91,50 +91,76 @@ namespace TERMINAL.Services
         {
             var sensor = new SensorSummary();
 
-            dynamic wsData = workbook.Sheets["Данные"];
-            dynamic wsBCH = workbook.Sheets["БЧХ"];
-            dynamic wsTerminal = workbook.Sheets["TERMINAL"];
-
-            // Номер датчика
-            var numVal = wsData.Range("F1").Value;
-            if (numVal != null)
-                sensor.Number = (int)Math.Round(Convert.ToDouble(numVal));
-
-            // Описываемость
-            sensor.GradDescription = ToNullableDouble(wsBCH.Range("J18").Value);
-            for (int i = 0; i < 5; i++)
+            try
             {
-                string cell = "J" + (19 + i);
-                sensor.CheckDescriptions[i] = ToNullableDouble(wsBCH.Range(cell).Value);
+                dynamic wsData = workbook.Sheets["Данные"];
+                dynamic wsBCH = workbook.Sheets["БЧХ"];
+                dynamic wsTerminal = workbook.Sheets["TERMINAL"];
+
+                // Номер датчика
+                try
+                {
+                    var numVal = wsData.Range("F1").Value;
+                    if (numVal != null)
+                        sensor.Number = (int)Math.Round(Convert.ToDouble(numVal));
+                }
+                catch (Exception ex) { throw new Exception("Ошибка чтения F1: " + ex.Message); }
+
+                // Описываемость
+                try
+                {
+                    sensor.GradDescription = ToNullableDouble(wsBCH.Range("J18").Value);
+                    for (int i = 0; i < 5; i++)
+                    {
+                        string cell = "J" + (19 + i);
+                        sensor.CheckDescriptions[i] = ToNullableDouble(wsBCH.Range(cell).Value);
+                    }
+                }
+                catch (Exception ex) { throw new Exception("Ошибка чтения БЧХ.J18:J23: " + ex.Message); }
+
+                // Погрешность
+                try
+                {
+                    sensor.Errors = ReadTable(
+                        wsTerminal,
+                        tempRow: 2, tempColStart: 3, tempColCount: 10,
+                        pressRowStart: 4, pressRowCount: 16, pressCol: 2,
+                        dataRowStart: 4, dataColStart: 3,
+                        dataRows: 16, dataCols: 10);
+                }
+                catch (Exception ex) { throw new Exception("Ошибка чтения Погрешности: " + ex.Message); }
+
+                // Гистерезис градуировки
+                try
+                {
+                    sensor.GradHysteresis = ReadTable(
+                        wsTerminal,
+                        tempRow: 4, tempColStart: 15, tempColCount: 10,
+                        pressRowStart: 4, pressRowCount: 7, pressCol: 14,
+                        dataRowStart: 5, dataColStart: 15,
+                        dataRows: 6, dataCols: 10);
+                }
+                catch (Exception ex) { throw new Exception("Ошибка чтения Гистерезиса градуировки: " + ex.Message); }
+
+                // Гистерезис проверки
+                try
+                {
+                    sensor.CheckHysteresis = ReadTable(
+                        wsTerminal,
+                        tempRow: 14, tempColStart: 15, tempColCount: 5,
+                        pressRowStart: 15, pressRowCount: 6, pressCol: 14,
+                        dataRowStart: 15, dataColStart: 15,
+                        dataRows: 6, dataCols: 5);
+                }
+                catch (Exception ex) { throw new Exception("Ошибка чтения Гистерезиса проверки: " + ex.Message); }
             }
-
-            // Погрешность: C2:L2 (темп), B4:B19 (давл), C4:L19 (знач)
-            sensor.Errors = ReadTable(
-                wsTerminal,
-                tempRow: 2, tempColStart: 3, tempColCount: 10,
-                pressRowStart: 4, pressRowCount: 16, pressCol: 2,
-                dataRowStart: 4, dataColStart: 3,
-                dataRows: 16, dataCols: 10);
-
-            // Гистерезис градуировки: O4:X4 (темп), N4:N10 (давл), O5:X10 (знач)
-            sensor.GradHysteresis = ReadTable(
-                wsTerminal,
-                tempRow: 4, tempColStart: 15, tempColCount: 10,
-                pressRowStart: 4, pressRowCount: 7, pressCol: 14,
-                dataRowStart: 5, dataColStart: 15,
-                dataRows: 6, dataCols: 10);
-
-            // Гистерезис проверки: O14:S14 (темп), N15:N20 (давл), O15:S20 (знач)
-            sensor.CheckHysteresis = ReadTable(
-                wsTerminal,
-                tempRow: 14, tempColStart: 15, tempColCount: 5,
-                pressRowStart: 15, pressRowCount: 6, pressCol: 14,
-                dataRowStart: 15, dataColStart: 15,
-                dataRows: 6, dataCols: 5);
+            catch (Exception ex)
+            {
+                throw new Exception("Датчик: " + ex.Message, ex);
+            }
 
             return sensor;
         }
-
         private static TableData ReadTable(
             dynamic ws,
             int tempRow, int tempColStart, int tempColCount,
@@ -144,18 +170,21 @@ namespace TERMINAL.Services
         {
             var table = new TableData();
 
+            // Заголовки температур
             for (int c = 0; c < tempColCount; c++)
             {
                 var v = ws.Cells[tempRow, tempColStart + c].Value;
                 table.ColumnHeaders.Add(ToDouble(v));
             }
 
+            // Заголовки давлений
             for (int r = 0; r < pressRowCount; r++)
             {
                 var v = ws.Cells[pressRowStart + r, pressCol].Value;
                 table.RowHeaders.Add(ToDouble(v));
             }
 
+            // Значения
             table.Values = new double?[dataRows, dataCols];
             for (int r = 0; r < dataRows; r++)
             {

@@ -698,10 +698,17 @@ namespace TERMINAL
         {
             try
             {
-                var win = new TERMINAL.Windows.SummaryWindow();
+                string dataFolder = SavePathBox.Text ?? "";
+                if (string.IsNullOrWhiteSpace(dataFolder))
+                {
+                    MessageBox.Show("Не указан путь сохранения.",
+                        "Сводка данных", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var win = new TERMINAL.Windows.SummaryWindow(dataFolder);
                 win.Owner = this;
-                win.Show();   // Show() — не блокирует главное окно
-                              // ShowDialog() — блокирует, пока не закроют
+                win.Show();
             }
             catch (Exception ex)
             {

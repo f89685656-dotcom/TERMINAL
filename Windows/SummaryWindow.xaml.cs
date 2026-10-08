@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -13,10 +14,50 @@ namespace TERMINAL.Windows
     {
         private SummaryBatch? _currentBatch;
         private bool _isLoadedFromCsv = false;
+        private readonly string _dataFolder;
 
-        public SummaryWindow()
+        public SummaryWindow(string dataFolder)
         {
             InitializeComponent();
+
+            _dataFolder = dataFolder;
+
+            // При открытии сразу читаем .xlsx из папки
+            Loaded += (s, e) => RefreshFromXlsx();
+        }
+
+        // ─── Перечитать .xlsx из папки ───
+        private void RefreshFromXlsx()
+        {
+            if (_isLoadedFromCsv) return;
+
+            if (string.IsNullOrWhiteSpace(_dataFolder) || !Directory.Exists(_dataFolder))
+            {
+                MessageBox.Show($"Папка не найдена:\n{_dataFolder}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                // Имя партии — из родительской папки
+                string batchName = new DirectoryInfo(
+                    Directory.GetParent(_dataFolder)?.FullName ?? _dataFolder).Name;
+
+                _currentBatch = SummaryService.ReadAllSensorsFromFolder(
+                    _dataFolder, batchName);
+
+                BatchNameText.Text = $"Партия: {_currentBatch.BatchName}";
+                UpdateSummaryGrid();
+                UpdateDetailPanel();
+
+                RefreshButton.IsEnabled = true;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка чтения .xlsx:\n{ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         // ─── Открыть CSV прошлой партии ───
@@ -58,9 +99,22 @@ namespace TERMINAL.Windows
                 return;
             }
 
-            // Путь: та же папка, что SavePathBox + имя партии
-            // TODO: получить SavePathBox из MainWindow — см. ниже
-            MessageBox.Show("Сохранение CSV — TODO (нужно получить путь из MainWindow).");
+            try
+            {
+                string batchName = _currentBatch.BatchName;
+                string fileName = $"{batchName}_сводка.csv";
+                string fullPath = Path.Combine(_dataFolder, fileName);
+
+                CsvService.SaveToCsv(_currentBatch, fullPath);
+
+                MessageBox.Show($"Сохранено:\n{fullPath}",
+                    "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка сохранения CSV:\n{ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         // ─── Обновить (перечитать .xlsx) ───
@@ -72,8 +126,7 @@ namespace TERMINAL.Windows
                 return;
             }
 
-            // TODO: перечитать .xlsx — вызов из MainWindow
-            MessageBox.Show("Обновление — TODO.");
+            RefreshFromXlsx();
         }
 
         // ─── Печать ───
@@ -82,7 +135,6 @@ namespace TERMINAL.Windows
             var pd = new System.Windows.Controls.PrintDialog();
             if (pd.ShowDialog() == true)
             {
-                // TODO: сформировать документ для печати
                 MessageBox.Show("Печать — TODO.");
             }
         }
@@ -99,7 +151,7 @@ namespace TERMINAL.Windows
             UpdateDetailPanel();
         }
 
-        // ─── Вспомогательные ───
+        // ─── Заполнить сводку ───
         private void UpdateSummaryGrid()
         {
             if (_currentBatch == null)
@@ -125,11 +177,11 @@ namespace TERMINAL.Windows
 
             SummaryGrid.ItemsSource = rows;
 
-            // Автовыбор первой строки
             if (rows.Count > 0)
                 SummaryGrid.SelectedIndex = 0;
         }
 
+        // ─── Заполнить панель деталей ───
         private void UpdateDetailPanel()
         {
             if (SummaryGrid.SelectedItem is not SummaryRow row)
@@ -142,14 +194,13 @@ namespace TERMINAL.Windows
             DetailHeaderText.Text = $"Детали: Датчик №{row.Number}    " +
                                     $"Опис.град.: {row.GradDescription?.ToString("0.0000") ?? "—"}";
 
-            // Какую вкладку смотрим
             int tabIndex = DetailTabs.SelectedIndex;
 
             TableData? table = tabIndex switch
             {
-                0 => row.Source.GradHysteresis,   // Гистерезис
-                1 => row.Source.CheckHysteresis,  // Проверка
-                2 => row.Source.Errors,           // Погрешность
+                0 => row.Source.GradHysteresis,
+                1 => row.Source.CheckHysteresis,
+                2 => row.Source.Errors,
                 _ => null
             };
 
@@ -164,7 +215,7 @@ namespace TERMINAL.Windows
                 return;
             }
 
-            // Заглушка — просто показываем размеры
+            // ВРЕМЕННАЯ заглушка — показываем размеры и заголовки
             DetailContent.Content = new TextBlock
             {
                 Text = $"Таблица: {table.Values.GetLength(0)} × {table.Values.GetLength(1)}\n" +
@@ -175,19 +226,18 @@ namespace TERMINAL.Windows
                 FontSize = 12
             };
         }
+    }
 
-        public class SummaryRow
-        {
-            public int Number { get; set; }
-            public double? GradDescription { get; set; }
-            public double? Check1 { get; set; }
-            public double? Check2 { get; set; }
-            public double? Check3 { get; set; }
-            public double? Check4 { get; set; }
-            public double? Check5 { get; set; }
-
-            // Ссылка на оригинальный датчик — для деталей
-            public SensorSummary Source { get; set; } = null!;
-        }
+    // ─── Модель строки для сводки ───
+    public class SummaryRow
+    {
+        public int Number { get; set; }
+        public double? GradDescription { get; set; }
+        public double? Check1 { get; set; }
+        public double? Check2 { get; set; }
+        public double? Check3 { get; set; }
+        public double? Check4 { get; set; }
+        public double? Check5 { get; set; }
+        public SensorSummary Source { get; set; } = null!;
     }
 }
