@@ -12,6 +12,7 @@
 		<PackageIcon>6.png</PackageIcon>
 		<Platforms>AnyCPU;x64</Platforms>
 		<PlatformTarget>x64</PlatformTarget>
+		<NoWarn>$(NoWarn);CA1416</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>

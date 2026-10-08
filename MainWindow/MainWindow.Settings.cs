@@ -84,7 +84,8 @@ namespace TERMINAL
                             IsEnabled = dto.IsEnabled,
                             IsCalibrationMode = dto.IsCalibrationMode,
                             CyclesText = string.IsNullOrWhiteSpace(dto.Cycles) ? "10" : dto.Cycles,
-                            StartStepText = string.IsNullOrWhiteSpace(dto.StartStep) ? "1" : dto.StartStep
+                            StartStepText = string.IsNullOrWhiteSpace(dto.StartStep) ? "1" : dto.StartStep,
+                            CaseText = dto.Case
                         });
                     }
                 }
@@ -175,7 +176,6 @@ namespace TERMINAL
 
                 var s = new Settings
                 {
-
                     BatchPresets = _batchPresets.Select(p => new BatchPreset
                     {
                         Name = p.Name,
@@ -187,7 +187,8 @@ namespace TERMINAL
                             IsEnabled = j.IsEnabled,
                             IsCalibrationMode = j.IsCalibrationMode,
                             Cycles = j.Cycles,
-                            StartStep = j.StartStep
+                            StartStep = j.StartStep,
+                            Case = j.Case         
                         }).ToList()
                     }).ToList(),
                     LastUsedPresetIndex = BatchPresetCombo?.SelectedIndex ?? -1,
@@ -197,6 +198,7 @@ namespace TERMINAL
                     SavePath = SavePathBox.Text,
                     BatchKosaEnabled = _batchKosaEnabled,
                     BatchKosaTimerSeconds = _batchKosaTimerSeconds,
+
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
                         SetPoint = j.SetPointText,
@@ -204,7 +206,8 @@ namespace TERMINAL
                         IsEnabled = j.IsEnabled,
                         IsCalibrationMode = j.IsCalibrationMode,
                         Cycles = j.CyclesText,
-                        StartStep = j.StartStepText
+                        StartStep = j.StartStepText,
+                        Case = j.CaseText
                     }).ToList(),
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
