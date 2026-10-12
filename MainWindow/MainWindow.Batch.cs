@@ -120,6 +120,13 @@ namespace TERMINAL
             _batchStopRequested = false;
             _stopRequested = false;
 
+            // ─── СБРОС СТАТУСОВ ───
+            foreach (var job in _batchJobs)
+            {
+                job.StatusText = "ожидает";
+                job.StatusColor = Brushes.Gray;
+            }
+
             // Валидация активных заданий
             for (int i = 0; i < _batchJobs.Count; i++)
             {
