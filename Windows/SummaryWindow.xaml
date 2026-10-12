@@ -36,6 +36,11 @@
             <Button x:Name="PrintButton" Content="Печать"
                     Width="100" Height="28" Margin="0,0,6,0"
                     Click="Print_Click"/>
+            <CheckBox x:Name="PrintAllCheckBox"
+                    Content="Печать всех датчиков"
+                    FontSize="12"
+                    VerticalAlignment="Center"
+                    Margin="15,0,0,0"/>
 
             <TextBlock x:Name="DataFolderText"
                    Text=""

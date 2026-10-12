@@ -5,6 +5,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Markup;
 using System.Windows.Media;
 using TERMINAL.Models;
 using TERMINAL.Services;
@@ -142,13 +144,217 @@ namespace TERMINAL.Windows
         }
 
         // ─── Печать ───
+        //private void Print_Click(object sender, RoutedEventArgs e)
+        //{
+        //    if (_currentBatch == null || _currentBatch.Sensors.Count == 0)
+        //    {
+        //        MessageBox.Show("Нет данных для печати.");
+        //        return;
+        //    }
+
+        //    bool printAll = PrintAllCheckBox.IsChecked == true;
+
+        //    if (!printAll && SummaryGrid.SelectedItem is not SummaryRow)
+        //    {
+        //        MessageBox.Show("Выберите датчик или включите «Печать всех датчиков».");
+        //        return;
+        //    }
+
+        //    var pd = new PrintDialog();
+        //    if (pd.ShowDialog() != true) return;
+
+        //    try
+        //    {
+        //        double pageWidth = pd.PrintableAreaWidth;
+        //        double pageHeight = pd.PrintableAreaHeight;
+
+        //        // Собираем страницы
+        //        var pages = new List<FixedPage>();
+
+        //        if (printAll)
+        //        {
+        //            foreach (var sensor in _currentBatch.Sensors.OrderBy(s => s.Number))
+        //            {
+        //                pages.Add(BuildPageForSensor(sensor, pageWidth, pageHeight));
+        //            }
+        //        }
+        //        else
+        //        {
+        //            var row = (SummaryRow)SummaryGrid.SelectedItem;
+        //            pages.Add(BuildPageForSensor(row.Source, pageWidth, pageHeight));
+        //        }
+
+        //        // Свой пагинатор — прижимает содержимое к верхнему левому углу
+        //        var paginator = new PrintPaginator(pages, new Size(pageWidth, pageHeight));
+
+        //        var writer = System.Printing.PrintQueue.CreateXpsDocumentWriter(pd.PrintQueue);
+        //        writer.Write(paginator, pd.PrintTicket);
+
+        //        MessageBox.Show($"Отправлено на печать: {(printAll ? "все датчики" : "выбранный датчик")}.");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        MessageBox.Show($"Ошибка печати:\n{ex.Message}");
+        //    }
+        //}
+
         private void Print_Click(object sender, RoutedEventArgs e)
         {
-            var pd = new System.Windows.Controls.PrintDialog();
-            if (pd.ShowDialog() == true)
+            if (_currentBatch == null || _currentBatch.Sensors.Count == 0)
             {
-                MessageBox.Show("Печать — TODO.");
+                MessageBox.Show("Нет данных для печати.");
+                return;
             }
+
+            bool printAll = PrintAllCheckBox.IsChecked == true;
+
+            if (!printAll && SummaryGrid.SelectedItem is not SummaryRow)
+            {
+                MessageBox.Show("Выберите датчик или включите «Печать всех датчиков».");
+                return;
+            }
+
+            var pd = new PrintDialog();
+            if (pd.ShowDialog() != true) return;
+
+            try
+            {
+                FixedDocument doc;
+
+                if (printAll)
+                {
+                    doc = BuildPrintDocumentAll(pd);
+                }
+                else
+                {
+                    var row = (SummaryRow)SummaryGrid.SelectedItem;
+                    doc = BuildPrintDocument(row, pd);
+                }
+
+                pd.PrintDocument(
+                    ((IDocumentPaginatorSource)doc).DocumentPaginator,
+                    printAll ? "Сводка всех датчиков" : "Сводка датчика");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка печати:\n{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Формирует документ для печати всех датчиков.
+        /// Каждый датчик — на отдельной странице.
+        /// </summary>
+        private FixedDocument BuildPrintDocumentAll(PrintDialog pd)
+        {
+            double pageWidth = pd.PrintableAreaWidth;
+            double pageHeight = pd.PrintableAreaHeight;
+
+            var doc = new FixedDocument();
+            doc.DocumentPaginator.PageSize = new Size(pageWidth, pageHeight);
+
+            var sensors = _currentBatch!.Sensors.OrderBy(s => s.Number).ToList();
+
+            foreach (var sensor in sensors)
+            {
+                var page = BuildPageForSensor(sensor, pageWidth, pageHeight);
+                var content = new PageContent();
+                ((IAddChild)content).AddChild(page);
+                doc.Pages.Add(content);
+            }
+
+            return doc;
+        }
+
+        private FixedPage BuildPageForSensor(SensorSummary sensor,
+                                     double pageWidth, double pageHeight)
+        {
+            // ─── Содержимое ───
+            var stack = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Width = pageWidth - 20
+            };
+
+            // Шапка
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"Партия: {_currentBatch?.BatchName ?? "—"}",
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0)
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"Датчик №{sensor.Number}    Опис.град.: {sensor.GradDescription?.ToString("0.0000") ?? "—"}    " +
+                       $"Дата: {DateTime.Now:dd.MM.yyyy HH:mm}",
+                FontSize = 10,
+                Foreground = Brushes.Gray,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+
+            // Таблица 1
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Гистерезис градуировки",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 2)
+            });
+            stack.Children.Add(BuildTableGrid(sensor.GradHysteresis, forPrint: true));
+
+            // Таблица 2
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Гистерезис проверки",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 6, 0, 2)
+            });
+            stack.Children.Add(BuildTableGrid(sensor.CheckHysteresis, forPrint: true));
+
+            // Таблица 3
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Погрешность",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 6, 0, 2)
+            });
+            stack.Children.Add(BuildTableGrid(sensor.Errors, forPrint: true));
+
+            // ─── Canvas — точное позиционирование ───
+            var canvas = new Canvas
+            {
+                Width = pageWidth,
+                Height = pageHeight
+            };
+
+            // Сдвигаем содержимое вверх и вправо
+            Canvas.SetLeft(stack, 10);
+            Canvas.SetTop(stack, -60);   // ← подбери это значение
+
+            canvas.Children.Add(stack);
+
+            // ─── Страница ───
+            var page = new FixedPage
+            {
+                Width = pageWidth,
+                Height = pageHeight
+            };
+            page.Children.Add(canvas);
+
+            return page;
+        }
+        private TextBlock MakeTableHeader(string text, double topMargin = 0)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, topMargin, 0, 2)
+            };
         }
 
         // ─── Выбор датчика ───
@@ -192,7 +398,6 @@ namespace TERMINAL.Windows
             if (rows.Count > 0)
                 SummaryGrid.SelectedIndex = 0;
         }
-
 
         // ─── Построить панель «Гистерезис» (2 таблицы) ───
         private UIElement BuildHysteresisPanel(SummaryRow row)
@@ -241,7 +446,7 @@ namespace TERMINAL.Windows
         }
 
         // ─── Построить DataGrid для одной таблицы ───
-        private UIElement BuildTableGrid(TableData table)
+        private UIElement BuildTableGrid(TableData table, bool forPrint = false)
         {
             if (table == null || table.Values.Length == 0)
             {
@@ -253,7 +458,7 @@ namespace TERMINAL.Windows
                 };
             }
 
-            // ─── Определяем заполненные столбцы ───
+            // Определяем заполненные столбцы
             bool[] hasData = new bool[table.ColumnHeaders.Count];
             for (int c = 0; c < table.ColumnHeaders.Count; c++)
             {
@@ -267,7 +472,7 @@ namespace TERMINAL.Windows
                 }
             }
 
-            // ─── Максимум по модулю в этой таблице ───
+            // Максимум по модулю
             double maxAbs = 0;
             for (int r = 0; r < table.Values.GetLength(0); r++)
             {
@@ -279,9 +484,8 @@ namespace TERMINAL.Windows
                 }
             }
             if (maxAbs < 0.0001) maxAbs = 1.0;
-            maxAbs *= 1.05;   // запас
+            maxAbs *= 1.05;
 
-            // ─── DataGrid ───
             var grid = new DataGrid
             {
                 AutoGenerateColumns = false,
@@ -290,20 +494,20 @@ namespace TERMINAL.Windows
                 CanUserSortColumns = false,
                 GridLinesVisibility = DataGridGridLinesVisibility.All,
                 HeadersVisibility = DataGridHeadersVisibility.Column,
-                RowHeight = 22,
-                FontSize = 12,
+                RowHeight = forPrint ? 16 : 22,   // ← ИЗМЕНЕНО
+                FontSize = forPrint ? 10 : 12,    // ← ИЗМЕНЕНО
                 HorizontalAlignment = HorizontalAlignment.Left
             };
 
-            // ─── Колонка P ───
+            // Колонка P
             grid.Columns.Add(new DataGridTextColumn
             {
                 Header = "P, кгс/см²",
                 Binding = new System.Windows.Data.Binding("P"),
-                Width = 110
+                Width = forPrint ? 80 : 110
             });
 
-            // ─── Колонки температур с полосками ───
+            // Колонки температур
             for (int c = 0; c < table.ColumnHeaders.Count; c++)
             {
                 if (!hasData[c]) continue;
@@ -311,19 +515,18 @@ namespace TERMINAL.Windows
                 int colIndex = c;
                 string bindingPath = $"C{colIndex}";
 
-                // DataTemplate: полоска + текст
                 var template = new DataTemplate();
                 var gridFactory = new FrameworkElementFactory(typeof(Grid));
 
-                // Слой 1: полоска
+                // Полоска
                 var barFactory = new FrameworkElementFactory(typeof(Border));
                 barFactory.SetBinding(Border.WidthProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
                         Converter = new TERMINAL.Converters.ValueToBarWidthConverter
                         {
-                            MaxWidth = 60,
-                            MaxAbsValue = maxAbs   // ← масштаб этой таблицы
+                            MaxWidth = forPrint ? 40 : 60,
+                            MaxAbsValue = maxAbs
                         }
                     });
                 barFactory.SetBinding(Border.BackgroundProperty,
@@ -332,11 +535,11 @@ namespace TERMINAL.Windows
                         Converter = new TERMINAL.Converters.ValueToBarBrushConverter()
                     });
                 barFactory.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Left);
-                barFactory.SetValue(Border.MarginProperty, new Thickness(2, 2, 2, 2));
+                barFactory.SetValue(Border.MarginProperty, new Thickness(2));
                 barFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
                 gridFactory.AppendChild(barFactory);
 
-                // Слой 2: текст
+                // Текст
                 var textFactory = new FrameworkElementFactory(typeof(TextBlock));
                 textFactory.SetBinding(TextBlock.TextProperty,
                     new System.Windows.Data.Binding(bindingPath)
@@ -346,7 +549,7 @@ namespace TERMINAL.Windows
                 textFactory.SetValue(TextBlock.ForegroundProperty, Brushes.Black);
                 textFactory.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
                 textFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
-                textFactory.SetValue(TextBlock.FontSizeProperty, 12.0);
+                textFactory.SetValue(TextBlock.FontSizeProperty, forPrint ? 10.0 : 12.0);
                 gridFactory.AppendChild(textFactory);
 
                 template.VisualTree = gridFactory;
@@ -355,13 +558,13 @@ namespace TERMINAL.Windows
                 {
                     Header = table.ColumnHeaders[c].ToString("0.##"),
                     CellTemplate = template,
-                    Width = 70
+                    Width = forPrint ? 55 : 70
                 };
 
                 grid.Columns.Add(column);
             }
 
-            // ─── Строки ───
+            // Строки
             var rows = new System.Collections.Generic.List<object>();
 
             for (int r = 0; r < table.Values.GetLength(0); r++)
@@ -375,8 +578,7 @@ namespace TERMINAL.Windows
 
                 for (int c = 0; c < table.Values.GetLength(1); c++)
                 {
-                    var val = table.Values[r, c];
-                    dict[$"C{c}"] = val;   // ← передаём double?, чтобы конвертеры работали
+                    dict[$"C{c}"] = table.Values[r, c];
                 }
 
                 rows.Add(expando);
@@ -412,6 +614,131 @@ namespace TERMINAL.Windows
             {
                 DetailContent.Content = BuildSingleTablePanel(row.Source.Errors);
             }
+        }
+
+        private FixedDocument BuildPrintDocument(SummaryRow row, PrintDialog pd)
+        {
+            // ─── Размеры страницы ───
+            double pageWidth = pd.PrintableAreaWidth;
+            double pageHeight = pd.PrintableAreaHeight;
+
+            var doc = new FixedDocument();
+            doc.DocumentPaginator.PageSize = new Size(pageWidth, pageHeight);
+
+            // ─── Содержимое ───
+            var stack = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Margin = new Thickness(0)   // ← убираем все отступы
+            };
+
+            // Шапка — 2 строки, без пустот
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"Партия: {_currentBatch?.BatchName ?? "—"}",
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0)
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"Датчик №{row.Number}    Опис.град.: {row.GradDescription?.ToString("0.0000") ?? "—"}    " +
+                       $"Дата: {DateTime.Now:dd.MM.yyyy HH:mm}",
+                FontSize = 10,
+                Foreground = Brushes.Gray,
+                Margin = new Thickness(0, 0, 0, 0)
+            });
+
+            // Таблица 1
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Гистерезис градуировки",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 2)
+            });
+            stack.Children.Add(BuildTableGrid(row.Source.GradHysteresis));
+
+            // Таблица 2
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Гистерезис проверки",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 6, 0, 2)   // ← 6 вместо 8
+            });
+            stack.Children.Add(BuildTableGrid(row.Source.CheckHysteresis));
+
+            // Таблица 3
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Погрешность",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 6, 0, 2)
+            });
+            stack.Children.Add(BuildTableGrid(row.Source.Errors));
+
+            // ─── Viewbox ───
+            var viewbox = new Viewbox
+            {
+                Stretch = Stretch.Uniform,
+                Width = pageWidth,
+                Height = pageHeight,
+                StretchDirection = StretchDirection.DownOnly   // ← не растягивать, если влезает
+            };
+            viewbox.Child = stack;
+
+            // ─── Одна страница ───
+            var page = new FixedPage
+            {
+                Width = pageWidth,
+                Height = pageHeight
+            };
+            page.Children.Add(viewbox);
+
+            var content = new PageContent();
+            ((IAddChild)content).AddChild(page);
+            doc.Pages.Add(content);
+
+            return doc;
+        }
+        public class PrintPaginator : System.Windows.Documents.DocumentPaginator
+        {
+            private readonly List<FixedPage> _pages;
+            private Size _pageSize;
+
+            public PrintPaginator(List<FixedPage> pages, Size pageSize)
+            {
+                _pages = pages;
+                _pageSize = pageSize;
+            }
+
+            public override System.Windows.Documents.DocumentPage GetPage(int pageNumber)
+            {
+                var page = _pages[pageNumber];
+
+                var paperSize = new Size(_pageSize.Width, _pageSize.Height);
+                var bleedBox = new Rect(0, 0, _pageSize.Width, _pageSize.Height);
+                var contentBox = new Rect(0, 0, _pageSize.Width, _pageSize.Height);
+
+                return new System.Windows.Documents.DocumentPage(
+                    page,
+                    paperSize,
+                    bleedBox,
+                    contentBox);
+            }
+
+            public override bool IsPageCountValid => true;
+            public override int PageCount => _pages.Count;
+
+            public override Size PageSize
+            {
+                get => _pageSize;
+                set => _pageSize = value;
+            }
+
+            public override IDocumentPaginatorSource Source => null;
         }
     }
 
