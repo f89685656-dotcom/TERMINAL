@@ -1009,8 +1009,8 @@ namespace TERMINAL
                     IsEnabled = dto.IsEnabled,
                     IsCalibrationMode = dto.IsCalibrationMode,
                     CyclesText = dto.Cycles,
-                    StartStepText = dto.StartStep
-
+                    StartStepText = dto.StartStep,
+                    CaseText = dto.Case
                 });
             }
 
