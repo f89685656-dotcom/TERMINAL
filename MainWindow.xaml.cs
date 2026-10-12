@@ -24,6 +24,7 @@ namespace TERMINAL
 {
     public partial class MainWindow : Window
     {
+        public static MainWindow? Current { get; private set; }
         private TcpClient? _client;
         private NetworkStream? _stream;
         private readonly object _streamLock = new object();
@@ -149,6 +150,7 @@ namespace TERMINAL
         public MainWindow()
         {
             InitializeComponent();
+            Current = this;
 
             if (StartButtonBatchBrush is SolidColorBrush sb2 && sb2.CanFreeze)
                 sb2.Freeze();
@@ -565,6 +567,37 @@ namespace TERMINAL
                 // ─── Макрос 2: Universal Insert ───────────────────────────
                 AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
                 xl.Run("Universal_Insert_FULL_Auto");
+
+                try
+                {
+                    var sensors = new List<TERMINAL.Models.SensorSummary>();
+                    foreach (dynamic ws in xl.ActiveWorkbook.Sheets)
+                    {
+                        string wsName = ws.Name;
+                        if (wsName == "TERMINAL" || wsName == "БЧХ" ||
+                            wsName == "ТЧХ" || wsName == "Проверка" ||
+                            wsName == "ChangeLog" || wsName == "Данные")
+                            continue;
+
+                        SensorSummary s = TERMINAL.Services.SummaryService.ReadSensorFromOpenWorkbook(
+                            (object)xl.ActiveWorkbook);
+                        sensors.Add(s);
+
+                        AppendLog($"Прочитан датчик №{s.Number}: " +
+                                  $"опис.град={s.GradDescription}, " +
+                                  $"проверок={s.CheckDescriptions.Count(x => x.HasValue)}, " +
+                                  $"гист.град={s.GradHysteresis.Values.GetLength(0)}x{s.GradHysteresis.Values.GetLength(1)}, " +
+                                  $"погр={s.Errors.Values.GetLength(0)}x{s.Errors.Values.GetLength(1)}",
+                                  Brushes.Green);
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"Ошибка чтения: {ex.Message}", Brushes.Red);
+                }
+
+
                 AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
 
                 // Закрываем CSV
@@ -661,6 +694,29 @@ namespace TERMINAL
                 }
             }
             return 0;
+        }
+
+        private void SummaryButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string dataFolder = SavePathBox.Text ?? "";
+                if (string.IsNullOrWhiteSpace(dataFolder))
+                {
+                    MessageBox.Show("Не указан путь сохранения.",
+                        "Сводка данных", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var win = new TERMINAL.Windows.SummaryWindow(dataFolder);
+                win.Owner = this;
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось открыть окно сводки:\n{ex.Message}",
+                                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
     }
