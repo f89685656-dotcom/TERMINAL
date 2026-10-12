@@ -55,6 +55,27 @@ namespace TERMINAL.Services
                 sb.AppendLine();
                 WriteTable(sb, "# --- Гистерезис проверки ---", s.CheckHysteresis);
                 sb.AppendLine();
+
+                // ─── ТЧХ ───
+                if (s.Tchx != null && s.Tchx.MainTables.Count > 0)
+                {
+                    sb.AppendLine($"# --- ТЧХ ({s.Tchx.ChannelCount}) ---");
+
+                    // Основные таблицы
+                    for (int i = 0; i < s.Tchx.MainTables.Count; i++)
+                    {
+                        WriteTchxTable(sb, $"# Основная {i + 1}", s.Tchx.MainTables[i]);
+                        sb.AppendLine();
+                    }
+
+                    // Проверочные таблицы
+                    for (int i = 0; i < s.Tchx.CheckTables.Count; i++)
+                    {
+                        WriteTchxTable(sb, $"# Проверка {i + 1}", s.Tchx.CheckTables[i]);
+                        sb.AppendLine();
+                    }
+                }
+
                 WriteTable(sb, "# --- Погрешность ---", s.Errors);
                 sb.AppendLine();
             }
@@ -190,6 +211,89 @@ namespace TERMINAL.Services
                     currentSection = "check";
                     continue;
                 }
+                if (line.StartsWith("# --- ТЧХ"))
+                {
+                    currentSection = "tchx";
+                    // Извлекаем ChannelCount
+                    int p1 = line.IndexOf('(');
+                    int p2 = line.IndexOf(')');
+                    if (p1 >= 0 && p2 > p1)
+                    {
+                        string mode = line.Substring(p1 + 1, p2 - p1 - 1);
+                        current.Tchx = new TchxData { ChannelCount = mode };
+                    }
+                    continue;
+                }
+                if (line.StartsWith("# Основная") || line.StartsWith("# Проверка"))
+                {
+                    bool isMain = line.StartsWith("# Основная");
+                    string tchxHeader = line.Substring(2).Trim();
+
+                    // Пропускаем строку с самим заголовком (если идёт "# Название таблицы")
+                    i++;
+                    if (i >= lines.Length) break;
+
+                    // Если следующая строка — тоже "# ...", это Title таблицы
+                    string title = tchxHeader;
+                    if (lines[i].Trim().StartsWith("#"))
+                    {
+                        title = lines[i].Trim().Substring(1).Trim();
+                        i++;
+                        if (i >= lines.Length) break;
+                    }
+
+                    // Подписи столбцов
+                    var colHeaders = lines[i].Split(';')
+                        .Select(x => x.Trim())
+                        .ToArray();
+
+                    var table = new TchxTable
+                    {
+                        Title = title,
+                        ColumnHeaders = colHeaders
+                    };
+
+                    // Читаем до 10 строк данных
+                    var valuesList = new List<double?[]>();
+                    i++;
+
+                    while (i < lines.Length && valuesList.Count < 10)
+                    {
+                        string dataLine = lines[i].Trim();
+                        if (string.IsNullOrEmpty(dataLine) || dataLine.StartsWith("#"))
+                        {
+                            i--;
+                            break;
+                        }
+
+                        var cells = dataLine.Split(';');
+                        var row = new double?[4];
+                        for (int c = 0; c < 4; c++)
+                        {
+                            row[c] = c < cells.Length ? ParseNullable(cells[c]) : null;
+                        }
+                        valuesList.Add(row);
+                        i++;
+                    }
+
+                    // Заполняем Values
+                    table.Values = new double?[10, 4];
+                    for (int r = 0; r < valuesList.Count; r++)
+                    {
+                        for (int c = 0; c < 4; c++)
+                        {
+                            table.Values[r, c] = valuesList[r][c];
+                        }
+                    }
+
+                    if (current?.Tchx != null)
+                    {
+                        if (isMain) current.Tchx.MainTables.Add(table);
+                        else current.Tchx.CheckTables.Add(table);
+                    }
+
+                    continue;
+                }
                 if (line.StartsWith("# --- Погрешность"))
                 {
                     currentSection = "errors";
@@ -281,6 +385,32 @@ namespace TERMINAL.Services
                 CultureInfo.InvariantCulture, out double r))
                 return r;
             return null;
+        }
+
+        private static void WriteTchxTable(StringBuilder sb, string header, TchxTable table)
+        {
+            sb.AppendLine(header);
+
+            if (!string.IsNullOrEmpty(table.Title))
+                sb.AppendLine($"# {table.Title}");
+
+            sb.AppendLine(string.Join(";", table.ColumnHeaders));
+
+            for (int r = 0; r < table.Values.GetLength(0); r++)
+            {
+                bool hasAny = false;
+                for (int c = 0; c < table.Values.GetLength(1); c++)
+                    if (table.Values[r, c].HasValue) { hasAny = true; break; }
+
+                if (!hasAny) continue;
+
+                for (int c = 0; c < table.Values.GetLength(1); c++)
+                {
+                    if (c > 0) sb.Append(';');
+                    sb.Append(FormatNullable(table.Values[r, c]));
+                }
+                sb.AppendLine();
+            }
         }
     }
 }

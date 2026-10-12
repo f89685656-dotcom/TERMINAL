@@ -47,11 +47,9 @@ namespace TERMINAL.Services
                     {
                         wb = xl.Workbooks.Open(file);
 
-                        // ← ЯВНЫЙ ТИП + приведение к object
                         SensorSummary sensor = ReadSensorFromOpenWorkbook((object)wb);
                         batch.Sensors.Add(sensor);
 
-                        // Температуры — из первого датчика
                         if (batch.Temperatures.Count == 0 &&
                             sensor.Errors.ColumnHeaders.Count > 0)
                         {
@@ -62,6 +60,7 @@ namespace TERMINAL.Services
                     }
                     finally
                     {
+                        // Закрываем ТОЛЬКО книгу, без Quitif (line.StartsWith("# Основная") || line.StartsWith("# Проверка"))
                         if (wb != null)
                         {
                             try { ((dynamic)wb).Close(false); } catch { }
@@ -71,12 +70,12 @@ namespace TERMINAL.Services
             }
             finally
             {
+                // ← Quit и Release ТОЛЬКО ЗДЕСЬ, один раз
                 if (xlApp != null)
                 {
                     try { ((dynamic)xlApp).Quit(); } catch { }
                     try { System.Runtime.InteropServices.Marshal.ReleaseComObject(xlApp); } catch { }
                 }
-
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
             }
@@ -158,15 +157,13 @@ namespace TERMINAL.Services
             {
                 throw new Exception("Датчик: " + ex.Message, ex);
             }
+            sensor.Tchx = ReadTchx(workbook);
 
             return sensor;
         }
-        private static TableData ReadTable(
-            dynamic ws,
-            int tempRow, int tempColStart, int tempColCount,
-            int pressRowStart, int pressRowCount, int pressCol,
-            int dataRowStart, int dataColStart,
-            int dataRows, int dataCols)
+        
+        
+        private static TableData ReadTable(dynamic ws,int tempRow, int tempColStart, int tempColCount,int pressRowStart, int pressRowCount, int pressCol,int dataRowStart, int dataColStart,int dataRows, int dataCols)
         {
             var table = new TableData();
 
@@ -214,6 +211,92 @@ namespace TERMINAL.Services
             if (v is int i) return i;
             if (double.TryParse(v.ToString(), out double r)) return r;
             return null;
+        }
+
+        private static TchxData? ReadTchx(dynamic workbook)
+        {
+            // Условие читаем с листа БЧХ
+            dynamic wsBCH = workbook.Sheets["БЧХ"];
+            string mode = (wsBCH.Range("I11").Value?.ToString() ?? "").Trim();
+
+            if (mode.IndexOf("Без термоканала", StringComparison.OrdinalIgnoreCase) >= 0)
+                return null;
+
+            var tchx = new TchxData { ChannelCount = mode };
+
+            // Таблицы читаем с листа ТЧХ
+            dynamic wsTCH = workbook.Sheets["ТЧХ"];
+
+            var mainCols = new List<(int col, int colEnd)>();
+            var checkCols = new List<(int col, int colEnd)>();
+
+            if (mode.IndexOf("Один", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                mainCols.Add((1, 4));
+                checkCols.Add((1, 4));
+            }
+            else if (mode.IndexOf("Два", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                mainCols.Add((1, 4));
+                mainCols.Add((6, 9));
+                checkCols.Add((1, 4));
+                checkCols.Add((6, 9));
+            }
+            else if (mode.IndexOf("Три", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                mainCols.Add((1, 4));
+                mainCols.Add((6, 9));
+                mainCols.Add((11, 14));
+                checkCols.Add((1, 4));
+                checkCols.Add((6, 9));
+                checkCols.Add((11, 14));
+            }
+            else
+            {
+                return null;
+            }
+
+            // ← читаем с wsTCH, а не wsBCH
+            foreach (var (col, colEnd) in mainCols)
+            {
+                tchx.MainTables.Add(ReadTchxTable(wsTCH, 3, col, colEnd));
+            }
+
+            foreach (var (col, colEnd) in checkCols)
+            {
+                tchx.CheckTables.Add(ReadTchxTable(wsTCH, 37, col, colEnd));
+            }
+
+            return tchx;
+        }
+
+        private static TchxTable ReadTchxTable(dynamic ws, int rowStart, int col, int colEnd)
+        {
+            var table = new TchxTable();
+
+            // Заголовок (объединённая ячейка)
+            table.Title = ws.Cells[rowStart, col].Value?.ToString()?.Trim() ?? "";
+
+            // Подписи столбцов (строка +1)
+            table.ColumnHeaders = new string[4];
+            for (int c = 0; c < 4; c++)
+            {
+                table.ColumnHeaders[c] = ws.Cells[rowStart + 1, col + c]
+                                            .Value?.ToString()?.Trim() ?? "";
+            }
+
+            // Данные (10 строк × 4 столбца, начиная со строки +2)
+            table.Values = new double?[10, 4];
+            for (int r = 0; r < 10; r++)
+            {
+                for (int c = 0; c < 4; c++)
+                {
+                    var v = ws.Cells[rowStart + 2 + r, col + c].Value;
+                    table.Values[r, c] = ToNullableDouble(v);
+                }
+            }
+
+            return table;
         }
     }
 }

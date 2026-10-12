@@ -20,6 +20,7 @@ namespace TERMINAL.Models
         public TableData GradHysteresis { get; set; } = new();
         public TableData CheckHysteresis { get; set; } = new();
         public TableData Errors { get; set; } = new();
+        public TchxData? Tchx { get; set; }
     }
 
     public class TableData
@@ -38,5 +39,19 @@ namespace TERMINAL.Models
         public double? Check4 { get; set; }
         public double? Check5 { get; set; }
         public SensorSummary Source { get; set; } = null!;
+    }
+
+    public class TchxTable
+    {
+        public string Title { get; set; } = "";
+        public string[] ColumnHeaders { get; set; } = new string[4];
+        public double?[,] Values { get; set; } = new double?[10, 4];
+    }
+
+    public class TchxData
+    {
+        public string ChannelCount { get; set; } = "";
+        public List<TchxTable> MainTables { get; set; } = new();
+        public List<TchxTable> CheckTables { get; set; } = new();
     }
 }

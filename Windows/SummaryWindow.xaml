@@ -89,6 +89,7 @@
             Height="30"
             Margin="0,0,0,4">
             <TabItem Header="Гистерезис"/>
+            <TabItem Header="ТЧХ"/>
             <TabItem Header="Погрешность"/>
         </TabControl>
 
