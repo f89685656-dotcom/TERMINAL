@@ -36,7 +36,7 @@ namespace TERMINAL
             BatchTargetPressureCombo.Items.Add("140 МПа");
             BatchTargetPressureCombo.Items.Add("160 МПа (БУРСЕРВИС)");
             BatchTargetPressureCombo.Items.Add("160 МПа (Schlumberger)");
-            BatchTargetPressureCombo.Items.Add("ТЕСТ");
+            BatchTargetPressureCombo.Items.Add("100 МПа (New)");
             BatchTargetPressureCombo.SelectedIndex = 0;
         }
 
@@ -326,7 +326,7 @@ namespace TERMINAL
             { "140 МПа", new double[] { 0, 15, 30, 45, 60, 75, 90, 105, 120, 140, 105, 90, 75, 60, 30, 0 } },
             { "160 МПа (БУРСЕРВИС)", new double[] { 0, 34.5, 69, 103.5, 138, 160, 155, 120.75, 86.25, 51.75, 17.25, 2.5 } },
             { "160 МПа (Schlumberger)", new double[] { 0, 15, 30, 45, 60, 80, 100, 120, 140, 160, 120, 80, 60, 45, 15, 0 } },
-            { "ТЕСТ", new double[] { 0, 0, 0, 0, 0 } },
+            { "100 МПа (New)", new double[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 0 } },
         };
 
         // ─────────────────────────── НАСТРОЙКИ ───────────────────────────
