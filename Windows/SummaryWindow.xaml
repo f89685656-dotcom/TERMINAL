@@ -72,10 +72,10 @@
 
         <!-- Вкладки -->
         <TabControl Grid.Row="4" x:Name="DetailTabs"
-                    SelectionChanged="DetailTabs_SelectionChanged"
-                    Height="30">
+            SelectionChanged="DetailTabs_SelectionChanged"
+            Height="30"
+            Margin="0,0,0,4">
             <TabItem Header="Гистерезис"/>
-            <TabItem Header="Проверка"/>
             <TabItem Header="Погрешность"/>
         </TabControl>
 

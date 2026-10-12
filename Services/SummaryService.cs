@@ -123,7 +123,7 @@ namespace TERMINAL.Services
                 {
                     sensor.Errors = ReadTable(
                         wsTerminal,
-                        tempRow: 2, tempColStart: 3, tempColCount: 10,
+                        tempRow: 3, tempColStart: 3, tempColCount: 10,
                         pressRowStart: 4, pressRowCount: 16, pressCol: 2,
                         dataRowStart: 4, dataColStart: 3,
                         dataRows: 16, dataCols: 10);
@@ -136,7 +136,7 @@ namespace TERMINAL.Services
                     sensor.GradHysteresis = ReadTable(
                         wsTerminal,
                         tempRow: 4, tempColStart: 15, tempColCount: 10,
-                        pressRowStart: 4, pressRowCount: 7, pressCol: 14,
+                        pressRowStart: 5, pressRowCount: 6, pressCol: 14,
                         dataRowStart: 5, dataColStart: 15,
                         dataRows: 6, dataCols: 10);
                 }

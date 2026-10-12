@@ -22,11 +22,10 @@ namespace TERMINAL.Windows
 
             _dataFolder = dataFolder;
 
-            // При открытии сразу читаем .xlsx из папки
             Loaded += (s, e) => RefreshFromXlsx();
         }
 
-        // ─── Перечитать .xlsx из папки ───
+        // ─── Перечитать .xlsm из папки ───
         private void RefreshFromXlsx()
         {
             if (_isLoadedFromCsv) return;
@@ -40,12 +39,10 @@ namespace TERMINAL.Windows
 
             try
             {
-                // Имя партии — из родительской папки
-                string batchName = new DirectoryInfo(
-                    Directory.GetParent(_dataFolder)?.FullName ?? _dataFolder).Name;
+                string parentFolder = Directory.GetParent(_dataFolder)?.FullName ?? _dataFolder;
+                string batchName = new DirectoryInfo(parentFolder).Name;
 
-                _currentBatch = SummaryService.ReadAllSensorsFromFolder(
-                    _dataFolder, batchName);
+                _currentBatch = SummaryService.ReadAllSensorsFromFolder(parentFolder, batchName);
 
                 BatchNameText.Text = $"Партия: {_currentBatch.BatchName}";
                 UpdateSummaryGrid();
@@ -55,7 +52,7 @@ namespace TERMINAL.Windows
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка чтения .xlsx:\n{ex.Message}",
+                MessageBox.Show($"Ошибка чтения .xlsm:\n{ex.Message}",
                     "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -75,8 +72,6 @@ namespace TERMINAL.Windows
             {
                 _currentBatch = CsvService.LoadFromCsv(dlg.FileName);
                 _isLoadedFromCsv = true;
-
-                // Блокируем «Обновить» — данные из архива
                 RefreshButton.IsEnabled = false;
 
                 BatchNameText.Text = $"Партия: {_currentBatch.BatchName}";
@@ -117,7 +112,7 @@ namespace TERMINAL.Windows
             }
         }
 
-        // ─── Обновить (перечитать .xlsx) ───
+        // ─── Обновить ───
         private void Refresh_Click(object sender, RoutedEventArgs e)
         {
             if (_isLoadedFromCsv)
@@ -139,13 +134,13 @@ namespace TERMINAL.Windows
             }
         }
 
-        // ─── Выбор датчика в сводке ───
+        // ─── Выбор датчика ───
         private void SummaryGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateDetailPanel();
         }
 
-        // ─── Переключение вкладки деталей ───
+        // ─── Переключение вкладки ───
         private void DetailTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateDetailPanel();
@@ -181,6 +176,141 @@ namespace TERMINAL.Windows
                 SummaryGrid.SelectedIndex = 0;
         }
 
+
+        // ─── Построить панель «Гистерезис» (2 таблицы) ───
+        private UIElement BuildHysteresisPanel(SummaryRow row)
+        {
+            var stack = new StackPanel { Orientation = Orientation.Vertical };
+
+            // Таблица 1: Гистерезис градуировки
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Гистерезис градуировки",
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 4)
+            });
+
+            stack.Children.Add(BuildTableGrid(row.Source.GradHysteresis));
+
+            // Таблица 2: Гистерезис проверки
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Гистерезис проверки",
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 16, 0, 4)
+            });
+
+            stack.Children.Add(BuildTableGrid(row.Source.CheckHysteresis));
+
+            return stack;
+        }
+
+        // ─── Построить панель с одной таблицей ───
+        private UIElement BuildSingleTablePanel(TableData? table)
+        {
+            if (table == null || table.Values.Length == 0)
+            {
+                return new TextBlock
+                {
+                    Text = "Нет данных",
+                    Margin = new Thickness(10),
+                    FontStyle = FontStyles.Italic
+                };
+            }
+
+            return BuildTableGrid(table);
+        }
+
+        // ─── Построить DataGrid для одной таблицы ───
+        private UIElement BuildTableGrid(TableData table)
+        {
+            if (table == null || table.Values.Length == 0)
+            {
+                return new TextBlock
+                {
+                    Text = "Нет данных",
+                    Margin = new Thickness(10),
+                    FontStyle = FontStyles.Italic
+                };
+            }
+
+            // Определяем заполненные столбцы
+            bool[] hasData = new bool[table.ColumnHeaders.Count];
+            for (int c = 0; c < table.ColumnHeaders.Count; c++)
+            {
+                for (int r = 0; r < table.Values.GetLength(0); r++)
+                {
+                    if (table.Values[r, c].HasValue)
+                    {
+                        hasData[c] = true;
+                        break;
+                    }
+                }
+            }
+
+            var grid = new DataGrid
+            {
+                AutoGenerateColumns = false,
+                IsReadOnly = true,
+                CanUserAddRows = false,
+                CanUserSortColumns = false,
+                GridLinesVisibility = DataGridGridLinesVisibility.All,
+                HeadersVisibility = DataGridHeadersVisibility.Column,
+                RowHeight = 22,
+                FontSize = 12,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+
+            // Колонка P
+            grid.Columns.Add(new DataGridTextColumn
+            {
+                Header = "P, кгс/см²",
+                Binding = new System.Windows.Data.Binding("P"),
+                Width = 110
+            });
+
+            // Колонки температур — только заполненные
+            for (int c = 0; c < table.ColumnHeaders.Count; c++)
+            {
+                if (!hasData[c]) continue;
+
+                int colIndex = c;
+                grid.Columns.Add(new DataGridTextColumn
+                {
+                    Header = table.ColumnHeaders[c].ToString("0.##"),
+                    Binding = new System.Windows.Data.Binding($"C{colIndex}"),
+                    Width = 70
+                });
+            }
+
+            // Строки
+            var rows = new System.Collections.Generic.List<object>();
+
+            for (int r = 0; r < table.Values.GetLength(0); r++)
+            {
+                dynamic expando = new System.Dynamic.ExpandoObject();
+                var dict = (System.Collections.Generic.IDictionary<string, object>)expando;
+
+                dict["P"] = table.RowHeaders.Count > r
+                    ? table.RowHeaders[r].ToString("0.###")
+                    : "";
+
+                for (int c = 0; c < table.Values.GetLength(1); c++)
+                {
+                    var val = table.Values[r, c];
+                    dict[$"C{c}"] = val?.ToString("0.000") ?? "";
+                }
+
+                rows.Add(expando);
+            }
+
+            grid.ItemsSource = rows;
+
+            return grid;
+        }
+
         // ─── Заполнить панель деталей ───
         private void UpdateDetailPanel()
         {
@@ -196,35 +326,16 @@ namespace TERMINAL.Windows
 
             int tabIndex = DetailTabs.SelectedIndex;
 
-            TableData? table = tabIndex switch
+            // Вкладка 0 — Гистерезис (две таблицы: градуировка + проверка)
+            // Вкладка 1 — Погрешность (одна таблица)
+            if (tabIndex == 0)
             {
-                0 => row.Source.GradHysteresis,
-                1 => row.Source.CheckHysteresis,
-                2 => row.Source.Errors,
-                _ => null
-            };
-
-            if (table == null)
-            {
-                DetailContent.Content = new TextBlock
-                {
-                    Text = "Нет данных",
-                    Margin = new Thickness(10),
-                    FontStyle = FontStyles.Italic
-                };
-                return;
+                DetailContent.Content = BuildHysteresisPanel(row);
             }
-
-            // ВРЕМЕННАЯ заглушка — показываем размеры и заголовки
-            DetailContent.Content = new TextBlock
+            else
             {
-                Text = $"Таблица: {table.Values.GetLength(0)} × {table.Values.GetLength(1)}\n" +
-                       $"Температуры: {string.Join(", ", table.ColumnHeaders)}\n" +
-                       $"Давления: {string.Join(", ", table.RowHeaders)}",
-                Margin = new Thickness(10),
-                FontFamily = new FontFamily("Consolas"),
-                FontSize = 12
-            };
+                DetailContent.Content = BuildSingleTablePanel(row.Source.Errors);
+            }
         }
     }
 
