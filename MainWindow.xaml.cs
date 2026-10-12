@@ -27,6 +27,7 @@ namespace TERMINAL
         public static MainWindow? Current { get; private set; }
         private TcpClient? _client;
         private NetworkStream? _stream;
+        private float _currentBatchSetPointForSave = 0f;
         private readonly object _streamLock = new object();
 
         private DispatcherTimer? _timer;

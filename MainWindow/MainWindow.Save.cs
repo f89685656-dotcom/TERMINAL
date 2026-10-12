@@ -49,35 +49,19 @@ namespace TERMINAL
             }
 
             string fileName;
-            string batchSetPoint = GetCurrentBatchSetPoint();
 
-            if (!string.IsNullOrEmpty(batchSetPoint))
+            if (_batchRunning && _currentBatchSetPointForSave > 0)
             {
-                // Имя из активного задания пакета: "+80.csv" или "80.csv"
-                fileName = "+" + batchSetPoint + ".csv";
+                fileName = FormatFurnaceSetPointFileName(_currentBatchSetPointForSave);
             }
             else
             {
-                // Fallback — старое поведение (для ручного режима)
                 float furnaceSetPoint = _lastValidFurnaceSetPoint;
                 fileName = FormatFurnaceSetPointFileName(furnaceSetPoint);
             }
 
             string fullPath = Path.Combine(saveDir, fileName);
-
-            // В SaveDataCoreAsync после формирования fullPath:
             _lastSavedFilePath = fullPath;
-
-            // В RunExcelMacroInternal:
-            string csvPath = _lastSavedFilePath;
-            if (!string.IsNullOrEmpty(csvPath) && File.Exists(csvPath))
-            {
-                // используем именно этот файл
-            }
-            else
-            {
-                // fallback — искать по уставке
-            }
 
             if (!silent)
             {

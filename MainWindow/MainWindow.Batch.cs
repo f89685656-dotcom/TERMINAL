@@ -235,6 +235,8 @@ namespace TERMINAL
 
                     completedCount++;
 
+                    _currentBatchSetPointForSave = job.SetPoint;
+
                     // 1) Запись уставки
                     job.StatusText = "запись уставки";
                     job.StatusColor = Brushes.Orange;
@@ -306,6 +308,19 @@ namespace TERMINAL
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» " +
                               $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
 
+                    // ─── Переключение панелей по режиму задания ───
+                    if (job.IsCalibrationMode)
+                    {
+                        CalibrationPanel.Visibility = Visibility.Visible;
+                        PumpPanel.Visibility = Visibility.Collapsed;
+                    }
+                    else
+                    {
+                        CalibrationPanel.Visibility = Visibility.Collapsed;
+                        PumpPanel.Visibility = Visibility.Visible;
+                    }
+                    // ──────────────────────────────────────────────
+
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(
                         TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -340,6 +355,7 @@ namespace TERMINAL
             finally
             {
                 _batchRunning = false;
+                _currentBatchSetPointForSave = 0f;
                 StopBatchStatusTimer();
                 _batchRunDoneSignal = null;
                 _batchStopRequested = false;

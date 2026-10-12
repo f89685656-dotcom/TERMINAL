@@ -89,7 +89,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="32"/>
                     <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="45"/>
+                    <ColumnDefinition Width="55"/>
                     <ColumnDefinition Width="27"/>
                     <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="62"/>
@@ -131,7 +131,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="32"/>
                     <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="55"/>
                     <ColumnDefinition Width="27"/>
                     <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="62"/>
@@ -557,7 +557,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32"/>
                                         <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="45"/>
+                                        <ColumnDefinition Width="55"/>
                                         <ColumnDefinition Width="27"/>
                                         <ColumnDefinition Width="40"/>
                                         <ColumnDefinition Width="62"/>
@@ -594,7 +594,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32"/>
                                         <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="55"/>
                                         <ColumnDefinition Width="27"/>
                                         <ColumnDefinition Width="40"/>
                                         <ColumnDefinition Width="62"/>
