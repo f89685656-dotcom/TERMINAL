@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
 using TERMINAL.Models;
 using TERMINAL.Services;
@@ -22,7 +23,21 @@ namespace TERMINAL.Windows
 
             _dataFolder = dataFolder;
 
-            Loaded += (s, e) => RefreshFromXlsx();
+            // Показать путь в окне
+            DataFolderText.Text = $"Папка: {_dataFolder}";
+
+            // Начальное состояние — пусто
+            BatchNameText.Text = "Партия: —";
+            SummaryGrid.ItemsSource = null;
+            DetailHeaderText.Text = "Детали: —";
+            DetailContent.Content = new TextBlock
+            {
+                Text = "Нажмите «Обновить» для загрузки данных из .xlsm\n" +
+                       "или «Открыть CSV» для просмотра сохранённой партии.",
+                Margin = new Thickness(20),
+                FontStyle = FontStyles.Italic,
+                Foreground = Brushes.Gray
+            };
         }
 
         // ─── Перечитать .xlsm из папки ───
@@ -117,7 +132,9 @@ namespace TERMINAL.Windows
         {
             if (_isLoadedFromCsv)
             {
-                MessageBox.Show("Обновление недоступно для архивных данных.");
+                MessageBox.Show("Обновление недоступно для архивных данных.\n" +
+                                "Сначала закройте окно и откройте заново.",
+                                "Обновление", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -236,7 +253,7 @@ namespace TERMINAL.Windows
                 };
             }
 
-            // Определяем заполненные столбцы
+            // ─── Определяем заполненные столбцы ───
             bool[] hasData = new bool[table.ColumnHeaders.Count];
             for (int c = 0; c < table.ColumnHeaders.Count; c++)
             {
@@ -250,6 +267,21 @@ namespace TERMINAL.Windows
                 }
             }
 
+            // ─── Максимум по модулю в этой таблице ───
+            double maxAbs = 0;
+            for (int r = 0; r < table.Values.GetLength(0); r++)
+            {
+                for (int c = 0; c < table.Values.GetLength(1); c++)
+                {
+                    var v = table.Values[r, c];
+                    if (v.HasValue && Math.Abs(v.Value) > maxAbs)
+                        maxAbs = Math.Abs(v.Value);
+                }
+            }
+            if (maxAbs < 0.0001) maxAbs = 1.0;
+            maxAbs *= 1.05;   // запас
+
+            // ─── DataGrid ───
             var grid = new DataGrid
             {
                 AutoGenerateColumns = false,
@@ -263,7 +295,7 @@ namespace TERMINAL.Windows
                 HorizontalAlignment = HorizontalAlignment.Left
             };
 
-            // Колонка P
+            // ─── Колонка P ───
             grid.Columns.Add(new DataGridTextColumn
             {
                 Header = "P, кгс/см²",
@@ -271,21 +303,65 @@ namespace TERMINAL.Windows
                 Width = 110
             });
 
-            // Колонки температур — только заполненные
+            // ─── Колонки температур с полосками ───
             for (int c = 0; c < table.ColumnHeaders.Count; c++)
             {
                 if (!hasData[c]) continue;
 
                 int colIndex = c;
-                grid.Columns.Add(new DataGridTextColumn
+                string bindingPath = $"C{colIndex}";
+
+                // DataTemplate: полоска + текст
+                var template = new DataTemplate();
+                var gridFactory = new FrameworkElementFactory(typeof(Grid));
+
+                // Слой 1: полоска
+                var barFactory = new FrameworkElementFactory(typeof(Border));
+                barFactory.SetBinding(Border.WidthProperty,
+                    new System.Windows.Data.Binding(bindingPath)
+                    {
+                        Converter = new TERMINAL.Converters.ValueToBarWidthConverter
+                        {
+                            MaxWidth = 60,
+                            MaxAbsValue = maxAbs   // ← масштаб этой таблицы
+                        }
+                    });
+                barFactory.SetBinding(Border.BackgroundProperty,
+                    new System.Windows.Data.Binding(bindingPath)
+                    {
+                        Converter = new TERMINAL.Converters.ValueToBarBrushConverter()
+                    });
+                barFactory.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Left);
+                barFactory.SetValue(Border.MarginProperty, new Thickness(2, 2, 2, 2));
+                barFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
+                gridFactory.AppendChild(barFactory);
+
+                // Слой 2: текст
+                var textFactory = new FrameworkElementFactory(typeof(TextBlock));
+                textFactory.SetBinding(TextBlock.TextProperty,
+                    new System.Windows.Data.Binding(bindingPath)
+                    {
+                        StringFormat = "0.000"
+                    });
+                textFactory.SetValue(TextBlock.ForegroundProperty, Brushes.Black);
+                textFactory.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                textFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+                textFactory.SetValue(TextBlock.FontSizeProperty, 12.0);
+                gridFactory.AppendChild(textFactory);
+
+                template.VisualTree = gridFactory;
+
+                var column = new DataGridTemplateColumn
                 {
                     Header = table.ColumnHeaders[c].ToString("0.##"),
-                    Binding = new System.Windows.Data.Binding($"C{colIndex}"),
+                    CellTemplate = template,
                     Width = 70
-                });
+                };
+
+                grid.Columns.Add(column);
             }
 
-            // Строки
+            // ─── Строки ───
             var rows = new System.Collections.Generic.List<object>();
 
             for (int r = 0; r < table.Values.GetLength(0); r++)
@@ -300,7 +376,7 @@ namespace TERMINAL.Windows
                 for (int c = 0; c < table.Values.GetLength(1); c++)
                 {
                     var val = table.Values[r, c];
-                    dict[$"C{c}"] = val?.ToString("0.000") ?? "";
+                    dict[$"C{c}"] = val;   // ← передаём double?, чтобы конвертеры работали
                 }
 
                 rows.Add(expando);
