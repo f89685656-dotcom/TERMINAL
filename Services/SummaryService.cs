@@ -84,6 +84,45 @@ namespace TERMINAL.Services
         }
 
         /// <summary>
+        /// Читает один .xlsm файл (один датчик).
+        /// Открывает Excel, читает, закрывает. Для прогресс-бара.
+        /// </summary>
+        public static SensorSummary ReadSingleFile(string filePath)
+        {
+            object? xlApp = null;
+            dynamic? wb = null;
+
+            try
+            {
+                Type? excelType = Type.GetTypeFromProgID("Excel.Application");
+                if (excelType == null)
+                    throw new Exception("Excel не установлен на этой машине");
+
+                dynamic xl = Activator.CreateInstance(excelType)!;
+                xlApp = xl;
+                xl.Visible = false;
+                xl.DisplayAlerts = false;
+
+                wb = xl.Workbooks.Open(filePath);
+                return ReadSensorFromOpenWorkbook((object)wb);
+            }
+            finally
+            {
+                if (wb != null)
+                {
+                    try { ((dynamic)wb).Close(false); } catch { }
+                }
+                if (xlApp != null)
+                {
+                    try { ((dynamic)xlApp).Quit(); } catch { }
+                    try { System.Runtime.InteropServices.Marshal.ReleaseComObject(xlApp); } catch { }
+                }
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+        }
+
+        /// <summary>
         /// Читает данные одного датчика из открытой книги.
         /// </summary>
         public static SensorSummary ReadSensorFromOpenWorkbook(dynamic workbook)
@@ -298,5 +337,6 @@ namespace TERMINAL.Services
 
             return table;
         }
+
     }
 }

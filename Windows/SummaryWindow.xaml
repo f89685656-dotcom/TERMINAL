@@ -1,28 +1,32 @@
 ﻿<Window x:Class="TERMINAL.Windows.SummaryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:conv="clr-namespace:TERMINAL.Converters"
-        Title="Сводка данных" Width="1200" Height="800"
+        Title="Сводка данных"
+        Width="1200" Height="800"
         MinWidth="800" MinHeight="500"
         WindowStartupLocation="CenterOwner">
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- toolbar -->
+            <!-- 0: toolbar -->
             <RowDefinition Height="Auto"/>
-            <!-- заголовок сводки -->
+            <!-- 1: путь к папке -->
+            <RowDefinition Height="Auto"/>
+            <!-- 2: прогресс-бар -->
+            <RowDefinition Height="Auto"/>
+            <!-- 3: заголовок сводки -->
             <RowDefinition Height="2*"/>
-            <!-- сводка -->
+            <!-- 4: DataGrid сводки -->
             <RowDefinition Height="Auto"/>
-            <!-- заголовок деталей -->
+            <!-- 5: заголовок деталей -->
             <RowDefinition Height="Auto"/>
-            <!-- вкладки -->
+            <!-- 6: TabControl -->
             <RowDefinition Height="3*"/>
-            <!-- детали -->
+            <!-- 7: область деталей -->
         </Grid.RowDefinitions>
 
-        <!-- Toolbar -->
+        <!-- ═══ Toolbar ═══ -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
             <Button x:Name="OpenCsvButton" Content="Открыть CSV"
                     Width="110" Height="28" Margin="0,0,6,0"
@@ -36,37 +40,67 @@
             <Button x:Name="PrintButton" Content="Печать"
                     Width="100" Height="28" Margin="0,0,6,0"
                     Click="Print_Click"/>
+
             <CheckBox x:Name="PrintAllCheckBox"
-                    Content="Печать всех датчиков"
-                    FontSize="12"
-                    VerticalAlignment="Center"
-                    Margin="15,0,0,0"/>
+                      Content="Печать всех датчиков"
+                      FontSize="12"
+                      VerticalAlignment="Center"
+                      Margin="15,0,0,0"/>
 
-            <TextBlock x:Name="DataFolderText"
-                   Text=""
-                   VerticalAlignment="Center"
-                   FontSize="11"
-                   Foreground="Gray"
-                   Margin="20,0,0,0"/>
-
-            <TextBlock x:Name="BatchNameText" VerticalAlignment="Center"
-                       FontSize="12" Margin="20,0,0,0"/>
+            <TextBlock x:Name="BatchNameText"
+                       Text="Партия: —"
+                       VerticalAlignment="Center"
+                       FontSize="13" FontWeight="Bold"
+                       Margin="15,0,0,0"/>
         </StackPanel>
 
-        <!-- Заголовок сводки -->
-        <TextBlock Grid.Row="1" Text="Сводка по датчикам"
-                   FontSize="14" FontWeight="Bold" Margin="0,0,0,4"/>
+        <!-- ═══ Путь к папке ═══ -->
+        <TextBlock Grid.Row="1"
+                   x:Name="DataFolderText"
+                   Text=""
+                   FontSize="11"
+                   Foreground="Gray"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,4"/>
 
-        <!-- DataGrid сводки -->
-        <DataGrid Grid.Row="2" x:Name="SummaryGrid"
-          AutoGenerateColumns="False"
-          IsReadOnly="True"
-          CanUserSortColumns="True"
-          SelectionChanged="SummaryGrid_SelectionChanged"
-          GridLinesVisibility="All"
-          HeadersVisibility="Column"
-          RowHeight="22"
-          FontSize="12">
+        <!-- ═══ Прогресс-бар (отдельная строка) ═══ -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    Margin="0,0,0,6">
+            <ProgressBar x:Name="LoadProgressBar"
+                         Width="300" Height="18"
+                         Minimum="0" Maximum="1"
+                         Value="0"
+                         VerticalAlignment="Center"
+                         Visibility="Collapsed"/>
+            <TextBlock x:Name="LoadProgressText"
+                       Text=""
+                       VerticalAlignment="Center"
+                       FontSize="11"
+                       Foreground="Gray"
+                       Margin="8,0,0,0"
+                       Visibility="Collapsed"/>
+        </StackPanel>
+
+        <!-- ═══ Заголовок сводки ═══ -->
+        <TextBlock Grid.Row="3"
+                   Text="Сводка по датчикам"
+                   FontSize="14" FontWeight="Bold"
+                   Margin="0,0,0,4"/>
+
+        <!-- ═══ DataGrid сводки ═══ -->
+        <DataGrid Grid.Row="4"
+                  x:Name="SummaryGrid"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserSortColumns="True"
+                  CanUserAddRows="False"
+                  SelectionMode="Single"
+                  SelectionChanged="SummaryGrid_SelectionChanged"
+                  GridLinesVisibility="All"
+                  HeadersVisibility="Column"
+                  RowHeaderWidth="0"
+                  FontSize="12">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="№" Binding="{Binding Number}" Width="50"/>
                 <DataGridTextColumn Header="Опис.град." Binding="{Binding GradDescription, StringFormat=0.0000}" Width="90"/>
@@ -78,26 +112,34 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Заголовок деталей -->
-        <TextBlock Grid.Row="3" x:Name="DetailHeaderText"
-                   Text="Детали: —"
-                   FontSize="14" FontWeight="Bold" Margin="0,10,0,4"/>
+        <!-- ═══ Заголовок деталей ═══ -->
+        <TextBlock Grid.Row="5"
+                   x:Name="DetailHeaderText"
+                   Text="Детали: выберите датчик"
+                   FontSize="14" FontWeight="Bold"
+                   Margin="0,10,0,4"/>
 
-        <!-- Вкладки -->
-        <TabControl Grid.Row="4" x:Name="DetailTabs"
-            SelectionChanged="DetailTabs_SelectionChanged"
-            Height="30"
-            Margin="0,0,0,4">
+        <!-- ═══ TabControl ═══ -->
+        <TabControl Grid.Row="6"
+                    x:Name="DetailTabs"
+                    SelectionChanged="DetailTabs_SelectionChanged"
+                    Height="30"
+                    Margin="0,0,0,4">
             <TabItem Header="Гистерезис"/>
             <TabItem Header="ТЧХ"/>
             <TabItem Header="Погрешность"/>
         </TabControl>
 
-        <!-- Область деталей -->
-        <ScrollViewer Grid.Row="5"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Auto">
-            <ContentControl x:Name="DetailContent"/>
-        </ScrollViewer>
+        <!-- ═══ Область деталей ═══ -->
+        <Border Grid.Row="7"
+                BorderBrush="#FFCCCCCC" BorderThickness="1"
+                Background="#FFFCFCFC"
+                CornerRadius="2">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          Padding="8">
+                <ContentControl x:Name="DetailContent"/>
+            </ScrollViewer>
+        </Border>
     </Grid>
 </Window>

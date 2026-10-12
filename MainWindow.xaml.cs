@@ -24,6 +24,7 @@ namespace TERMINAL
 {
     public partial class MainWindow : Window
     {
+        public static MainWindow? Current { get; private set; }
         private TcpClient? _client;
         private NetworkStream? _stream;
         private readonly object _streamLock = new object();
@@ -149,6 +150,7 @@ namespace TERMINAL
         public MainWindow()
         {
             InitializeComponent();
+            Current = this;
 
             if (StartButtonBatchBrush is SolidColorBrush sb2 && sb2.CanFreeze)
                 sb2.Freeze();
