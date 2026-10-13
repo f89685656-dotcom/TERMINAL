@@ -488,12 +488,20 @@ namespace TERMINAL
 
             if (!isMax)
             {
+                SetStatus($"Атмосфера: таймер запущен на {remaining} сек");
+
                 while (remaining > 0)
                 {
-                    remaining--;
-                    MinTimerText.Text = remaining.ToString();
+                    await RefreshPressureAndSetPointAsync();
+                    string? stateResponse = await SendCommandAsync("get_state_in_point;");
 
-                    SetStatus($"Атмосфера: {remaining} сек");
+                    if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
+                    {
+                        remaining--;
+                        MaxTimerText.Text = remaining.ToString();
+                    }
+
+                    SetStatus($"Максимум: {remaining} сек");
                     await SafeDelayAsync(1000);
                 }
 
@@ -501,10 +509,11 @@ namespace TERMINAL
                 return;
             }
 
+            SetStatus($"Максимум: таймер запущен на {remaining} сек");
+
             while (remaining > 0)
             {
                 await RefreshPressureAndSetPointAsync();
-
                 string? stateResponse = await SendCommandAsync("get_state_in_point;");
 
                 if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
@@ -513,7 +522,7 @@ namespace TERMINAL
                     MaxTimerText.Text = remaining.ToString();
                 }
 
-                SetStatus($"Максимум: {remaining} сек");
+                SetStatus($"Максимум: {remaining} сек", log: false);
                 await SafeDelayAsync(1000);
             }
 
@@ -525,13 +534,17 @@ namespace TERMINAL
 
             if (!waitForState)
             {
+                // Один раз пишем в журнал
+                SetStatus($"До начала съёма данных: {remaining} сек — таймер запущен");
+
                 while (remaining > 0)
                 {
                     remaining--;
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
-                    SetStatus($"До начала съёма данных: {remaining} сек");
+                    // Обновляем только статус, без журнала
+                    SetStatus($"До начала съёма данных: {remaining} сек", log: false);
                     await SafeDelayAsync(1000);
                 }
 
@@ -541,6 +554,8 @@ namespace TERMINAL
             }
 
             bool firstOkReceived = false;
+
+            SetStatus($"До начала съёма данных: таймер запущен на {remaining} сек");
 
             while (remaining > 0)
             {
@@ -574,6 +589,7 @@ namespace TERMINAL
 
                     while (true)
                     {
+                        SetStatus($"До начала съёма данных: {remaining} сек", log: false);
                         await SafeDelayAsync(1000);
 
                         string? s = await SendCommandAsync("get_state_in_point;");
@@ -585,8 +601,6 @@ namespace TERMINAL
                     }
                     continue;
                 }
-
-                SetStatus($"До начала съёма данных: {remaining} сек");
                 await SafeDelayAsync(1000);
             }
 

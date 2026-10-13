@@ -747,12 +747,15 @@ v1.0.00
 ";
         }
 
-        private void SetStatus(string text, bool running = true)
+        private void SetStatus(string text, bool running = true, bool log = true)
         {
-            if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatus(text, running)); return; }
+            if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => SetStatus(text, running, log)); return; }
+
             StatusText.Text = text;
             StatusText.Foreground = running ? Brushes.Green : Brushes.Gray;
-            AppendLog(text, running ? Brushes.Green : Brushes.Gray);
+
+            if (log)
+                AppendLog(text, running ? Brushes.Green : Brushes.Gray);
         }
 
         private void SetStatusSuccess(string text)
