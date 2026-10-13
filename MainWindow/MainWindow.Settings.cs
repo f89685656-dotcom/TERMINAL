@@ -128,7 +128,11 @@ namespace TERMINAL
                 SavePathBox.Text = _loadedSettings.SavePath;
 
             if (BatchKosaCheckBox != null)
-                BatchKosaCheckBox.IsChecked = _batchKosaEnabled;
+                BatchKosaCheckBox.IsChecked = _loadedSettings?.BatchKosaEnabled ?? false;
+
+            if (AutoExcelCheckBox != null)
+                AutoExcelCheckBox.IsChecked = _loadedSettings?.AutoExcelEnabled ?? true;
+
             if (BatchKosaTimerBox != null)
                 BatchKosaTimerBox.Text = _batchKosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
 
@@ -198,6 +202,7 @@ namespace TERMINAL
                     SavePath = SavePathBox.Text,
                     BatchKosaEnabled = _batchKosaEnabled,
                     BatchKosaTimerSeconds = _batchKosaTimerSeconds,
+                    AutoExcelEnabled = AutoExcelCheckBox.IsChecked == true,
 
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
@@ -347,6 +352,7 @@ namespace TERMINAL
             public double WindowHeight { get; set; } = double.NaN;
             public List<BatchPreset> BatchPresets { get; set; } = new();
             public int LastUsedPresetIndex { get; set; } = -1;
+            public bool AutoExcelEnabled { get; set; } = true;
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");

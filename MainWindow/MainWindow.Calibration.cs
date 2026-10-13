@@ -220,19 +220,26 @@ namespace TERMINAL
 
                             await ClearDataCoreAsync(silent: true);
 
-                            // ─── Автозапуск Excel-макросов (до смены уставки) ───
-                            //if (!_stopRequested && !_batchStopRequested)
-                            //{
-                                //try
-                               // {
-                               //     AppendLog("Excel: автозапуск после градуировки", Brushes.Blue);
-                               //     RunExcelMacroInternal(silent: true);
-                               // }
-                               // catch (Exception ex)
-                               // {
-                               //     AppendLog($"Автозапуск Excel: {ex.Message}", Brushes.OrangeRed);
-                               // }
-                           // }
+                            // ─── Автозапуск Excel ───
+                            bool autoExcelEnabled = AutoExcelCheckBox?.IsChecked == true;
+
+                            if (autoExcelEnabled && !_stopRequested && !_batchStopRequested)
+                            {
+                                try
+                                {
+                                    AppendLog("Excel: автозапуск после градуировки", Brushes.Blue);
+                                    RunExcelMacroInternal(silent: true);
+                                }
+                                catch (Exception ex)
+                                {
+                                    AppendLog($"Автозапуск Excel: {ex.Message}", Brushes.OrangeRed);
+                                }
+                            }
+                            else if (!autoExcelEnabled)
+                            {
+                                AppendLog("Excel: автозапуск пропущен (галочка снята)", Brushes.Gray);
+                            }
+                            // ─────────────────────────
                         }
                         else
                         {

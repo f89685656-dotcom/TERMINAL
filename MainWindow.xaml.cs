@@ -735,5 +735,12 @@ namespace TERMINAL
             }
         }
 
+        private void AutoExcelCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_uiLoaded) return;
+            AppendLog($"AutoExcelCheckBox: {(AutoExcelCheckBox.IsChecked == true ? "включено" : "выключено")}", Brushes.Gray);
+            SaveSettings();
+        }
+
     }
 }
