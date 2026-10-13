@@ -326,18 +326,49 @@ namespace TERMINAL
                     continue;
                 }
 
+                // ─── Первый шаг ───
                 if (i == 0)
                 {
-                    SetStatus("Шаг 1: сброс до атмосферы (vent)");
-                    bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
-                    if (!ventOk) return;
+                    if (v == 0)
+                    {
+                        SetStatus("Шаг 1: сброс до атмосферы (vent)");
+                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        if (!ventOk) return;
 
-                    SetStatus($"Шаг 1: измерение {duration} сек");
-                    await RunTimerWithStepAsync(duration, i, waitForState: false);
+                        SetStatus($"Шаг 1: измерение {duration} сек");
+                        await RunTimerWithStepAsync(duration, i, waitForState: false);
 
-                    SetStatus("Шаг 1: команда съёма");
-                    bool q1 = await TakePointForStepAsync(i, waitForState: false);
-                    if (!q1) return;
+                        SetStatus("Шаг 1: команда съёма");
+                        bool q1 = await TakePointForStepAsync(i, waitForState: false);
+                        if (!q1) return;
+                    }
+                    else
+                    {
+                        SetStatus("Шаг 1: set_mode=control (1)");
+                        bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                        if (!m1) return;
+
+                        await SafeDelayAsync(1000);
+
+                        SetStatus("Шаг 1: set_mode=control (2)");
+                        bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                        if (!m2) return;
+
+                        SetStatus($"Шаг 1: установка {v}");
+                        bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
+                        if (!setOk) return;
+
+                        SetStatus("Шаг 1: ожидание стабилизации");
+                        bool stable = await WaitForStateInPointAsync();
+                        if (!stable) return;
+
+                        SetStatus($"Шаг 1: измерение {duration} сек");
+                        await RunTimerWithStepAsync(duration, i, waitForState: true);
+
+                        SetStatus("Шаг 1: команда съёма");
+                        bool q1 = await TakePointForStepAsync(i, waitForState: true);
+                        if (!q1) return;
+                    }
 
                     if (i < _stepItems.Count)
                     {
@@ -349,15 +380,39 @@ namespace TERMINAL
                     continue;
                 }
 
+                // ─── Последний шаг ───
                 if (i == steps.Length - 1)
                 {
-                    SetStatus($"Шаг {human}: сброс до атмосферы (vent)");
-                    bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
-                    if (!ventOk) return;
+                    if (v == 0)
+                    {
+                        SetStatus($"Шаг {human}: сброс до атмосферы (vent)");
+                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        if (!ventOk) return;
 
-                    SetStatus($"Шаг {human}: ожидание снижения давления");
-                    bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
-                    if (!lowOk) return;
+                        SetStatus($"Шаг {human}: ожидание снижения давления");
+                        bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+                        if (!lowOk) return;
+                    }
+                    else
+                    {
+                        SetStatus($"Шаг {human}: set_mode=control (1)");
+                        bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                        if (!m1) return;
+
+                        await SafeDelayAsync(1000);
+
+                        SetStatus($"Шаг {human}: set_mode=control (2)");
+                        bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                        if (!m2) return;
+
+                        SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
+                        bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
+                        if (!setOk) return;
+
+                        SetStatus($"Шаг {human}: ожидание стабилизации");
+                        bool stable = await WaitForStateInPointAsync();
+                        if (!stable) return;
+                    }
 
                     SetStatus($"Шаг {human}: измерение {duration} сек");
                     await RunTimerWithStepAsync(duration, i, waitForState: v != 0);
@@ -376,23 +431,24 @@ namespace TERMINAL
                     continue;
                 }
 
+                // ─── Обычный шаг (середина) ───
                 SetStatus($"Шаг {human}: set_mode=control (1)");
-                bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m1) return;
+                bool mm1 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                if (!mm1) return;
 
                 await SafeDelayAsync(1000);
 
                 SetStatus($"Шаг {human}: set_mode=control (2)");
-                bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m2) return;
+                bool mm2 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                if (!mm2) return;
 
                 SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
-                bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
-                if (!setOk) return;
+                bool setOk2 = await SendWithRetryAsync($"set_point={v};", "ok;");
+                if (!setOk2) return;
 
                 SetStatus($"Шаг {human}: ожидание стабилизации");
-                bool stable = await WaitForStateInPointAsync();
-                if (!stable) return;
+                bool stable2 = await WaitForStateInPointAsync();
+                if (!stable2) return;
 
                 SetStatus($"Шаг {human}: измерение {duration} сек");
                 await RunTimerWithStepAsync(duration, i, waitForState: v != 0);
@@ -408,6 +464,23 @@ namespace TERMINAL
                 }
                 _completedSteps = i + 1;
                 UpdateStepCounter();
+            }
+
+            // ─── Финальный сброс ───
+            // Если последнее давление в программе ≠ 0 — сброс до атмосферы + уставка 0
+            double lastPressure = steps[steps.Length - 1];
+            if (lastPressure != 0)
+            {
+                SetStatus("Программа завершена — финальный сброс до атмосферы");
+                bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                if (ventOk)
+                {
+                    SetStatus("Ожидание снижения давления");
+                    await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+
+                    SetStatus("Уставка → 0");
+                    await SendWithRetryAsync("set_point=0;", "ok;");
+                }
             }
 
             SetStatus("Программа завершена");
