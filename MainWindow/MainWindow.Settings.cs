@@ -30,13 +30,13 @@ namespace TERMINAL
             BatchTargetPressureCombo.Items.Add("75 МПа");
             BatchTargetPressureCombo.Items.Add("80 МПа");
             BatchTargetPressureCombo.Items.Add("100 МПа");
+            BatchTargetPressureCombo.Items.Add("100 МПа (Арбузов)");
             BatchTargetPressureCombo.Items.Add("110 МПа");
             BatchTargetPressureCombo.Items.Add("130 МПа");
             BatchTargetPressureCombo.Items.Add("138 МПа (БУРСЕРВИС)");
             BatchTargetPressureCombo.Items.Add("140 МПа");
             BatchTargetPressureCombo.Items.Add("160 МПа (БУРСЕРВИС)");
             BatchTargetPressureCombo.Items.Add("160 МПа (Schlumberger)");
-            BatchTargetPressureCombo.Items.Add("100 МПа (New)");
             BatchTargetPressureCombo.SelectedIndex = 0;
         }
 
@@ -365,14 +365,26 @@ namespace TERMINAL
             { "75 МПа", new double[] { 0, 7.5, 15, 22.5, 30, 40, 50, 60, 67.5, 75, 60, 50, 40, 30, 15, 0 } },
             { "80 МПа", new double[] { 0, 7.5, 15, 22.5, 30, 40, 50, 60, 70, 80, 60, 50, 40, 30, 15, 0 } },
             { "100 МПа", new double[] { 0, 7.5, 15, 30, 45, 60, 70, 80, 90, 100, 80, 70, 60, 45, 15, 0 } },
+            { "100 МПа (Арбузов)", new double[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 0 } },
             { "110 МПа", new double[] { 0, 7.5, 15, 30, 45, 60, 75, 90, 100, 110, 90, 75, 60, 45, 15, 0 } },
             { "130 МПа", new double[] { 0, 15, 30, 45, 60, 75, 90, 105, 120, 130, 105, 90, 75, 60, 30, 0 } },
             { "138 МПа (БУРСЕРВИС)", new double[] { 0, 27.5, 55, 85.75, 110.25, 138, 131, 103.5, 75.75, 48.25, 20.75, 2.5 } },
             { "140 МПа", new double[] { 0, 15, 30, 45, 60, 75, 90, 105, 120, 140, 105, 90, 75, 60, 30, 0 } },
             { "160 МПа (БУРСЕРВИС)", new double[] { 0, 34.5, 69, 103.5, 138, 160, 155, 120.75, 86.25, 51.75, 17.25, 2.5 } },
             { "160 МПа (Schlumberger)", new double[] { 0, 15, 30, 45, 60, 80, 100, 120, 140, 160, 120, 80, 60, 45, 15, 0 } },
-            { "100 МПа (New)", new double[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 0 } },
+
         };
+
+        /// <summary>
+        /// Кастомные длительности шагов по диапазонам (в секундах).
+        /// Если диапазона нет в словаре — таймеры считаются по формуле GetStepDuration.
+        /// </summary>
+        private readonly Dictionary<string, int[]> _timersByTarget = new()
+{
+    // Пример:
+    { "100 МПа (Арбузов)", new int[] { 10, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 10 } },
+
+};
 
         // ─────────────────────────── НАСТРОЙКИ ───────────────────────────
         private class Settings

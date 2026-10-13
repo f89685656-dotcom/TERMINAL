@@ -643,6 +643,15 @@ namespace TERMINAL
             };
         private int GetStepDuration(double[] steps, int index, bool longTimers)
         {
+            // ─── 1. Если для диапазона заданы кастомные таймеры — берём из словаря ───
+            if (_selectedTargetPressure != null &&
+                _timersByTarget.TryGetValue(_selectedTargetPressure, out var customTimers))
+            {
+                if (index >= 0 && index < customTimers.Length)
+                    return customTimers[index];
+            }
+
+            // ─── 2. Иначе — стандартная логика ───
             if (BatchTimerSetCombo.SelectedIndex == 2)
                 return 10;
 
