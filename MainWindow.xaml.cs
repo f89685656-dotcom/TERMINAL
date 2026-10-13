@@ -338,15 +338,20 @@ namespace TERMINAL
             {
                 var job = _batchJobs[i];
                 string st = job.StatusText ?? "";
+
                 if (st.Contains("запись") || st.Contains("стабилизация") ||
                     st.Contains("проверка") || st.Contains("Идёт съём") ||
-                    st.Contains("завершено"))
+                    st.Contains("бароциклирование") || st.Contains("завершено"))
                 {
-                    // Извлекаем целое число из SetPointText ("80" или "80.5" → "80")
                     string spText = job.SetPointText ?? "";
                     spText = spText.Trim().TrimStart('+').Replace(',', '.');
+
+                    bool negative = spText.StartsWith("-");
+                    if (negative) spText = spText.TrimStart('-');
+
                     if (spText.Contains('.')) spText = spText.Split('.')[0];
-                    return spText;
+
+                    return (negative ? "-" : "") + spText;
                 }
             }
 
@@ -373,7 +378,17 @@ namespace TERMINAL
 
             // ─── 2. Уставка для имени CSV ──────────────────────────────────
             // Сначала пробуем из активного задания пакета (надёжнее).
-            string setpoint = GetCurrentBatchSetPoint();
+            string setpoint = "";
+            if (_batchRunning && _currentBatchSetPointForSave > 0)
+            {
+                setpoint = ((int)_currentBatchSetPointForSave).ToString();
+            }
+            else
+            {
+                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
+                    .TrimStart('+').Replace(',', '.');
+                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
+            }
 
             // Если пакет не запущен — берём из печи.
             if (string.IsNullOrEmpty(setpoint))

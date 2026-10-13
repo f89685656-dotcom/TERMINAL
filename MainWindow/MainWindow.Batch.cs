@@ -301,7 +301,7 @@ namespace TERMINAL
                     }
 
                     // 3) Запуск нужного режима
-                    job.StatusText = "Идёт съём данных";
+                    job.StatusText = job.IsCalibrationMode ? "Идёт съём данных" : "Идёт бароциклирование";
                     job.StatusColor = Brushes.Blue;
 
                     string modeName = job.IsCalibrationMode ? "Градуировка" : "Жамкать";
