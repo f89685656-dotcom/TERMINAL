@@ -1285,7 +1285,7 @@
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
 
-                                    <TextBlock Grid.Column="5" Text="Точка:"
+                                    <TextBlock Grid.Column="5" Text="Кол-во датчиков:"
                                                FontSize="11" VerticalAlignment="Center"
                                                Margin="0,0,4,0"/>
 

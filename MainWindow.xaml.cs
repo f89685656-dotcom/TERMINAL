@@ -58,7 +58,7 @@ namespace TERMINAL
         private const int ClientDeadThresholdSeconds = 120;
 
         // ═══════════════════════════════════════════════════════════════════
-        // НАСТРОЙКИ ПРИБОРОВ (заменяют прежние const)
+        // НАСТРОЙКИ ПРИБОРОВ
         // ═══════════════════════════════════════════════════════════════════
 
         // ── АГК (прибор давления) ──
@@ -331,9 +331,6 @@ namespace TERMINAL
             }
         }
 
-        /// <summary>
-        /// Применяет новые настройки приборов, полученные из окна настроек.
-        /// </summary>
         public void ApplyDeviceSettings(
             string furnaceIp, int furnacePort,
             ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
@@ -358,13 +355,9 @@ namespace TERMINAL
             SaveSettings();
             RefreshDeviceCardsVisibility();
 
-            // Переподключение в фоне
             _ = Task.Run(ReconnectDevicesAsync);
         }
 
-        /// <summary>
-        /// Скрывает/показывает карточки приборов.
-        /// </summary>
         public void RefreshDeviceCardsVisibility()
         {
             try
@@ -381,16 +374,12 @@ namespace TERMINAL
             catch { }
         }
 
-        /// <summary>
-        /// Переподключение приборов после изменения IP/порта.
-        /// </summary>
         public async Task ReconnectDevicesAsync()
         {
             try
             {
                 AppendLog("Настройки приборов изменены, переподключение...", Brushes.Blue);
 
-                // Принудительно закрываем текущее соединение с АГК
                 lock (_streamLock)
                 {
                     try { _stream?.Close(); } catch { }
@@ -399,8 +388,6 @@ namespace TERMINAL
                     _client = null;
                 }
 
-                // Цикл ConnectToDeviceLoopAsync сам переподключится с новыми настройками.
-                // Если он остановлен — запустим заново.
                 _ = Task.Run(ConnectToDeviceLoopAsync);
 
                 AppendLog("Переподключение запущено (АГК + ST-351)", Brushes.Gray);
@@ -488,9 +475,6 @@ namespace TERMINAL
             RunExcelMacroInternal(silent: false);
         }
 
-        /// <summary>
-        /// Возвращает уставку (температуру) текущего активного задания пакета.
-        /// </summary>
         private string GetCurrentBatchSetPoint()
         {
             if (!_batchRunning) return "";
@@ -519,9 +503,6 @@ namespace TERMINAL
             return "";
         }
 
-        /// <summary>
-        /// Основная логика запуска Excel-макросов.
-        /// </summary>
         private void RunExcelMacroInternal(bool silent)
         {
             // ─── 1. Данные из UI ────────────────────────────────────────────
@@ -593,12 +574,12 @@ namespace TERMINAL
                 StatusText.Text = $"Excel: использован свежий файл {Path.GetFileName(csvPath)}";
             }
 
-            // ─── 4. Количество датчиков (Точка) для первого макроса ────────
+            // ─── 4. Количество датчиков (Case) для первого макроса ────────
             int sensorCount = GetSelectedClientCase();
             if (sensorCount < 1 || sensorCount > 10)
             {
-                string msg = "Количество датчиков (Точка) должно быть от 1 до 10.\n\n" +
-                             "Отметьте клиента галочкой и введите Точку рядом с SID.";
+                string msg = "Количество датчиков должно быть от 1 до 10.\n\n" +
+                             "Убедитесь, что клиент подключён и передал CASE.";
                 AppendLog($"Excel: {msg}", Brushes.OrangeRed);
                 if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -644,7 +625,7 @@ namespace TERMINAL
             }
 
             AppendLog($"Excel: запуск макросов для {Path.GetFileName(csvPath)} " +
-                      $"(Точка={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
+                      $"(Case={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
 
             // ─── 8. Запускаем Excel ────────────────────────────────────────
             object? xlApp = null;

@@ -172,7 +172,9 @@ namespace TERMINAL
                         lock (_clientsLock)
                         {
                             if (!_connectedClients.Any(c => c.Sid == sid))
+                            {
                                 _connectedClients.Add(connectedClient);
+                            }
                         }
                     });
                 }
@@ -253,6 +255,14 @@ namespace TERMINAL
             {
                 string name = line.Substring(5).Trim();
                 client.CustomName = name;
+            }
+            else if (line.StartsWith("CASE "))                       // ← ДОБАВЛЕНО
+            {
+                string val = line.Substring(5).Trim();
+                if (int.TryParse(val, out int caseVal) && caseVal >= 1 && caseVal <= 10)
+                {
+                    client.CaseValue = caseVal.ToString();
+                }
             }
             else if (line.StartsWith("STATUS_BUSY")) client.SetStatusWaiting();
             else if (line.StartsWith("DONE_OK"))

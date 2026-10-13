@@ -112,7 +112,6 @@ namespace TERMINAL
         {
             if (_loadedSettings == null) return;
 
-            // ─── Настройки приборов ───
             _furnaceIp = _loadedSettings.FurnaceIp;
             _furnacePort = _loadedSettings.FurnacePort;
             _furnaceSetPointRegister = (ushort)_loadedSettings.FurnaceSetPointRegister;
@@ -127,10 +126,8 @@ namespace TERMINAL
             _sktbFilterScript = _loadedSettings.SktbFilterScript;
             _showSktbCard = _loadedSettings.ShowSktbCard;
 
-            // Скрыть/показать карточки по настройкам
             RefreshDeviceCardsVisibility();
 
-            // ─── ComboBox-ы ───
             if (_loadedSettings.BatchTargetPressureIndex >= 0 &&
                 _loadedSettings.BatchTargetPressureIndex < BatchTargetPressureCombo.Items.Count)
                 BatchTargetPressureCombo.SelectedIndex = _loadedSettings.BatchTargetPressureIndex;
@@ -146,7 +143,6 @@ namespace TERMINAL
             if (!string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
                 SavePathBox.Text = _loadedSettings.SavePath;
 
-            // ─── Галочки ───
             if (BatchKosaCheckBox != null)
                 BatchKosaCheckBox.IsChecked = _loadedSettings?.BatchKosaEnabled ?? false;
 
@@ -156,7 +152,6 @@ namespace TERMINAL
             if (BatchKosaTimerBox != null)
                 BatchKosaTimerBox.Text = _batchKosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
 
-            // ─── Списки ───
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
 
@@ -236,7 +231,6 @@ namespace TERMINAL
                         Case = j.CaseText
                     }).ToList(),
 
-                    // ─── Настройки приборов ───
                     FurnaceIp = _furnaceIp,
                     FurnacePort = _furnacePort,
                     FurnaceSetPointRegister = _furnaceSetPointRegister,
@@ -372,19 +366,12 @@ namespace TERMINAL
             { "140 МПа", new double[] { 0, 15, 30, 45, 60, 75, 90, 105, 120, 140, 105, 90, 75, 60, 30, 0 } },
             { "160 МПа (БУРСЕРВИС)", new double[] { 0, 34.5, 69, 103.5, 138, 160, 155, 120.75, 86.25, 51.75, 17.25, 2.5 } },
             { "160 МПа (Schlumberger)", new double[] { 0, 15, 30, 45, 60, 80, 100, 120, 140, 160, 120, 80, 60, 45, 15, 0 } },
-
         };
 
-        /// <summary>
-        /// Кастомные длительности шагов по диапазонам (в секундах).
-        /// Если диапазона нет в словаре — таймеры считаются по формуле GetStepDuration.
-        /// </summary>
         private readonly Dictionary<string, int[]> _timersByTarget = new()
-{
-    // Пример:
-    { "100 МПа (Арбузов)", new int[] { 10, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 10 } },
-
-};
+        {
+            { "100 МПа (Арбузов)", new int[] { 10, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 10 } },
+        };
 
         // ─────────────────────────── НАСТРОЙКИ ───────────────────────────
         private class Settings
@@ -403,7 +390,6 @@ namespace TERMINAL
             public int LastUsedPresetIndex { get; set; } = -1;
             public bool AutoExcelEnabled { get; set; } = true;
 
-            // ─── ST-351 (печь) ───
             public string FurnaceIp { get; set; } = "192.168.0.167";
             public int FurnacePort { get; set; } = 502;
             public int FurnaceSetPointRegister { get; set; } = 201;
@@ -411,22 +397,19 @@ namespace TERMINAL
             public int FurnaceModeRegister { get; set; } = 200;
             public bool ShowFurnaceCard { get; set; } = true;
 
-            // ─── АГК (прибор давления) ───
-            public string DeviceIp { get; set; } = "192.168.0.159";    // ← ЭТО
-            public int DevicePort { get; set; } = 8888;                 // ← И ЭТО
+            public string DeviceIp { get; set; } = "192.168.0.159";
+            public int DevicePort { get; set; } = 8888;
             public bool ShowAgkCard { get; set; } = true;
 
-            // ─── СКТБ ЭлПА ───
             public string SktbFilterScript { get; set; } = "Filter_for_KOSA_GUI";
             public bool ShowSktbCard { get; set; } = true;
         }
 
-        private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");
+        private static readonly string SettingsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "TERMINAL");
 
-        private static readonly string SettingsFile = Path.Combine(SettingsDir, "settings.json");
-
+        private static readonly string SettingsFile = Path.Combine(
+            SettingsDir, "settings.json");
     }
-
-
-
 }
