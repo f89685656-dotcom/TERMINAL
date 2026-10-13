@@ -180,6 +180,8 @@ namespace TERMINAL
         public string SktbFilterScript => _sktbFilterScript;
         public bool ShowSktbCard => _showSktbCard;
 
+        private string _currentAgkMode = "";
+
         public MainWindow()
         {
             InitializeComponent();

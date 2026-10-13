@@ -169,9 +169,15 @@ namespace TERMINAL
                         await Task.Delay(200);
                         string? pointResp = await SendCommandAsync("get_point;");
                         await Task.Delay(200);
+                        string? modeResp = await SendCommandAsync("get_mode;");
+                        await Task.Delay(200);
                         string? statusResp = await SendCommandAsync("get_status;");
 
                         if (unitsResp != null) UpdateUnits(unitsResp);
+
+                        // Сохраняем текущий режим АГК
+                        if (modeResp != null)
+                            _currentAgkMode = modeResp.Trim().TrimEnd(';').ToLower();
 
                         if (pressResp != null)
                         {
@@ -187,10 +193,20 @@ namespace TERMINAL
 
                         if (pointResp != null)
                         {
-                            string parsedSp = ParsePressure(pointResp);
-                            string units = _currentPressureUnitsLabel;
-                            AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                                ? parsedSp : $"{parsedSp} {units}";
+                            if (_currentAgkMode == "vent")
+                            {
+                                // В режиме vent уставка не имеет смысла — показываем 0
+                                string units = _currentPressureUnitsLabel;
+                                AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                                    ? "0.00000" : $"0.00000 {units}";
+                            }
+                            else
+                            {
+                                string parsedSp = ParsePressure(pointResp);
+                                string units = _currentPressureUnitsLabel;
+                                AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                                    ? parsedSp : $"{parsedSp} {units}";
+                            }
                         }
 
                         if (statusResp != null)
@@ -239,6 +255,7 @@ namespace TERMINAL
                     AgkPressureText.Text = "—";
                     AgkSetPointText.Text = "—";
                     AgkStatusEllipse.Fill = Brushes.Red;
+                    _currentAgkMode = "";   // ← сброс режима
 
                     if (AgkStatusTextBox != null)
                     {
@@ -362,6 +379,12 @@ namespace TERMINAL
             string? p = await SendCommandAsync("get_press;");
             await Task.Delay(200);
             string? sp = await SendCommandAsync("get_point;");
+            await Task.Delay(200);
+            string? modeResp = await SendCommandAsync("get_mode;");
+
+            // Обновляем текущий режим
+            if (modeResp != null)
+                _currentAgkMode = modeResp.Trim().TrimEnd(';').ToLower();
 
             if (p != null)
             {
@@ -380,10 +403,20 @@ namespace TERMINAL
 
             if (sp != null)
             {
-                string parsedSp = ParsePressure(sp);
-                string units = _currentPressureUnitsLabel;
-                AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                    ? parsedSp : $"{parsedSp} {units}";
+                if (_currentAgkMode == "vent")
+                {
+                    // В режиме vent уставка не имеет смысла — показываем 0
+                    string units = _currentPressureUnitsLabel;
+                    AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                        ? "0.00000" : $"0.00000 {units}";
+                }
+                else
+                {
+                    string parsedSp = ParsePressure(sp);
+                    string units = _currentPressureUnitsLabel;
+                    AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                        ? parsedSp : $"{parsedSp} {units}";
+                }
             }
 
             return pressure;
