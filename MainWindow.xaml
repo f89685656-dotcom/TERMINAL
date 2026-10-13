@@ -1290,12 +1290,12 @@
                                                Margin="0,0,4,0"/>
 
                                     <TextBox Grid.Column="6" Width="40"
-                                             Text="{Binding CaseValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             FontSize="12" Padding="3,1"
-                                             HorizontalContentAlignment="Center"
-                                             VerticalContentAlignment="Center"
-                                             Margin="0,0,6,0"
-                                             ToolTip="Точка: 1..10 или -1..-5"/>
+                                                 Text="{Binding CaseValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="12" Padding="3,1"
+                                                 HorizontalContentAlignment="Center"
+                                                 VerticalContentAlignment="Center"
+                                                 Margin="0,0,6,0"
+                                                 ToolTip="Количество датчиков в текущей загрузке"/>
 
                                     <TextBlock Grid.Column="7" Text="{Binding StatusText}"
                                                FontSize="12" FontWeight="SemiBold"

@@ -256,10 +256,10 @@ namespace TERMINAL
                 string name = line.Substring(5).Trim();
                 client.CustomName = name;
             }
-            else if (line.StartsWith("CASE "))                       // ← ДОБАВЛЕНО
+            else if (line.StartsWith("CASE "))
             {
                 string val = line.Substring(5).Trim();
-                if (int.TryParse(val, out int caseVal) && caseVal >= 1 && caseVal <= 10)
+                if (int.TryParse(val, out int caseVal) && caseVal >= 1)
                 {
                     client.CaseValue = caseVal.ToString();
                 }

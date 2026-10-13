@@ -576,9 +576,9 @@ namespace TERMINAL
 
             // ─── 4. Количество датчиков (Case) для первого макроса ────────
             int sensorCount = GetSelectedClientCase();
-            if (sensorCount < 1 || sensorCount > 10)
+            if (sensorCount < 1)
             {
-                string msg = "Количество датчиков должно быть от 1 до 10.\n\n" +
+                string msg = "Количество датчиков должно быть не меньше 1.\n\n" +
                              "Убедитесь, что клиент подключён и передал CASE.";
                 AppendLog($"Excel: {msg}", Brushes.OrangeRed);
                 if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
