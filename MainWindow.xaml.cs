@@ -16,6 +16,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TERMINAL.Models;
@@ -56,14 +57,30 @@ namespace TERMINAL
         private const int OfflineRetentionSeconds = 60;
         private const int ClientDeadThresholdSeconds = 120;
 
-        private const string DeviceIp = "192.168.0.159";
-        private const int DevicePort = 8888;
+        // ═══════════════════════════════════════════════════════════════════
+        // НАСТРОЙКИ ПРИБОРОВ (заменяют прежние const)
+        // ═══════════════════════════════════════════════════════════════════
 
-        private const string FurnaceIp = "192.168.0.167";
-        private const int FurnacePort = 502;
-        private const ushort FurnaceSetPointRegister = 201;
-        private const ushort FurnaceCurrentTempRegister = 205;
-        private const ushort FurnaceModeRegister = 200;
+        // ── АГК (прибор давления) ──
+        private string _deviceIp = "192.168.0.159";
+        private int _devicePort = 8888;
+
+        // ── ST-351 (печь) ──
+        private string _furnaceIp = "192.168.0.167";
+        private int _furnacePort = 502;
+        private ushort _furnaceSetPointRegister = 201;
+        private ushort _furnaceCurrentTempRegister = 205;
+        private ushort _furnaceModeRegister = 200;
+        private bool _showFurnaceCard = true;
+
+        // ── АГК карточка ──
+        private bool _showAgkCard = true;
+
+        // ── СКТБ ЭлПА ──
+        private string _sktbFilterScript = "Filter_for_KOSA_GUI";
+        private bool _showSktbCard = true;
+
+        // Режимы (не настраиваются)
         private const ushort FurnaceModeManual = 2;
         private const ushort FurnaceModeIdle = 1;
 
@@ -147,6 +164,21 @@ namespace TERMINAL
         private System.Windows.Controls.TextBox? _logFilterBox = null;
         private const int LogMaxEntries = 5000;
         private System.Windows.Controls.TextBlock? _logCounterText = null;
+
+        // Публичные свойства для окна настроек
+        public string FurnaceIp => _furnaceIp;
+        public int FurnacePort => _furnacePort;
+        public ushort FurnaceSetPointRegister => _furnaceSetPointRegister;
+        public ushort FurnaceCurrentTempRegister => _furnaceCurrentTempRegister;
+        public ushort FurnaceModeRegister => _furnaceModeRegister;
+        public bool ShowFurnaceCard => _showFurnaceCard;
+
+        public string DeviceIp => _deviceIp;
+        public int DevicePort => _devicePort;
+        public bool ShowAgkCard => _showAgkCard;
+
+        public string SktbFilterScript => _sktbFilterScript;
+        public bool ShowSktbCard => _showSktbCard;
 
         public MainWindow()
         {
@@ -243,7 +275,139 @@ namespace TERMINAL
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // НАСТРОЙКИ ПРИБОРОВ — открытие окна и применение
+        // ═══════════════════════════════════════════════════════════════════
 
+        private void DeviceSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            OpenDeviceSettings(0);
+        }
+
+        private void FurnaceTitle_Click(object sender, MouseButtonEventArgs e)
+        {
+            OpenDeviceSettings(0);
+        }
+
+        private void FurnaceSettings_Click(object sender, RoutedEventArgs e)
+        {
+            OpenDeviceSettings(0);
+        }
+
+        private void AgkTitle_Click(object sender, MouseButtonEventArgs e)
+        {
+            OpenDeviceSettings(1);
+        }
+
+        private void AgkSettings_Click(object sender, RoutedEventArgs e)
+        {
+            OpenDeviceSettings(1);
+        }
+
+        private void SktbTitle_Click(object sender, MouseButtonEventArgs e)
+        {
+            OpenDeviceSettings(2);
+        }
+
+        private void SktbSettings_Click(object sender, RoutedEventArgs e)
+        {
+            OpenDeviceSettings(2);
+        }
+
+        private void OpenDeviceSettings(int initialTab)
+        {
+            try
+            {
+                var win = new TERMINAL.Windows.DeviceSettingsWindow(initialTab);
+                win.Owner = this;
+                win.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось открыть окно настроек:\n{ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Применяет новые настройки приборов, полученные из окна настроек.
+        /// </summary>
+        public void ApplyDeviceSettings(
+            string furnaceIp, int furnacePort,
+            ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
+            bool showFurnaceCard,
+            string agkIp, int agkPort, bool showAgkCard,
+            string sktbFilterScript, bool showSktbCard)
+        {
+            _furnaceIp = furnaceIp;
+            _furnacePort = furnacePort;
+            _furnaceSetPointRegister = furnaceSetPointReg;
+            _furnaceCurrentTempRegister = furnaceCurrentTempReg;
+            _furnaceModeRegister = furnaceModeReg;
+            _showFurnaceCard = showFurnaceCard;
+
+            _deviceIp = agkIp;
+            _devicePort = agkPort;
+            _showAgkCard = showAgkCard;
+
+            _sktbFilterScript = sktbFilterScript;
+            _showSktbCard = showSktbCard;
+
+            SaveSettings();
+            RefreshDeviceCardsVisibility();
+
+            // Переподключение в фоне
+            _ = Task.Run(ReconnectDevicesAsync);
+        }
+
+        /// <summary>
+        /// Скрывает/показывает карточки приборов.
+        /// </summary>
+        public void RefreshDeviceCardsVisibility()
+        {
+            try
+            {
+                if (FurnaceCardBorder != null)
+                    FurnaceCardBorder.Visibility = _showFurnaceCard ? Visibility.Visible : Visibility.Collapsed;
+
+                if (AgkCardBorder != null)
+                    AgkCardBorder.Visibility = _showAgkCard ? Visibility.Visible : Visibility.Collapsed;
+
+                if (SktbCardBorder != null)
+                    SktbCardBorder.Visibility = _showSktbCard ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Переподключение приборов после изменения IP/порта.
+        /// </summary>
+        public async Task ReconnectDevicesAsync()
+        {
+            try
+            {
+                AppendLog("Настройки приборов изменены, переподключение...", Brushes.Blue);
+
+                // Принудительно закрываем текущее соединение с АГК
+                lock (_streamLock)
+                {
+                    try { _stream?.Close(); } catch { }
+                    try { _client?.Close(); } catch { }
+                    _stream = null;
+                    _client = null;
+                }
+
+                // Цикл ConnectToDeviceLoopAsync сам переподключится с новыми настройками.
+                // Если он остановлен — запустим заново.
+                _ = Task.Run(ConnectToDeviceLoopAsync);
+
+                AppendLog("Переподключение запущено (АГК + ST-351)", Brushes.Gray);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Ошибка переподключения: {ex.Message}", Brushes.OrangeRed);
+            }
+        }
 
         // ═══════════════════════════════════════════════════════════════════
         // ЖУРНАЛ СОБЫТИЙ
@@ -322,13 +486,8 @@ namespace TERMINAL
             RunExcelMacroInternal(silent: false);
         }
 
-
-
-
         /// <summary>
         /// Возвращает уставку (температуру) текущего активного задания пакета.
-        /// Например, "80" для задания «80 °C».
-        /// Если пакет не запущен или активного задания нет — возвращает "".
         /// </summary>
         private string GetCurrentBatchSetPoint()
         {
@@ -357,13 +516,10 @@ namespace TERMINAL
 
             return "";
         }
+
         /// <summary>
         /// Основная логика запуска Excel-макросов.
         /// </summary>
-        /// <param name="silent">
-        /// true — тихий режим (автозапуск): ошибки только в журнал, без MessageBox.
-        /// false — обычный режим (кнопка): ошибки показываются MessageBox.
-        /// </param>
         private void RunExcelMacroInternal(bool silent)
         {
             // ─── 1. Данные из UI ────────────────────────────────────────────
@@ -377,7 +533,6 @@ namespace TERMINAL
             }
 
             // ─── 2. Уставка для имени CSV ──────────────────────────────────
-            // Сначала пробуем из активного задания пакета (надёжнее).
             string setpoint = "";
             if (_batchRunning && _currentBatchSetPointForSave > 0)
             {
@@ -390,7 +545,6 @@ namespace TERMINAL
                 if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
             }
 
-            // Если пакет не запущен — берём из печи.
             if (string.IsNullOrEmpty(setpoint))
             {
                 setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
@@ -403,27 +557,24 @@ namespace TERMINAL
 
             if (setpoint.StartsWith("-"))
             {
-                // Отрицательные температуры: имя без плюса → "-40.csv"
                 candidates = new[]
                 {
-            Path.Combine(dataFolder, setpoint + ".csv"),
-        };
+                    Path.Combine(dataFolder, setpoint + ".csv"),
+                };
             }
             else
             {
-                // Положительные: сначала с плюсом, потом без
                 candidates = new[]
                 {
-            Path.Combine(dataFolder, "+" + setpoint + ".csv"),
-            Path.Combine(dataFolder, setpoint + ".csv"),
-        };
+                    Path.Combine(dataFolder, "+" + setpoint + ".csv"),
+                    Path.Combine(dataFolder, setpoint + ".csv"),
+                };
             }
 
             string? csvPath = candidates.FirstOrDefault(File.Exists);
 
             if (csvPath == null)
             {
-                // Fallback: самый свежий CSV в папке
                 csvPath = Directory.GetFiles(dataFolder, "*.csv")
                     .OrderByDescending(File.GetLastWriteTime)
                     .FirstOrDefault();
@@ -510,14 +661,12 @@ namespace TERMINAL
 
                 dynamic xl = Activator.CreateInstance(excelType)!;
                 xlApp = xl;
-                xl.Visible = false;     // ← true для отладки; в релизе false
+                xl.Visible = false;
                 xl.DisplayAlerts = false;
 
-                // Создаём временную книгу — обход бага с AddIns
                 dynamic tempBook = xl.Workbooks.Add();
                 tempBook.Close(false);
 
-                // Загружаем надстройку
                 bool addinLoaded = false;
                 dynamic addins = xl.AddIns;
 
@@ -548,24 +697,19 @@ namespace TERMINAL
 
                 AppendLog("Excel: надстройка IvanoFF загружена", Brushes.Gray);
 
-                // Открываем CSV
                 csvBook = xl.Workbooks.Open(csvPath);
                 dynamic wb = csvBook;
                 wb.Activate();
 
-                // ─── Пишем параметры в скрытые ячейки Z1, Z2, Z3 ─────────
                 dynamic sheet = wb.ActiveSheet;
                 sheet.Range("Z1").Value = sensorCount;
                 sheet.Range("Z2").Value = caseForCopy;
                 sheet.Range("Z3").Value = parentFolder;
 
-                // ─── Макрос 1: Фильтр КОСА ────────────────────────────────
                 AppendLog("Excel: запуск макроса «Фильтр КОСА»", Brushes.Blue);
                 xl.Run("Filter_KOSA_GUI_Auto");
                 AppendLog("Excel: макрос «Фильтр КОСА» выполнен", Brushes.Green);
 
-                // ─── ВАЖНО: первый макрос делает SaveAs,
-                //     активная книга меняется — пишем Z1/Z2/Z3 ЗАНОВО ────
                 try
                 {
                     dynamic activeBook = xl.ActiveWorkbook;
@@ -580,7 +724,6 @@ namespace TERMINAL
                     AppendLog($"Excel: не удалось перезаписать Z1/Z2/Z3 — {ex.Message}", Brushes.OrangeRed);
                 }
 
-                // ─── Макрос 2: Universal Insert ───────────────────────────
                 AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
                 xl.Run("Universal_Insert_FULL_Auto");
 
@@ -613,10 +756,8 @@ namespace TERMINAL
                     AppendLog($"Ошибка чтения: {ex.Message}", Brushes.Red);
                 }
 
-
                 AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
 
-                // Закрываем CSV
                 try { wb.Close(false); } catch { }
                 csvBook = null;
 
@@ -676,10 +817,6 @@ namespace TERMINAL
             }
         }
 
-        /// <summary>
-        /// Возвращает CASE первого клиента с галочкой.
-        /// Если ни один не выбран или значение некорректное — 0.
-        /// </summary>
         private int GetSelectedClientCase()
         {
             var client = _connectedClients.FirstOrDefault(c => c.IsSelected);
@@ -687,12 +824,6 @@ namespace TERMINAL
             return int.TryParse(client.CaseValue, out int c) ? c : 0;
         }
 
-
-        /// <summary>
-        /// Возвращает CASE текущего активного задания пакета.
-        /// Берёт значение из поля CaseText активного задания.
-        /// Если пакет не запущен или активного нет — возвращает 0.
-        /// </summary>
         private int GetCurrentBatchCase()
         {
             if (!_batchRunning) return 0;
@@ -706,7 +837,7 @@ namespace TERMINAL
                 {
                     if (int.TryParse(job.CaseText, out int c) && c != 0)
                         return c;
-                    return i + 1;   // fallback — реальный номер задания
+                    return i + 1;
                 }
             }
             return 0;
@@ -741,6 +872,5 @@ namespace TERMINAL
             AppendLog($"AutoExcelCheckBox: {(AutoExcelCheckBox.IsChecked == true ? "включено" : "выключено")}", Brushes.Gray);
             SaveSettings();
         }
-
     }
 }

@@ -1,0 +1,86 @@
+﻿<Window x:Class="TERMINAL.Windows.DeviceSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Настройки приборов"
+        Width="500" Height="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TabControl x:Name="DeviceTabs" Grid.Row="0">
+
+            <!-- ═══ ST-351 ═══ -->
+            <TabItem Header="ST-351">
+                <StackPanel Margin="15">
+                    <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
+                    <TextBox x:Name="FurnaceIpBox" Height="24" Padding="4,2"/>
+
+                    <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <TextBox x:Name="FurnacePortBox" Height="24" Padding="4,2"/>
+
+                    <TextBlock Text="Регистр уставки:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <TextBox x:Name="FurnaceSetPointRegBox" Height="24" Padding="4,2"/>
+
+                    <TextBlock Text="Регистр текущей температуры:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <TextBox x:Name="FurnaceCurrentTempRegBox" Height="24" Padding="4,2"/>
+
+                    <TextBlock Text="Регистр режима:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <TextBox x:Name="FurnaceModeRegBox" Height="24" Padding="4,2"/>
+
+                    <CheckBox x:Name="ShowFurnaceCardCheck"
+                              Content="Показывать карточку"
+                              Margin="0,15,0,0"/>
+                </StackPanel>
+            </TabItem>
+
+            <!-- ═══ АГК ═══ -->
+            <TabItem Header="АГК">
+                <StackPanel Margin="15">
+                    <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
+                    <TextBox x:Name="AgkIpBox" Height="24" Padding="4,2"/>
+
+                    <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <TextBox x:Name="AgkPortBox" Height="24" Padding="4,2"/>
+
+                    <CheckBox x:Name="ShowAgkCardCheck"
+                              Content="Показывать карточку"
+                              Margin="0,15,0,0"/>
+                </StackPanel>
+            </TabItem>
+
+            <!-- ═══ СКТБ ЭлПА ═══ -->
+            <TabItem Header="СКТБ ЭлПА">
+                <StackPanel Margin="15">
+                    <TextBlock Text="Скрипт фильтрации:" FontWeight="Bold"/>
+                    <ComboBox x:Name="SktbFilterScriptCombo" Height="24">
+                        <ComboBoxItem Content="Фильтр_данных_ПДС"/>
+                        <ComboBoxItem Content="Фильтр_данных_БИДТ"/>
+                        <ComboBoxItem Content="Фильтр_РЧ"/>
+                        <ComboBoxItem Content="Filter_for_KOSA_GUI"/>
+                    </ComboBox>
+
+                    <CheckBox x:Name="ShowSktbCardCheck"
+                              Content="Показывать карточку"
+                              Margin="0,15,0,0"/>
+                </StackPanel>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- Кнопки -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,15,0,0">
+            <Button Content="По умолчанию" Width="120" Height="30"
+                    Click="Default_Click"/>
+            <Button Content="Сохранить" Width="100" Height="30" Margin="10,0,0,0"
+                    Click="Save_Click"/>
+            <Button Content="Отмена" Width="80" Height="30" Margin="10,0,0,0"
+                    Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

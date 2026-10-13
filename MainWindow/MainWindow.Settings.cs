@@ -112,6 +112,25 @@ namespace TERMINAL
         {
             if (_loadedSettings == null) return;
 
+            // ─── Настройки приборов ───
+            _furnaceIp = _loadedSettings.FurnaceIp;
+            _furnacePort = _loadedSettings.FurnacePort;
+            _furnaceSetPointRegister = (ushort)_loadedSettings.FurnaceSetPointRegister;
+            _furnaceCurrentTempRegister = (ushort)_loadedSettings.FurnaceCurrentTempRegister;
+            _furnaceModeRegister = (ushort)_loadedSettings.FurnaceModeRegister;
+            _showFurnaceCard = _loadedSettings.ShowFurnaceCard;
+
+            _deviceIp = _loadedSettings.DeviceIp;
+            _devicePort = _loadedSettings.DevicePort;
+            _showAgkCard = _loadedSettings.ShowAgkCard;
+
+            _sktbFilterScript = _loadedSettings.SktbFilterScript;
+            _showSktbCard = _loadedSettings.ShowSktbCard;
+
+            // Скрыть/показать карточки по настройкам
+            RefreshDeviceCardsVisibility();
+
+            // ─── ComboBox-ы ───
             if (_loadedSettings.BatchTargetPressureIndex >= 0 &&
                 _loadedSettings.BatchTargetPressureIndex < BatchTargetPressureCombo.Items.Count)
                 BatchTargetPressureCombo.SelectedIndex = _loadedSettings.BatchTargetPressureIndex;
@@ -127,6 +146,7 @@ namespace TERMINAL
             if (!string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
                 SavePathBox.Text = _loadedSettings.SavePath;
 
+            // ─── Галочки ───
             if (BatchKosaCheckBox != null)
                 BatchKosaCheckBox.IsChecked = _loadedSettings?.BatchKosaEnabled ?? false;
 
@@ -136,6 +156,7 @@ namespace TERMINAL
             if (BatchKosaTimerBox != null)
                 BatchKosaTimerBox.Text = _batchKosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
 
+            // ─── Списки ───
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
 
@@ -192,7 +213,7 @@ namespace TERMINAL
                             IsCalibrationMode = j.IsCalibrationMode,
                             Cycles = j.Cycles,
                             StartStep = j.StartStep,
-                            Case = j.Case         
+                            Case = j.Case
                         }).ToList()
                     }).ToList(),
                     LastUsedPresetIndex = BatchPresetCombo?.SelectedIndex ?? -1,
@@ -202,7 +223,7 @@ namespace TERMINAL
                     SavePath = SavePathBox.Text,
                     BatchKosaEnabled = _batchKosaEnabled,
                     BatchKosaTimerSeconds = _batchKosaTimerSeconds,
-                    AutoExcelEnabled = AutoExcelCheckBox.IsChecked == true,
+                    AutoExcelEnabled = AutoExcelCheckBox?.IsChecked == true,
 
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
@@ -214,6 +235,22 @@ namespace TERMINAL
                         StartStep = j.StartStepText,
                         Case = j.CaseText
                     }).ToList(),
+
+                    // ─── Настройки приборов ───
+                    FurnaceIp = _furnaceIp,
+                    FurnacePort = _furnacePort,
+                    FurnaceSetPointRegister = _furnaceSetPointRegister,
+                    FurnaceCurrentTempRegister = _furnaceCurrentTempRegister,
+                    FurnaceModeRegister = _furnaceModeRegister,
+                    ShowFurnaceCard = _showFurnaceCard,
+
+                    DeviceIp = _deviceIp,
+                    DevicePort = _devicePort,
+                    ShowAgkCard = _showAgkCard,
+
+                    SktbFilterScript = _sktbFilterScript,
+                    ShowSktbCard = _showSktbCard,
+
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
                     WindowWidth = _loadedSettings?.WindowWidth ?? double.NaN,
@@ -353,6 +390,23 @@ namespace TERMINAL
             public List<BatchPreset> BatchPresets { get; set; } = new();
             public int LastUsedPresetIndex { get; set; } = -1;
             public bool AutoExcelEnabled { get; set; } = true;
+
+            // ─── ST-351 (печь) ───
+            public string FurnaceIp { get; set; } = "192.168.0.167";
+            public int FurnacePort { get; set; } = 502;
+            public int FurnaceSetPointRegister { get; set; } = 201;
+            public int FurnaceCurrentTempRegister { get; set; } = 205;
+            public int FurnaceModeRegister { get; set; } = 200;
+            public bool ShowFurnaceCard { get; set; } = true;
+
+            // ─── АГК (прибор давления) ───
+            public string DeviceIp { get; set; } = "192.168.0.159";    // ← ЭТО
+            public int DevicePort { get; set; } = 8888;                 // ← И ЭТО
+            public bool ShowAgkCard { get; set; } = true;
+
+            // ─── СКТБ ЭлПА ───
+            public string SktbFilterScript { get; set; } = "Filter_for_KOSA_GUI";
+            public bool ShowSktbCard { get; set; } = true;
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");
