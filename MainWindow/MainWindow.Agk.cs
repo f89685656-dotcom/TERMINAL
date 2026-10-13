@@ -377,9 +377,9 @@ namespace TERMINAL
             if (stream == null) return null;
 
             string? p = await SendCommandAsync("get_press;");
-            await Task.Delay(200);
+            await Task.Delay(50);
             string? sp = await SendCommandAsync("get_point;");
-            await Task.Delay(200);
+            await Task.Delay(50);
             string? modeResp = await SendCommandAsync("get_mode;");
 
             // Обновляем текущий режим
