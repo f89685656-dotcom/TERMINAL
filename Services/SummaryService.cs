@@ -144,6 +144,16 @@ namespace TERMINAL.Services
                 }
                 catch (Exception ex) { throw new Exception("Ошибка чтения F1: " + ex.Message); }
 
+                // ─── Номер резонатора (F2) и модель (F3, объединённая с G3) ───
+                try
+                {
+                    sensor.ResonatorNumber = (wsData.Range("F2").Value?.ToString() ?? "").Trim();
+
+                    dynamic mergedCell = wsData.Range("F3").MergeArea;
+                    sensor.ResonatorModel = (mergedCell.Cells[1, 1].Value?.ToString() ?? "").Trim();
+                }
+                catch (Exception ex) { throw new Exception("Ошибка чтения F2/F3: " + ex.Message); }
+
                 // Описываемость
                 try
                 {

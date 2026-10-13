@@ -1,6 +1,8 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,6 +13,7 @@ using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using TERMINAL.Models;
 using TERMINAL.Services;
 
@@ -51,16 +54,19 @@ namespace TERMINAL.Windows
             {
                 MainWindow.Current?.LogExternal(message, color);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // ✅ ИСПРАВЛЕНО: не глотаем исключение молча
+                Debug.WriteLine($"[SummaryWindow] LogToMainWindow: {ex.Message}");
+            }
         }
 
         // ═══════════════════════════════════════════════════
         // Обновить (перечитать .xlsm)
         // ═══════════════════════════════════════════════════
-        private async void RefreshFromXlsx()
+        // ✅ ИСПРАВЛЕНО: async Task вместо async void
+        private async Task RefreshFromXlsxAsync()
         {
-            if (_isLoadedFromCsv) return;
-
             if (string.IsNullOrWhiteSpace(_dataFolder) || !Directory.Exists(_dataFolder))
             {
                 MessageBox.Show($"Папка не найдена:\n{_dataFolder}",
@@ -106,30 +112,42 @@ namespace TERMINAL.Windows
                     LoadProgressBar.Value = i;
                     LoadProgressText.Text = $"Чтение {i + 1}/{files.Count}: {Path.GetFileName(file)}";
 
-                    // Даём UI обновиться
                     await Dispatcher.InvokeAsync(() => { },
                         System.Windows.Threading.DispatcherPriority.Background);
-                    await Task.Delay(20);
+                    await Task.Yield();
 
                     try
                     {
                         var sensor = SummaryService.ReadSingleFile(file);
-                        batch.Sensors.Add(sensor);
 
-                        if (batch.Temperatures.Count == 0 &&
-                            sensor.Errors.ColumnHeaders.Count > 0)
+                        // ─── Чтение ГСТ ───
+                        try
                         {
-                            batch.Temperatures = sensor.Errors.ColumnHeaders
-                                .Where(t => t != 0)
-                                .ToList();
+                            if (!string.IsNullOrEmpty(sensor.ResonatorNumber) &&
+                                !string.IsNullOrEmpty(sensor.ResonatorModel))
+                            {
+                                sensor.Gst = GstService.ReadGst(
+                                    sensor.ResonatorNumber,
+                                    sensor.ResonatorModel);
+                            }
+                            else
+                            {
+                                sensor.Gst = new GstInfo
+                                {
+                                    Error = "Не заданы номер резонатора или модель"
+                                };
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            sensor.Gst = new GstInfo { Error = $"Ошибка ГСТ: {ex.Message}" };
                         }
 
-                        LogToMainWindow($"Сводка: прочитан {Path.GetFileName(file)} (№{sensor.Number})",
-                                        Brushes.Gray);
+                        batch.Sensors.Add(sensor);
                     }
                     catch (Exception ex)
                     {
-                        LogToMainWindow($"Сводка: ошибка чтения {Path.GetFileName(file)}: {ex.Message}",
+                        LogToMainWindow($"Сводка: ошибка чтения {Path.GetFileName(file)} — {ex.Message}",
                                         Brushes.OrangeRed);
                     }
                 }
@@ -232,7 +250,9 @@ namespace TERMINAL.Windows
         // ═══════════════════════════════════════════════════
         // Обновить (по кнопке)
         // ═══════════════════════════════════════════════════
-        private void Refresh_Click(object sender, RoutedEventArgs e)
+        // ✅ ИСПРАВЛЕНО: async void только для обработчика события (это нормально),
+        // внутри await на async Task
+        private async void Refresh_Click(object sender, RoutedEventArgs e)
         {
             if (_isLoadedFromCsv)
             {
@@ -242,7 +262,16 @@ namespace TERMINAL.Windows
                 return;
             }
 
-            RefreshFromXlsx();
+            RefreshButton.IsEnabled = false;
+            try
+            {
+                await RefreshFromXlsxAsync();
+            }
+            finally
+            {
+                // ✅ ИСПРАВЛЕНО: возвращаем кнопку в строй
+                RefreshButton.IsEnabled = !_isLoadedFromCsv;
+            }
         }
 
         // ═══════════════════════════════════════════════════
@@ -465,11 +494,12 @@ namespace TERMINAL.Windows
                 {
                     Number = s.Number,
                     GradDescription = s.GradDescription,
-                    Check1 = s.CheckDescriptions.Length > 0 ? s.CheckDescriptions[0] : null,
-                    Check2 = s.CheckDescriptions.Length > 1 ? s.CheckDescriptions[1] : null,
-                    Check3 = s.CheckDescriptions.Length > 2 ? s.CheckDescriptions[2] : null,
-                    Check4 = s.CheckDescriptions.Length > 3 ? s.CheckDescriptions[3] : null,
-                    Check5 = s.CheckDescriptions.Length > 4 ? s.CheckDescriptions[4] : null,
+                    // ✅ ИСПРАВЛЕНО: динамическое заполнение Check1..Check5 через хелпер
+                    Check1 = GetCheck(s.CheckDescriptions, 0),
+                    Check2 = GetCheck(s.CheckDescriptions, 1),
+                    Check3 = GetCheck(s.CheckDescriptions, 2),
+                    Check4 = GetCheck(s.CheckDescriptions, 3),
+                    Check5 = GetCheck(s.CheckDescriptions, 4),
                     Source = s
                 })
                 .ToList();
@@ -478,6 +508,14 @@ namespace TERMINAL.Windows
 
             if (rows.Count > 0)
                 SummaryGrid.SelectedIndex = 0;
+        }
+
+        // ✅ ДОБАВЛЕНО: хелпер для безопасного получения проверки по индексу
+        private static double? GetCheck(double?[]? arr, int index)
+        {
+            if (arr == null || index < 0 || index >= arr.Length)
+                return null;
+            return arr[index];
         }
 
         // ═══════════════════════════════════════════════════
@@ -658,8 +696,8 @@ namespace TERMINAL.Windows
 
             for (int r = 0; r < table.Values.GetLength(0); r++)
             {
-                dynamic expando = new System.Dynamic.ExpandoObject();
-                var dict = (IDictionary<string, object>)expando;
+                // ✅ ИСПРАВЛЕНО: без dynamic, сразу IDictionary
+                IDictionary<string, object> dict = new ExpandoObject();
 
                 dict["P"] = table.RowHeaders.Count > r
                     ? table.RowHeaders[r].ToString("0.###")
@@ -670,7 +708,7 @@ namespace TERMINAL.Windows
                     dict[$"C{c}"] = table.Values[r, c];
                 }
 
-                rows.Add(expando);
+                rows.Add(dict);
             }
 
             grid.ItemsSource = rows;
@@ -706,6 +744,10 @@ namespace TERMINAL.Windows
             else if (tabIndex == 2)
             {
                 DetailContent.Content = BuildSingleTablePanel(row.Source.Errors);
+            }
+            else if (tabIndex == 3)
+            {
+                DetailContent.Content = BuildGstPanel(row);
             }
         }
 
@@ -785,6 +827,132 @@ namespace TERMINAL.Windows
 
             root.Children.Add(columns);
             return root;
+        }
+
+
+        private UIElement BuildGstPanel(SummaryRow row)
+        {
+            var stack = new StackPanel { Orientation = Orientation.Vertical };
+
+            var gst = row.Source.Gst;
+
+            if (gst == null)
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = "ГСТ: данные не загружены",
+                    Margin = new Thickness(10),
+                    FontStyle = FontStyles.Italic,
+                    Foreground = Brushes.Gray
+                });
+                return stack;
+            }
+
+            if (!gst.IsOk)
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = "Не удалось прочитать файл ГСТ. Проверьте, существует ли он.",
+                    Margin = new Thickness(10),
+                    FontStyle = FontStyles.Italic,
+                    Foreground = Brushes.OrangeRed,
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+                stack.Children.Add(new TextBlock
+                {
+                    Text = gst.Error,
+                    Margin = new Thickness(10, 0, 10, 10),
+                    FontSize = 10,
+                    Foreground = Brushes.Gray,
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+                return stack;
+            }
+
+            // Шапка с инфо о файле
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"Резонатор: {gst.ResonatorNumber}    Модель: {gst.ResonatorModel}",
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = gst.FilePath,
+                FontSize = 10,
+                Foreground = Brushes.Gray,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 10)
+            });
+
+            // Картинка графика
+            if (gst.ChartPng != null && gst.ChartPng.Length > 0)
+            {
+                var bitmap = new BitmapImage();
+                using (var ms = new MemoryStream(gst.ChartPng))
+                {
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.StreamSource = ms;
+                    bitmap.EndInit();
+                }
+                bitmap.Freeze();
+
+                var image = new Image
+                {
+                    Source = bitmap,
+                    Stretch = Stretch.Uniform,
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
+
+                var viewbox = new Viewbox
+                {
+                    Child = image,
+                    Stretch = Stretch.Uniform,
+                    StretchDirection = StretchDirection.DownOnly,  // только уменьшать, не растягивать
+                    MaxHeight = 350,
+                    MaxWidth = 600,
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
+
+                stack.Children.Add(viewbox);
+            }
+
+            // Кнопка "Открыть источник"
+            var openBtn = new Button
+            {
+                Content = "Открыть источник в Excel",
+                Width = 200,
+                Height = 28,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Background = new SolidColorBrush(Color.FromRgb(0x50, 0x90, 0xD0)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0)
+            };
+            openBtn.Click += (s, e) =>
+            {
+                try
+                {
+                    // ✅ ИСПРАВЛЕНО: explorer.exe + путь открывает папку, а не файл.
+                    // Лучше использовать Process.Start с UseShellExecute = true
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = gst.FilePath,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[SummaryWindow] OpenGstSource: {ex.Message}");
+                }
+            };
+            stack.Children.Add(openBtn);
+
+            return stack;
         }
 
         // ═══════════════════════════════════════════════════
@@ -913,14 +1081,14 @@ namespace TERMINAL.Windows
                 }
                 if (!hasAny) continue;
 
-                dynamic expando = new System.Dynamic.ExpandoObject();
-                var dict = (IDictionary<string, object>)expando;
+                // ✅ ИСПРАВЛЕНО: без dynamic
+                IDictionary<string, object> dict = new ExpandoObject();
 
                 for (int c = 0; c < 4; c++)
                 {
                     dict[$"C{c}"] = tchx.Values[r, c];
                 }
-                rows.Add(expando);
+                rows.Add(dict);
             }
 
             grid.ItemsSource = rows;
@@ -960,11 +1128,20 @@ namespace TERMINAL.Windows
                         var binding = textCol.Binding as System.Windows.Data.Binding;
                         if (binding != null)
                         {
-                            var prop = item.GetType().GetProperty(binding.Path.Path);
-                            if (prop != null)
+                            // ✅ ИСПРАВЛЕНО: для ExpandoObject через IDictionary, иначе через рефлексию
+                            if (item is IDictionary<string, object> dict)
                             {
-                                var v = prop.GetValue(item);
-                                value = v?.ToString() ?? "";
+                                if (dict.TryGetValue(binding.Path.Path, out var v))
+                                    value = v?.ToString() ?? "";
+                            }
+                            else
+                            {
+                                var prop = item.GetType().GetProperty(binding.Path.Path);
+                                if (prop != null)
+                                {
+                                    var v = prop.GetValue(item);
+                                    value = v?.ToString() ?? "";
+                                }
                             }
                         }
                     }
@@ -983,20 +1160,13 @@ namespace TERMINAL.Windows
                                 key = $"C{origIdx}";
                             }
 
-                            if (dict.ContainsKey(key))
+                            if (dict.TryGetValue(key, out var v))
                             {
-                                var v = dict[key];
-
-                                if (v is double d)
-                                    value = d.ToString("0.000");
-                                else if (v is double?)
+                                value = v switch
                                 {
-                                    double? nd = (double?)v;
-                                    if (nd.HasValue)
-                                        value = nd.Value.ToString("0.000");
-                                }
-                                else
-                                    value = v?.ToString() ?? "";
+                                    double d => d.ToString("0.000"),
+                                    _ => v?.ToString() ?? ""
+                                };
                             }
                         }
                     }

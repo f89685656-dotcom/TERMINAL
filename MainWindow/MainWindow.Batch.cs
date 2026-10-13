@@ -237,7 +237,9 @@ namespace TERMINAL
 
                     _currentBatchSetPointForSave = job.SetPoint;
 
+                    // ═══════════════════════════════════════════════════════════
                     // 1) Запись уставки
+                    // ═══════════════════════════════════════════════════════════
                     job.StatusText = "запись уставки";
                     job.StatusColor = Brushes.Orange;
 
@@ -255,16 +257,25 @@ namespace TERMINAL
                         return;
                     }
 
+                    // ─── Успешная запись уставки ───
                     _lastValidFurnaceSetPoint = job.SetPoint;
                     await RefreshFurnaceSetPointAsync();
 
+                    SetStatusSuccess($"[Пакет {completedCount}/{enabledCount}] уставка " +
+                                     $"{job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C успешно записана");
+
                     ResetStabilizationTimer();
 
+                    // ═══════════════════════════════════════════════════════════
                     // 2) Стабилизация
+                    // ═══════════════════════════════════════════════════════════
                     if (job.StabilizationMinutes > 0)
                     {
                         job.StatusText = $"стабилизация {job.StabilizationMinutes} мин";
                         job.StatusColor = Brushes.Orange;
+
+                        SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации " +
+                                  $"{job.StabilizationMinutes} мин...", false);
 
                         bool stable = await WaitForBatchStabilizationAsync(
                             job.StabilizationMinutes, completedCount, enabledCount);
@@ -300,7 +311,9 @@ namespace TERMINAL
                                   $"стабилизация пропущена");
                     }
 
+                    // ═══════════════════════════════════════════════════════════
                     // 3) Запуск нужного режима
+                    // ═══════════════════════════════════════════════════════════
                     job.StatusText = job.IsCalibrationMode ? "Идёт съём данных" : "Идёт бароциклирование";
                     job.StatusColor = Brushes.Blue;
 
