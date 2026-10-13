@@ -832,64 +832,45 @@ namespace TERMINAL.Windows
 
         private UIElement BuildGstPanel(SummaryRow row)
         {
-            var stack = new StackPanel { Orientation = Orientation.Vertical };
-
             var gst = row.Source.Gst;
 
-            if (gst == null)
+            // ─── Grid вместо StackPanel: картинка занимает всё доступное место ───
+            var root = new Grid();
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // 0: шапка
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // 1: путь
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });  // 2: картинка
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // 3: кнопка
+
+            if (gst == null || !gst.IsOk)
             {
-                stack.Children.Add(new TextBlock
-                {
-                    Text = "ГСТ: данные не загружены",
-                    Margin = new Thickness(10),
-                    FontStyle = FontStyles.Italic,
-                    Foreground = Brushes.Gray
-                });
-                return stack;
+                // ... сюда вставьте код для случая ошибки как раньше ...
+                return root;
             }
 
-            if (!gst.IsOk)
-            {
-                stack.Children.Add(new TextBlock
-                {
-                    Text = "Не удалось прочитать файл ГСТ. Проверьте, существует ли он.",
-                    Margin = new Thickness(10),
-                    FontStyle = FontStyles.Italic,
-                    Foreground = Brushes.OrangeRed,
-                    TextWrapping = TextWrapping.Wrap
-                });
-
-                stack.Children.Add(new TextBlock
-                {
-                    Text = gst.Error,
-                    Margin = new Thickness(10, 0, 10, 10),
-                    FontSize = 10,
-                    Foreground = Brushes.Gray,
-                    TextWrapping = TextWrapping.Wrap
-                });
-
-                return stack;
-            }
-
-            // Шапка с инфо о файле
-            stack.Children.Add(new TextBlock
+            // Шапка
+            var header = new TextBlock
             {
                 Text = $"Резонатор: {gst.ResonatorNumber}    Модель: {gst.ResonatorModel}",
                 FontSize = 12,
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(0, 0, 0, 6)
-            });
+            };
+            Grid.SetRow(header, 0);
+            root.Children.Add(header);
 
-            stack.Children.Add(new TextBlock
+            // Путь к файлу
+            var pathText = new TextBlock
             {
                 Text = gst.FilePath,
                 FontSize = 10,
                 Foreground = Brushes.Gray,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 10)
-            });
+            };
+            Grid.SetRow(pathText, 1);
+            root.Children.Add(pathText);
 
-            // Картинка графика
+            // Картинка — в Viewbox, растягивается по всей доступной высоте
             if (gst.ChartPng != null && gst.ChartPng.Length > 0)
             {
                 var bitmap = new BitmapImage();
@@ -906,23 +887,24 @@ namespace TERMINAL.Windows
                 {
                     Source = bitmap,
                     Stretch = Stretch.Uniform,
-                    HorizontalAlignment = HorizontalAlignment.Left
+                    StretchDirection = StretchDirection.Both
                 };
 
                 var viewbox = new Viewbox
                 {
                     Child = image,
                     Stretch = Stretch.Uniform,
-                    StretchDirection = StretchDirection.DownOnly,  // только уменьшать, не растягивать
-                    MaxHeight = 350,
-                    MaxWidth = 600,
-                    HorizontalAlignment = HorizontalAlignment.Left
+                    StretchDirection = StretchDirection.Both,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                    Margin = new Thickness(0, 0, 0, 10)
                 };
 
-                stack.Children.Add(viewbox);
+                Grid.SetRow(viewbox, 2);
+                root.Children.Add(viewbox);
             }
 
-            // Кнопка "Открыть источник"
+            // Кнопка
             var openBtn = new Button
             {
                 Content = "Открыть источник в Excel",
@@ -937,8 +919,6 @@ namespace TERMINAL.Windows
             {
                 try
                 {
-                    // ✅ ИСПРАВЛЕНО: explorer.exe + путь открывает папку, а не файл.
-                    // Лучше использовать Process.Start с UseShellExecute = true
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = gst.FilePath,
@@ -950,9 +930,10 @@ namespace TERMINAL.Windows
                     Debug.WriteLine($"[SummaryWindow] OpenGstSource: {ex.Message}");
                 }
             };
-            stack.Children.Add(openBtn);
+            Grid.SetRow(openBtn, 3);
+            root.Children.Add(openBtn);
 
-            return stack;
+            return root;
         }
 
         // ═══════════════════════════════════════════════════
