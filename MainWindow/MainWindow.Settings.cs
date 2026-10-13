@@ -30,13 +30,13 @@ namespace TERMINAL
             BatchTargetPressureCombo.Items.Add("75 МПа");
             BatchTargetPressureCombo.Items.Add("80 МПа");
             BatchTargetPressureCombo.Items.Add("100 МПа");
+            BatchTargetPressureCombo.Items.Add("100 МПа (Арбузов)");
             BatchTargetPressureCombo.Items.Add("110 МПа");
             BatchTargetPressureCombo.Items.Add("130 МПа");
             BatchTargetPressureCombo.Items.Add("138 МПа (БУРСЕРВИС)");
             BatchTargetPressureCombo.Items.Add("140 МПа");
             BatchTargetPressureCombo.Items.Add("160 МПа (БУРСЕРВИС)");
             BatchTargetPressureCombo.Items.Add("160 МПа (Schlumberger)");
-            BatchTargetPressureCombo.Items.Add("100 МПа (New)");
             BatchTargetPressureCombo.SelectedIndex = 0;
         }
 
@@ -112,6 +112,22 @@ namespace TERMINAL
         {
             if (_loadedSettings == null) return;
 
+            _furnaceIp = _loadedSettings.FurnaceIp;
+            _furnacePort = _loadedSettings.FurnacePort;
+            _furnaceSetPointRegister = (ushort)_loadedSettings.FurnaceSetPointRegister;
+            _furnaceCurrentTempRegister = (ushort)_loadedSettings.FurnaceCurrentTempRegister;
+            _furnaceModeRegister = (ushort)_loadedSettings.FurnaceModeRegister;
+            _showFurnaceCard = _loadedSettings.ShowFurnaceCard;
+
+            _deviceIp = _loadedSettings.DeviceIp;
+            _devicePort = _loadedSettings.DevicePort;
+            _showAgkCard = _loadedSettings.ShowAgkCard;
+
+            _sktbFilterScript = _loadedSettings.SktbFilterScript;
+            _showSktbCard = _loadedSettings.ShowSktbCard;
+
+            RefreshDeviceCardsVisibility();
+
             if (_loadedSettings.BatchTargetPressureIndex >= 0 &&
                 _loadedSettings.BatchTargetPressureIndex < BatchTargetPressureCombo.Items.Count)
                 BatchTargetPressureCombo.SelectedIndex = _loadedSettings.BatchTargetPressureIndex;
@@ -128,7 +144,11 @@ namespace TERMINAL
                 SavePathBox.Text = _loadedSettings.SavePath;
 
             if (BatchKosaCheckBox != null)
-                BatchKosaCheckBox.IsChecked = _batchKosaEnabled;
+                BatchKosaCheckBox.IsChecked = _loadedSettings?.BatchKosaEnabled ?? false;
+
+            if (AutoExcelCheckBox != null)
+                AutoExcelCheckBox.IsChecked = _loadedSettings?.AutoExcelEnabled ?? true;
+
             if (BatchKosaTimerBox != null)
                 BatchKosaTimerBox.Text = _batchKosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
 
@@ -188,7 +208,7 @@ namespace TERMINAL
                             IsCalibrationMode = j.IsCalibrationMode,
                             Cycles = j.Cycles,
                             StartStep = j.StartStep,
-                            Case = j.Case         
+                            Case = j.Case
                         }).ToList()
                     }).ToList(),
                     LastUsedPresetIndex = BatchPresetCombo?.SelectedIndex ?? -1,
@@ -198,6 +218,7 @@ namespace TERMINAL
                     SavePath = SavePathBox.Text,
                     BatchKosaEnabled = _batchKosaEnabled,
                     BatchKosaTimerSeconds = _batchKosaTimerSeconds,
+                    AutoExcelEnabled = AutoExcelCheckBox?.IsChecked == true,
 
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
@@ -209,6 +230,21 @@ namespace TERMINAL
                         StartStep = j.StartStepText,
                         Case = j.CaseText
                     }).ToList(),
+
+                    FurnaceIp = _furnaceIp,
+                    FurnacePort = _furnacePort,
+                    FurnaceSetPointRegister = _furnaceSetPointRegister,
+                    FurnaceCurrentTempRegister = _furnaceCurrentTempRegister,
+                    FurnaceModeRegister = _furnaceModeRegister,
+                    ShowFurnaceCard = _showFurnaceCard,
+
+                    DeviceIp = _deviceIp,
+                    DevicePort = _devicePort,
+                    ShowAgkCard = _showAgkCard,
+
+                    SktbFilterScript = _sktbFilterScript,
+                    ShowSktbCard = _showSktbCard,
+
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
                     WindowWidth = _loadedSettings?.WindowWidth ?? double.NaN,
@@ -323,13 +359,18 @@ namespace TERMINAL
             { "75 МПа", new double[] { 0, 7.5, 15, 22.5, 30, 40, 50, 60, 67.5, 75, 60, 50, 40, 30, 15, 0 } },
             { "80 МПа", new double[] { 0, 7.5, 15, 22.5, 30, 40, 50, 60, 70, 80, 60, 50, 40, 30, 15, 0 } },
             { "100 МПа", new double[] { 0, 7.5, 15, 30, 45, 60, 70, 80, 90, 100, 80, 70, 60, 45, 15, 0 } },
+            { "100 МПа (Арбузов)", new double[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 0 } },
             { "110 МПа", new double[] { 0, 7.5, 15, 30, 45, 60, 75, 90, 100, 110, 90, 75, 60, 45, 15, 0 } },
             { "130 МПа", new double[] { 0, 15, 30, 45, 60, 75, 90, 105, 120, 130, 105, 90, 75, 60, 30, 0 } },
             { "138 МПа (БУРСЕРВИС)", new double[] { 0, 27.5, 55, 85.75, 110.25, 138, 131, 103.5, 75.75, 48.25, 20.75, 2.5 } },
             { "140 МПа", new double[] { 0, 15, 30, 45, 60, 75, 90, 105, 120, 140, 105, 90, 75, 60, 30, 0 } },
             { "160 МПа (БУРСЕРВИС)", new double[] { 0, 34.5, 69, 103.5, 138, 160, 155, 120.75, 86.25, 51.75, 17.25, 2.5 } },
             { "160 МПа (Schlumberger)", new double[] { 0, 15, 30, 45, 60, 80, 100, 120, 140, 160, 120, 80, 60, 45, 15, 0 } },
-            { "100 МПа (New)", new double[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 0 } },
+        };
+
+        private readonly Dictionary<string, int[]> _timersByTarget = new()
+        {
+            { "100 МПа (Арбузов)", new int[] { 10, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 10 } },
         };
 
         // ─────────────────────────── НАСТРОЙКИ ───────────────────────────
@@ -347,14 +388,28 @@ namespace TERMINAL
             public double WindowHeight { get; set; } = double.NaN;
             public List<BatchPreset> BatchPresets { get; set; } = new();
             public int LastUsedPresetIndex { get; set; } = -1;
+            public bool AutoExcelEnabled { get; set; } = true;
+
+            public string FurnaceIp { get; set; } = "192.168.0.167";
+            public int FurnacePort { get; set; } = 502;
+            public int FurnaceSetPointRegister { get; set; } = 201;
+            public int FurnaceCurrentTempRegister { get; set; } = 205;
+            public int FurnaceModeRegister { get; set; } = 200;
+            public bool ShowFurnaceCard { get; set; } = true;
+
+            public string DeviceIp { get; set; } = "192.168.0.159";
+            public int DevicePort { get; set; } = 8888;
+            public bool ShowAgkCard { get; set; } = true;
+
+            public string SktbFilterScript { get; set; } = "Filter_for_KOSA_GUI";
+            public bool ShowSktbCard { get; set; } = true;
         }
 
-        private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");
+        private static readonly string SettingsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "TERMINAL");
 
-        private static readonly string SettingsFile = Path.Combine(SettingsDir, "settings.json");
-
+        private static readonly string SettingsFile = Path.Combine(
+            SettingsDir, "settings.json");
     }
-
-
-
 }

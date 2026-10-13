@@ -16,11 +16,14 @@ namespace TERMINAL.Models
         public int Number { get; set; }
         public double? GradDescription { get; set; }
         public double?[] CheckDescriptions { get; set; } = new double?[5];
+        public string? ResonatorNumber { get; set; }
+        public string? ResonatorModel { get; set; }
 
         public TableData GradHysteresis { get; set; } = new();
         public TableData CheckHysteresis { get; set; } = new();
         public TableData Errors { get; set; } = new();
         public TchxData? Tchx { get; set; }
+        public GstInfo? Gst { get; set; }
     }
 
     public class TableData
@@ -53,5 +56,15 @@ namespace TERMINAL.Models
         public string ChannelCount { get; set; } = "";
         public List<TchxTable> MainTables { get; set; } = new();
         public List<TchxTable> CheckTables { get; set; } = new();
+    }
+
+    public class GstInfo
+    {
+        public string ResonatorNumber { get; set; } = "";   // "112.26"
+        public string ResonatorModel { get; set; } = "";    // "РКМА-100,0-ОС-21"
+        public string FilePath { get; set; } = "";          // найденный xlsx
+        public byte[]? ChartPng { get; set; }               // PNG-картинка графика
+        public string Error { get; set; } = "";             // текст ошибки, если что-то не нашли
+        public bool IsOk => string.IsNullOrEmpty(Error);
     }
 }

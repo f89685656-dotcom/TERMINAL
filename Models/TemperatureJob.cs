@@ -27,7 +27,17 @@ namespace TERMINAL.Models
         }
         private string _startStepText = "1";
 
-        public string IndexText { get; set; } = "";
+        private string _indexText = "";
+        public string IndexText
+        {
+            get => _indexText;
+            set
+            {
+                if (_indexText == value) return;
+                _indexText = value;
+                OnPropertyChanged(nameof(IndexText));
+            }
+        }
 
         public string SetPointText
         {

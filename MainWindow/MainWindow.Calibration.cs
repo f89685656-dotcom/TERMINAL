@@ -220,19 +220,26 @@ namespace TERMINAL
 
                             await ClearDataCoreAsync(silent: true);
 
-                            // ─── Автозапуск Excel-макросов (до смены уставки) ───
-                            //if (!_stopRequested && !_batchStopRequested)
-                            //{
-                                //try
-                               // {
-                               //     AppendLog("Excel: автозапуск после градуировки", Brushes.Blue);
-                               //     RunExcelMacroInternal(silent: true);
-                               // }
-                               // catch (Exception ex)
-                               // {
-                               //     AppendLog($"Автозапуск Excel: {ex.Message}", Brushes.OrangeRed);
-                               // }
-                           // }
+                            // ─── Автозапуск Excel ───
+                            bool autoExcelEnabled = AutoExcelCheckBox?.IsChecked == true;
+
+                            if (autoExcelEnabled && !_stopRequested && !_batchStopRequested)
+                            {
+                                try
+                                {
+                                    AppendLog("Excel: автозапуск после градуировки", Brushes.Blue);
+                                    RunExcelMacroInternal(silent: true);
+                                }
+                                catch (Exception ex)
+                                {
+                                    AppendLog($"Автозапуск Excel: {ex.Message}", Brushes.OrangeRed);
+                                }
+                            }
+                            else if (!autoExcelEnabled)
+                            {
+                                AppendLog("Excel: автозапуск пропущен (галочка снята)", Brushes.Gray);
+                            }
+                            // ─────────────────────────
                         }
                         else
                         {
@@ -319,18 +326,49 @@ namespace TERMINAL
                     continue;
                 }
 
+                // ─── Первый шаг ───
                 if (i == 0)
                 {
-                    SetStatus("Шаг 1: сброс до атмосферы (vent)");
-                    bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
-                    if (!ventOk) return;
+                    if (v == 0)
+                    {
+                        SetStatus("Шаг 1: сброс до атмосферы (vent)");
+                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        if (!ventOk) return;
 
-                    SetStatus($"Шаг 1: измерение {duration} сек");
-                    await RunTimerWithStepAsync(duration, i, waitForState: false);
+                        SetStatus($"Шаг 1: измерение {duration} сек");
+                        await RunTimerWithStepAsync(duration, i, waitForState: false);
 
-                    SetStatus("Шаг 1: команда съёма");
-                    bool q1 = await TakePointForStepAsync(i, waitForState: false);
-                    if (!q1) return;
+                        SetStatus("Шаг 1: команда съёма");
+                        bool q1 = await TakePointForStepAsync(i, waitForState: false);
+                        if (!q1) return;
+                    }
+                    else
+                    {
+                        SetStatus("Шаг 1: set_mode=control (1)");
+                        bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                        if (!m1) return;
+
+                        await SafeDelayAsync(1000);
+
+                        SetStatus("Шаг 1: set_mode=control (2)");
+                        bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                        if (!m2) return;
+
+                        SetStatus($"Шаг 1: установка {v}");
+                        bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
+                        if (!setOk) return;
+
+                        SetStatus("Шаг 1: ожидание стабилизации");
+                        bool stable = await WaitForStateInPointAsync();
+                        if (!stable) return;
+
+                        SetStatus($"Шаг 1: измерение {duration} сек");
+                        await RunTimerWithStepAsync(duration, i, waitForState: true);
+
+                        SetStatus("Шаг 1: команда съёма");
+                        bool q1 = await TakePointForStepAsync(i, waitForState: true);
+                        if (!q1) return;
+                    }
 
                     if (i < _stepItems.Count)
                     {
@@ -342,15 +380,39 @@ namespace TERMINAL
                     continue;
                 }
 
+                // ─── Последний шаг ───
                 if (i == steps.Length - 1)
                 {
-                    SetStatus($"Шаг {human}: сброс до атмосферы (vent)");
-                    bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
-                    if (!ventOk) return;
+                    if (v == 0)
+                    {
+                        SetStatus($"Шаг {human}: сброс до атмосферы (vent)");
+                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        if (!ventOk) return;
 
-                    SetStatus($"Шаг {human}: ожидание снижения давления");
-                    bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
-                    if (!lowOk) return;
+                        SetStatus($"Шаг {human}: ожидание снижения давления");
+                        bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+                        if (!lowOk) return;
+                    }
+                    else
+                    {
+                        SetStatus($"Шаг {human}: set_mode=control (1)");
+                        bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                        if (!m1) return;
+
+                        await SafeDelayAsync(1000);
+
+                        SetStatus($"Шаг {human}: set_mode=control (2)");
+                        bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                        if (!m2) return;
+
+                        SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
+                        bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
+                        if (!setOk) return;
+
+                        SetStatus($"Шаг {human}: ожидание стабилизации");
+                        bool stable = await WaitForStateInPointAsync();
+                        if (!stable) return;
+                    }
 
                     SetStatus($"Шаг {human}: измерение {duration} сек");
                     await RunTimerWithStepAsync(duration, i, waitForState: v != 0);
@@ -369,23 +431,24 @@ namespace TERMINAL
                     continue;
                 }
 
+                // ─── Обычный шаг (середина) ───
                 SetStatus($"Шаг {human}: set_mode=control (1)");
-                bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m1) return;
+                bool mm1 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                if (!mm1) return;
 
                 await SafeDelayAsync(1000);
 
                 SetStatus($"Шаг {human}: set_mode=control (2)");
-                bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m2) return;
+                bool mm2 = await SendWithRetryAsync("set_mode=control;", "ok;");
+                if (!mm2) return;
 
                 SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
-                bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
-                if (!setOk) return;
+                bool setOk2 = await SendWithRetryAsync($"set_point={v};", "ok;");
+                if (!setOk2) return;
 
                 SetStatus($"Шаг {human}: ожидание стабилизации");
-                bool stable = await WaitForStateInPointAsync();
-                if (!stable) return;
+                bool stable2 = await WaitForStateInPointAsync();
+                if (!stable2) return;
 
                 SetStatus($"Шаг {human}: измерение {duration} сек");
                 await RunTimerWithStepAsync(duration, i, waitForState: v != 0);
@@ -401,6 +464,23 @@ namespace TERMINAL
                 }
                 _completedSteps = i + 1;
                 UpdateStepCounter();
+            }
+
+            // ─── Финальный сброс ───
+            // Если последнее давление в программе ≠ 0 — сброс до атмосферы + уставка 0
+            double lastPressure = steps[steps.Length - 1];
+            if (lastPressure != 0)
+            {
+                SetStatus("Программа завершена — финальный сброс до атмосферы");
+                bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                if (ventOk)
+                {
+                    SetStatus("Ожидание снижения давления");
+                    await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+
+                    SetStatus("Уставка → 0");
+                    await SendWithRetryAsync("set_point=0;", "ok;");
+                }
             }
 
             SetStatus("Программа завершена");
@@ -481,12 +561,20 @@ namespace TERMINAL
 
             if (!isMax)
             {
+                SetStatus($"Атмосфера: таймер запущен на {remaining} сек");
+
                 while (remaining > 0)
                 {
-                    remaining--;
-                    MinTimerText.Text = remaining.ToString();
+                    await RefreshPressureAndSetPointAsync();
+                    string? stateResponse = await SendCommandAsync("get_state_in_point;");
 
-                    SetStatus($"Атмосфера: {remaining} сек");
+                    if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
+                    {
+                        remaining--;
+                        MaxTimerText.Text = remaining.ToString();
+                    }
+
+                    SetStatus($"Максимум: {remaining} сек");
                     await SafeDelayAsync(1000);
                 }
 
@@ -494,10 +582,11 @@ namespace TERMINAL
                 return;
             }
 
+            SetStatus($"Максимум: таймер запущен на {remaining} сек");
+
             while (remaining > 0)
             {
                 await RefreshPressureAndSetPointAsync();
-
                 string? stateResponse = await SendCommandAsync("get_state_in_point;");
 
                 if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
@@ -506,7 +595,7 @@ namespace TERMINAL
                     MaxTimerText.Text = remaining.ToString();
                 }
 
-                SetStatus($"Максимум: {remaining} сек");
+                SetStatus($"Максимум: {remaining} сек", log: false);
                 await SafeDelayAsync(1000);
             }
 
@@ -518,13 +607,17 @@ namespace TERMINAL
 
             if (!waitForState)
             {
+                // Один раз пишем в журнал
+                SetStatus($"До начала съёма данных: {remaining} сек — таймер запущен");
+
                 while (remaining > 0)
                 {
                     remaining--;
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
-                    SetStatus($"До начала съёма данных: {remaining} сек");
+                    // Обновляем только статус, без журнала
+                    SetStatus($"До начала съёма данных: {remaining} сек", log: false);
                     await SafeDelayAsync(1000);
                 }
 
@@ -534,6 +627,8 @@ namespace TERMINAL
             }
 
             bool firstOkReceived = false;
+
+            SetStatus($"До начала съёма данных: таймер запущен на {remaining} сек");
 
             while (remaining > 0)
             {
@@ -567,6 +662,7 @@ namespace TERMINAL
 
                     while (true)
                     {
+                        SetStatus($"До начала съёма данных: {remaining} сек", log: false);
                         await SafeDelayAsync(1000);
 
                         string? s = await SendCommandAsync("get_state_in_point;");
@@ -578,8 +674,6 @@ namespace TERMINAL
                     }
                     continue;
                 }
-
-                SetStatus($"До начала съёма данных: {remaining} сек");
                 await SafeDelayAsync(1000);
             }
 
@@ -622,6 +716,15 @@ namespace TERMINAL
             };
         private int GetStepDuration(double[] steps, int index, bool longTimers)
         {
+            // ─── 1. Если для диапазона заданы кастомные таймеры — берём из словаря ───
+            if (_selectedTargetPressure != null &&
+                _timersByTarget.TryGetValue(_selectedTargetPressure, out var customTimers))
+            {
+                if (index >= 0 && index < customTimers.Length)
+                    return customTimers[index];
+            }
+
+            // ─── 2. Иначе — стандартная логика ───
             if (BatchTimerSetCombo.SelectedIndex == 2)
                 return 10;
 

@@ -10,7 +10,7 @@ namespace TERMINAL.Services
 {
     public static class CsvService
     {
-        private const string NullMarker = "";   // пустая ячейка в CSV
+        private const string NullMarker = "";
 
         // ═══════════════════════════════════════════════════════
         // СОХРАНЕНИЕ
@@ -19,13 +19,11 @@ namespace TERMINAL.Services
         {
             var sb = new StringBuilder();
 
-            // ─── Шапка ───
             sb.AppendLine("# ПАРТИЯ: " + batch.BatchName);
             sb.AppendLine("# СОХРАНЕНО: " + DateTime.Now.ToString("dd.MM.yyyy HH:mm"));
             sb.AppendLine("# ДАТЧИКОВ: " + batch.Sensors.Count);
             sb.AppendLine();
 
-            // ─── Сводка ───
             sb.AppendLine("# ═══ СВОДКА ═══");
             sb.AppendLine("Датчик;Опис_Град;Пров_1;Пров_2;Пров_3;Пров_4;Пров_5");
 
@@ -45,7 +43,6 @@ namespace TERMINAL.Services
 
             sb.AppendLine();
 
-            // ─── По каждому датчику ───
             foreach (var s in batch.Sensors.OrderBy(x => x.Number))
             {
                 sb.AppendLine($"# ═══ ДАТЧИК: {s.Number} ═══");
@@ -56,19 +53,16 @@ namespace TERMINAL.Services
                 WriteTable(sb, "# --- Гистерезис проверки ---", s.CheckHysteresis);
                 sb.AppendLine();
 
-                // ─── ТЧХ ───
                 if (s.Tchx != null && s.Tchx.MainTables.Count > 0)
                 {
                     sb.AppendLine($"# --- ТЧХ ({s.Tchx.ChannelCount}) ---");
 
-                    // Основные таблицы
                     for (int i = 0; i < s.Tchx.MainTables.Count; i++)
                     {
                         WriteTchxTable(sb, $"# Основная {i + 1}", s.Tchx.MainTables[i]);
                         sb.AppendLine();
                     }
 
-                    // Проверочные таблицы
                     for (int i = 0; i < s.Tchx.CheckTables.Count; i++)
                     {
                         WriteTchxTable(sb, $"# Проверка {i + 1}", s.Tchx.CheckTables[i]);
@@ -78,6 +72,19 @@ namespace TERMINAL.Services
 
                 WriteTable(sb, "# --- Погрешность ---", s.Errors);
                 sb.AppendLine();
+
+                // ─── ГСТ (Base64) ───
+                if (s.Gst != null && s.Gst.IsOk &&
+                    s.Gst.ChartPng != null && s.Gst.ChartPng.Length > 0)
+                {
+                    sb.AppendLine("# --- ГСТ ---");
+                    sb.AppendLine("# Резонатор: " + (s.Gst.ResonatorNumber ?? ""));
+                    sb.AppendLine("# Модель: " + (s.Gst.ResonatorModel ?? ""));
+                    sb.AppendLine("# Файл: " + (s.Gst.FilePath ?? ""));
+                    sb.AppendLine("# PNG_BASE64");
+                    sb.AppendLine(Convert.ToBase64String(s.Gst.ChartPng));
+                    sb.AppendLine();
+                }
             }
 
             File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
@@ -87,13 +94,11 @@ namespace TERMINAL.Services
         {
             sb.AppendLine(header);
 
-            // Заголовок: P;t1;t2;...
             sb.Append("P");
             foreach (var t in table.ColumnHeaders)
                 sb.Append(';').Append(t.ToString("0.###", CultureInfo.InvariantCulture));
             sb.AppendLine();
 
-            // Строки
             for (int r = 0; r < table.Values.GetLength(0); r++)
             {
                 string p = r < table.RowHeaders.Count
@@ -121,15 +126,11 @@ namespace TERMINAL.Services
         // ═══════════════════════════════════════════════════════
         public static SummaryBatch LoadFromCsv(string path)
         {
-            var batch = new SummaryBatch
-            {
-                SavedAt = DateTime.Now
-            };
+            var batch = new SummaryBatch { SavedAt = DateTime.Now };
 
             var lines = File.ReadAllLines(path, Encoding.UTF8);
             int i = 0;
 
-            // ─── Шапка ───
             while (i < lines.Length)
             {
                 string line = lines[i].Trim();
@@ -145,9 +146,8 @@ namespace TERMINAL.Services
                 i++;
             }
 
-            // ─── Сводка ───
             if (i < lines.Length && lines[i].StartsWith("Датчик"))
-                i++;   // пропускаем заголовок
+                i++;
 
             while (i < lines.Length)
             {
@@ -156,11 +156,9 @@ namespace TERMINAL.Services
                     break;
 
                 var parts = line.Split(';');
-                if (parts.Length >= 7 &&
-                    int.TryParse(parts[0], out int num))
+                if (parts.Length >= 7 && int.TryParse(parts[0], out int num))
                 {
                     var sensor = new SensorSummary { Number = num };
-
                     sensor.GradDescription = ParseNullable(parts[1]);
 
                     for (int k = 0; k < 5; k++)
@@ -169,13 +167,11 @@ namespace TERMINAL.Services
                         sensor.CheckDescriptions[k] =
                             idx < parts.Length ? ParseNullable(parts[idx]) : null;
                     }
-
                     batch.Sensors.Add(sensor);
                 }
                 i++;
             }
 
-            // ─── По датчикам ───
             SensorSummary? current = null;
             string currentSection = "";
 
@@ -187,34 +183,24 @@ namespace TERMINAL.Services
 
                 if (line.StartsWith("# ═══ ДАТЧИК:"))
                 {
-                    // "# ═══ ДАТЧИК: 1048 ═══"
                     string numStr = line
                         .Replace("# ═══ ДАТЧИК:", "")
                         .Replace("═══", "")
                         .Trim();
 
                     if (int.TryParse(numStr, out int num))
-                    {
                         current = batch.Sensors.FirstOrDefault(s => s.Number == num);
-                    }
+
                     currentSection = "";
                     continue;
                 }
 
-                if (line.StartsWith("# --- Гистерезис градуировки"))
-                {
-                    currentSection = "grad";
-                    continue;
-                }
-                if (line.StartsWith("# --- Гистерезис проверки"))
-                {
-                    currentSection = "check";
-                    continue;
-                }
+                if (line.StartsWith("# --- Гистерезис градуировки")) { currentSection = "grad"; continue; }
+                if (line.StartsWith("# --- Гистерезис проверки")) { currentSection = "check"; continue; }
+
                 if (line.StartsWith("# --- ТЧХ"))
                 {
                     currentSection = "tchx";
-                    // Извлекаем ChannelCount
                     int p1 = line.IndexOf('(');
                     int p2 = line.IndexOf(')');
                     if (p1 >= 0 && p2 > p1)
@@ -224,16 +210,15 @@ namespace TERMINAL.Services
                     }
                     continue;
                 }
+
                 if (line.StartsWith("# Основная") || line.StartsWith("# Проверка"))
                 {
                     bool isMain = line.StartsWith("# Основная");
                     string tchxHeader = line.Substring(2).Trim();
 
-                    // Пропускаем строку с самим заголовком (если идёт "# Название таблицы")
                     i++;
                     if (i >= lines.Length) break;
 
-                    // Если следующая строка — тоже "# ...", это Title таблицы
                     string title = tchxHeader;
                     if (lines[i].Trim().StartsWith("#"))
                     {
@@ -242,10 +227,7 @@ namespace TERMINAL.Services
                         if (i >= lines.Length) break;
                     }
 
-                    // Подписи столбцов
-                    var colHeaders = lines[i].Split(';')
-                        .Select(x => x.Trim())
-                        .ToArray();
+                    var colHeaders = lines[i].Split(';').Select(x => x.Trim()).ToArray();
 
                     var table = new TchxTable
                     {
@@ -253,7 +235,6 @@ namespace TERMINAL.Services
                         ColumnHeaders = colHeaders
                     };
 
-                    // Читаем до 10 строк данных
                     var valuesList = new List<double?[]>();
                     i++;
 
@@ -269,40 +250,91 @@ namespace TERMINAL.Services
                         var cells = dataLine.Split(';');
                         var row = new double?[4];
                         for (int c = 0; c < 4; c++)
-                        {
                             row[c] = c < cells.Length ? ParseNullable(cells[c]) : null;
-                        }
                         valuesList.Add(row);
                         i++;
                     }
 
-                    // Заполняем Values
                     table.Values = new double?[10, 4];
                     for (int r = 0; r < valuesList.Count; r++)
-                    {
                         for (int c = 0; c < 4; c++)
-                        {
                             table.Values[r, c] = valuesList[r][c];
-                        }
-                    }
 
                     if (current?.Tchx != null)
                     {
                         if (isMain) current.Tchx.MainTables.Add(table);
                         else current.Tchx.CheckTables.Add(table);
                     }
-
                     continue;
                 }
+
                 if (line.StartsWith("# --- Погрешность"))
                 {
                     currentSection = "errors";
                     continue;
                 }
 
+                // ─── ГСТ (Base64) ───
+                if (line.StartsWith("# --- ГСТ ---"))
+                {
+                    currentSection = "gst";
+                    continue;
+                }
+
+                if (currentSection == "gst")
+                {
+                    if (line.StartsWith("# PNG_BASE64"))
+                    {
+                        i++;
+                        if (i < lines.Length)
+                        {
+                            string base64 = lines[i].Trim();
+                            try
+                            {
+                                if (current != null)
+                                {
+                                    if (current.Gst == null) current.Gst = new GstInfo();
+                                    current.Gst.ChartPng = Convert.FromBase64String(base64);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"[CsvService] Base64 decode error: {ex.Message}");
+                            }
+                            i++;
+                        }
+                        continue;
+                    }
+                    else if (line.StartsWith("# Резонатор:"))
+                    {
+                        if (current != null)
+                        {
+                            if (current.Gst == null) current.Gst = new GstInfo();
+                            current.Gst.ResonatorNumber = line.Substring("# Резонатор:".Length).Trim();
+                        }
+                    }
+                    else if (line.StartsWith("# Модель:"))
+                    {
+                        if (current != null)
+                        {
+                            if (current.Gst == null) current.Gst = new GstInfo();
+                            current.Gst.ResonatorModel = line.Substring("# Модель:".Length).Trim();
+                        }
+                    }
+                    else if (line.StartsWith("# Файл:"))
+                    {
+                        if (current != null)
+                        {
+                            if (current.Gst == null) current.Gst = new GstInfo();
+                            current.Gst.FilePath = line.Substring("# Файл:".Length).Trim();
+                        }
+                    }
+                    continue;
+                }
+
                 if (current == null) continue;
 
-                // Заголовок таблицы (P;t1;t2;...)
                 if (line.StartsWith("P;"))
                 {
                     var headers = line.Split(';')
@@ -311,10 +343,8 @@ namespace TERMINAL.Services
                         .Where(x => x != 0)
                         .ToList();
 
-                    var table = new TableData();
-                    table.ColumnHeaders = headers;
+                    var table = new TableData { ColumnHeaders = headers };
 
-                    // Читаем строки данных
                     i++;
                     while (i < lines.Length)
                     {
@@ -335,19 +365,9 @@ namespace TERMINAL.Services
                             for (int c = 1; c < cells.Length && c <= headers.Count; c++)
                                 rowVals.Add(ParseNullable(cells[c]));
 
-                            // дополняем null
                             while (rowVals.Count < headers.Count)
                                 rowVals.Add(null);
 
-                            // сохраняем во временную структуру — соберём в конце
-                            if (table.Values.Length == 0)
-                            {
-                                // инициализация по первому чтению
-                                var tempValues = new double?[0, headers.Count];
-                                table.Values = new double?[0, headers.Count];
-                            }
-
-                            // добавляем строку
                             var newVals = new double?[table.Values.GetLength(0) + 1, headers.Count];
                             for (int r = 0; r < table.Values.GetLength(0); r++)
                                 for (int c = 0; c < headers.Count; c++)

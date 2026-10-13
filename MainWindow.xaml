@@ -89,7 +89,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="32"/>
                     <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="45"/>
+                    <ColumnDefinition Width="55"/>
                     <ColumnDefinition Width="27"/>
                     <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="62"/>
@@ -131,7 +131,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="32"/>
                     <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="55"/>
                     <ColumnDefinition Width="27"/>
                     <ColumnDefinition Width="40"/>
                     <ColumnDefinition Width="62"/>
@@ -189,24 +189,40 @@
                         HorizontalAlignment="Stretch" VerticalAlignment="Top"
                         Margin="0,0,8,0">
 
-                <!-- СТАРТ / ПАУЗА -->
+                <!-- СТАРТ / ПАУЗА / НАСТРОЙКИ -->
                 <Grid Margin="0,0,0,6" HorizontalAlignment="Stretch">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+
                     <Button Grid.Column="0" x:Name="StartButton"
                             Content="СТАРТ (пакет)"
                             Style="{StaticResource ActionButtonStyle}"
-                            Height="34" FontSize="13" Padding="4,4"
+                            Height="34" FontSize="13"
+                            Padding="4,4"
                             Background="#FF2E8B8B"
                             Click="StartButton_Click"/>
+
                     <Button Grid.Column="1" x:Name="PauseButton"
                             Content="ПАУЗА"
                             Style="{StaticResource ActionButtonStyle}"
-                            Height="34" FontSize="14" Padding="6,4" Margin="8,0,0,0"
-                            Background="#FFB0A050" IsEnabled="False"
+                            Height="34" FontSize="14"
+                            Padding="6,4" Margin="8,0,0,0"
+                            Background="#FFB0A050"
+                            IsEnabled="False"
                             Click="PauseButton_Click"/>
+
+                    <Button Grid.Column="2"
+                            x:Name="DeviceSettingsButton"
+                            Content="⚙"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Width="34" Height="34" FontSize="16"
+                            Padding="0" Margin="8,0,0,0"
+                            Background="#FF607090"
+                            ToolTip="Настройки приборов"
+                            Click="DeviceSettingsButton_Click"/>
                 </Grid>
 
                 <!-- Пакетный режим -->
@@ -264,10 +280,19 @@
                                           Padding="3,1" VerticalContentAlignment="Center"
                                           SelectionChanged="BatchTimerSetCombo_SelectionChanged"/>
                                 <CheckBox x:Name="BatchKosaCheckBox"
-                                          Content="КОСА:" FontSize="11"
+                                          Content="q2view:" FontSize="11"
                                           VerticalAlignment="Center" Margin="10,0,4,0"
                                           Checked="BatchKosaCheckBox_Changed"
                                           Unchecked="BatchKosaCheckBox_Changed"/>
+                                <CheckBox x:Name="AutoExcelCheckBox"
+                                          Content="Автозаполнение Excel"
+                                          FontSize="11"
+                                          VerticalAlignment="Center"
+                                          Margin="15,0,4,0"
+                                          IsChecked="True"
+                                          Checked="AutoExcelCheckBox_Changed"
+                                          Unchecked="AutoExcelCheckBox_Changed"
+                                          ToolTip="Автоматически запускать макросы Excel после градуировки"/>
                                 <TextBox x:Name="BatchKosaTimerBox"
                                          Width="38" Height="22" FontSize="11"
                                          Text="25" Padding="3,1"
@@ -557,7 +582,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32"/>
                                         <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="45"/>
+                                        <ColumnDefinition Width="55"/>
                                         <ColumnDefinition Width="27"/>
                                         <ColumnDefinition Width="40"/>
                                         <ColumnDefinition Width="62"/>
@@ -594,7 +619,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32"/>
                                         <ColumnDefinition Width="60"/>
-                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="55"/>
                                         <ColumnDefinition Width="27"/>
                                         <ColumnDefinition Width="40"/>
                                         <ColumnDefinition Width="62"/>
@@ -757,24 +782,60 @@
                         HorizontalAlignment="Right" VerticalAlignment="Top">
 
                 <!-- ST-351 -->
-                <Border BorderBrush="LightGray" BorderThickness="1"
-                        CornerRadius="6" Padding="8,6"
-                        Background="#FFF8F8F8" Width="270"
-                        Margin="0,0,0,8" HorizontalAlignment="Right">
+                <Border x:Name="FurnaceCardBorder"
+                    BorderBrush="LightGray" BorderThickness="1"
+                    CornerRadius="6" Padding="8,6"
+                    Background="#FFF8F8F8" Width="270"
+                    Margin="0,0,0,8" HorizontalAlignment="Right">
                     <StackPanel Orientation="Vertical">
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <Ellipse x:Name="FurnaceStatusEllipse" Width="10" Height="10"
-                                     Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <Border Width="36" Height="36" CornerRadius="4"
-                                    Background="White" BorderBrush="#FFDDDDDD"
-                                    BorderThickness="1" Margin="0,0,8,0"
-                                    VerticalAlignment="Center">
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Ellipse Grid.Column="0"
+                                         x:Name="FurnaceStatusEllipse"
+                                         Width="10" Height="10"
+                                         Fill="Red"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,6,0"/>
+
+                            <Border Grid.Column="1"
+                                        Width="36" Height="36"
+                                        CornerRadius="4"
+                                        Background="White"
+                                        BorderBrush="#FFDDDDDD"
+                                        BorderThickness="1"
+                                        Margin="0,0,8,0"
+                                        VerticalAlignment="Center">
                                 <Image Source="/Images/ST_351.png" Stretch="Uniform" Margin="2"/>
                             </Border>
-                            <TextBlock Text="Печь ST-351" FontSize="13" FontWeight="Bold"
-                                       Foreground="#FF505050" VerticalAlignment="Center"/>
-                        </StackPanel>
+
+                            <TextBlock Grid.Column="2"
+                                       Text="Печь ST-351"
+                                       FontSize="13" FontWeight="Bold"
+                                       Foreground="#FF505050"
+                                       VerticalAlignment="Center"
+                                       Cursor="Hand"
+                                       MouseLeftButtonUp="FurnaceTitle_Click"/>
+
+                            <Button Grid.Column="4"
+                                        Content="⚙"
+                                        FontSize="14"
+                                        Width="22" Height="22"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Foreground="Gray"
+                                        Cursor="Hand"
+                                        ToolTip="Настройки печи ST-351"
+                                        Click="FurnaceSettings_Click"/>
+                        </Grid>
 
                         <Border CornerRadius="4" Padding="6,3" Margin="0,0,0,4"
                                 Background="#FF2E6B4A">
@@ -877,24 +938,56 @@
                 </Border>
 
                 <!-- АГК -->
-                <Border BorderBrush="LightGray" BorderThickness="1"
-                        CornerRadius="6" Padding="8,6"
-                        Background="#FFF8F8F8" Width="270"
-                        Margin="0,0,0,8" HorizontalAlignment="Right">
+                <Border x:Name="AgkCardBorder"
+                                BorderBrush="LightGray" BorderThickness="1"
+                                CornerRadius="6" Padding="8,6"
+                                Background="#FFF8F8F8" Width="270"
+                                Margin="0,0,0,8" HorizontalAlignment="Right">
                     <StackPanel Orientation="Vertical">
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <Ellipse x:Name="AgkStatusEllipse" Width="10" Height="10"
-                                     Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <Border Width="36" Height="36" CornerRadius="4"
-                                    Background="White" BorderBrush="#FFDDDDDD"
-                                    BorderThickness="1" Margin="0,0,8,0"
-                                    VerticalAlignment="Center">
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Ellipse Grid.Column="0" x:Name="AgkStatusEllipse"
+                                             Width="10" Height="10"
+                                             Fill="Red"
+                                             VerticalAlignment="Center"
+                                             Margin="0,0,6,0"/>
+
+                            <Border Grid.Column="1"
+                                            Width="36" Height="36"
+                                            CornerRadius="4"
+                                            Background="White"
+                                            BorderBrush="#FFDDDDDD"
+                                            BorderThickness="1"
+                                            Margin="0,0,8,0"
+                                            VerticalAlignment="Center">
                                 <Image Source="Images/AGK.png" Stretch="Uniform" Margin="2"/>
                             </Border>
-                            <TextBlock Text="АГК" FontSize="13" FontWeight="Bold"
-                                       Foreground="#FF505050" VerticalAlignment="Center"/>
-                        </StackPanel>
+
+                            <TextBlock Grid.Column="2"
+                                           Text="АГК"
+                                           FontSize="13" FontWeight="Bold"
+                                           Foreground="#FF505050"
+                                           VerticalAlignment="Center"
+                                           Cursor="Hand"
+                                           MouseLeftButtonUp="AgkTitle_Click"/>
+
+                            <Button Grid.Column="4"
+                                            Content="⚙"
+                                            Width="22" Height="22" FontSize="14"
+                                            Padding="0"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="Gray" Cursor="Hand"
+                                            ToolTip="Настройки АГК"
+                                            Click="AgkSettings_Click"/>
+                        </Grid>
 
                         <Border CornerRadius="4" Padding="6,5" Margin="0,0,0,4"
                                 Background="#FF2E4A6B">
@@ -969,18 +1062,45 @@
                 </Border>
 
                 <!-- СКТБ ЭлПА -->
-                <Border BorderBrush="LightGray" BorderThickness="1"
-                        CornerRadius="6" Padding="8,6"
-                        Background="#FFF8F8F8" Width="270"
-                        HorizontalAlignment="Right">
-                    <StackPanel Orientation="Vertical">
+            <!-- СКТБ ЭлПА -->
+                <Border x:Name="SktbCardBorder"
+                            BorderBrush="LightGray" BorderThickness="1"
+                            CornerRadius="6" Padding="8,6"
+                            Background="#FFF8F8F8" Width="270"
+                            HorizontalAlignment="Right">
+                <StackPanel Orientation="Vertical">
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <Ellipse x:Name="PlatinaStatusEllipse" Width="10" Height="10"
-                                     Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="СКТБ ЭлПА" FontSize="13" FontWeight="Bold"
-                                       Foreground="#FF505050" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Ellipse Grid.Column="0" x:Name="PlatinaStatusEllipse"
+                                 Width="10" Height="10"
+                                 Fill="Red"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,6,0"/>
+
+                            <TextBlock Grid.Column="1"
+                               Text="СКТБ ЭлПА"
+                               FontSize="13" FontWeight="Bold"
+                               Foreground="#FF505050"
+                               VerticalAlignment="Center"
+                               Cursor="Hand"
+                               MouseLeftButtonUp="SktbTitle_Click"/>
+
+                            <Button Grid.Column="3"
+                                Content="⚙"
+                                Width="22" Height="22" FontSize="14"
+                                Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="Gray" Cursor="Hand"
+                                ToolTip="Настройки СКТБ ЭлПА"
+                                Click="SktbSettings_Click"/>
+                        </Grid>
 
                         <Border x:Name="PlatinaRowBorder" CornerRadius="4" Padding="6,4"
                                 Background="#FF2E4A6B" Margin="0,0,0,4">
@@ -1165,7 +1285,7 @@
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
 
-                                    <TextBlock Grid.Column="5" Text="Точка:"
+                                    <TextBlock Grid.Column="5" Text="Кол-во датчиков:"
                                                FontSize="11" VerticalAlignment="Center"
                                                Margin="0,0,4,0"/>
 

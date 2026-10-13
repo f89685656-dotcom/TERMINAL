@@ -120,6 +120,13 @@ namespace TERMINAL
             _batchStopRequested = false;
             _stopRequested = false;
 
+            // ─── СБРОС СТАТУСОВ ───
+            foreach (var job in _batchJobs)
+            {
+                job.StatusText = "ожидает";
+                job.StatusColor = Brushes.Gray;
+            }
+
             // Валидация активных заданий
             for (int i = 0; i < _batchJobs.Count; i++)
             {
@@ -228,7 +235,11 @@ namespace TERMINAL
 
                     completedCount++;
 
+                    _currentBatchSetPointForSave = job.SetPoint;
+
+                    // ═══════════════════════════════════════════════════════════
                     // 1) Запись уставки
+                    // ═══════════════════════════════════════════════════════════
                     job.StatusText = "запись уставки";
                     job.StatusColor = Brushes.Orange;
 
@@ -246,16 +257,25 @@ namespace TERMINAL
                         return;
                     }
 
+                    // ─── Успешная запись уставки ───
                     _lastValidFurnaceSetPoint = job.SetPoint;
                     await RefreshFurnaceSetPointAsync();
 
+                    SetStatusSuccess($"[Пакет {completedCount}/{enabledCount}] уставка " +
+                                     $"{job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C успешно записана");
+
                     ResetStabilizationTimer();
 
+                    // ═══════════════════════════════════════════════════════════
                     // 2) Стабилизация
+                    // ═══════════════════════════════════════════════════════════
                     if (job.StabilizationMinutes > 0)
                     {
                         job.StatusText = $"стабилизация {job.StabilizationMinutes} мин";
                         job.StatusColor = Brushes.Orange;
+
+                        SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации " +
+                                  $"{job.StabilizationMinutes} мин...", false);
 
                         bool stable = await WaitForBatchStabilizationAsync(
                             job.StabilizationMinutes, completedCount, enabledCount);
@@ -291,13 +311,28 @@ namespace TERMINAL
                                   $"стабилизация пропущена");
                     }
 
+                    // ═══════════════════════════════════════════════════════════
                     // 3) Запуск нужного режима
-                    job.StatusText = "Идёт съём данных";
+                    // ═══════════════════════════════════════════════════════════
+                    job.StatusText = job.IsCalibrationMode ? "Идёт съём данных" : "Идёт бароциклирование";
                     job.StatusColor = Brushes.Blue;
 
                     string modeName = job.IsCalibrationMode ? "Градуировка" : "Жамкать";
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» " +
                               $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
+
+                    // ─── Переключение панелей по режиму задания ───
+                    if (job.IsCalibrationMode)
+                    {
+                        CalibrationPanel.Visibility = Visibility.Visible;
+                        PumpPanel.Visibility = Visibility.Collapsed;
+                    }
+                    else
+                    {
+                        CalibrationPanel.Visibility = Visibility.Collapsed;
+                        PumpPanel.Visibility = Visibility.Visible;
+                    }
+                    // ──────────────────────────────────────────────
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(
                         TaskCreationOptions.RunContinuationsAsynchronously);
@@ -333,6 +368,7 @@ namespace TERMINAL
             finally
             {
                 _batchRunning = false;
+                _currentBatchSetPointForSave = 0f;
                 StopBatchStatusTimer();
                 _batchRunDoneSignal = null;
                 _batchStopRequested = false;

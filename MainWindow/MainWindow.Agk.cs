@@ -22,26 +22,116 @@ namespace TERMINAL
 
                 try
                 {
-                    SetStatusWarning($"Подключение к {DeviceIp}:{DevicePort}...");
+                    SetStatusWarning($"Подключение к {_deviceIp}:{_devicePort}...");
+
                     var client = new TcpClient();
-                    var ct = client.ConnectAsync(DeviceIp, DevicePort);
+                    var ct = client.ConnectAsync(_deviceIp, _devicePort);
                     var tt = Task.Delay(3000);
+
                     if (await Task.WhenAny(ct, tt) != ct)
                     {
                         try { client.Close(); } catch { }
                         SetStatusError($"Прибор недоступен. Повтор через 5 сек...");
-                        await Task.Delay(5000); continue;
+                        await Task.Delay(5000);
+                        continue;
                     }
+
                     await ct;
+
                     var stream = client.GetStream();
-                    lock (_streamLock) { _client = client; _stream = stream; }
-                    SetStatusSuccess($"Подключено к {DeviceIp}:{DevicePort}");
+
+                    lock (_streamLock)
+                    {
+                        _client = client;
+                        _stream = stream;
+                    }
+
+                    SetStatus($"Проверка связи (get_ping;)...", false);
+
+                    // ─── Проверка ping ───
+                    bool pingOk = await SendPingAsync();
+
+                    if (!pingOk)
+                    {
+                        AppendLog($"АГК не отвечает на get_ping;, переподключение через 5 сек...",
+                                  Brushes.OrangeRed);
+
+                        lock (_streamLock)
+                        {
+                            try { _stream?.Close(); } catch { }
+                            try { _client?.Close(); } catch { }
+                            _stream = null;
+                            _client = null;
+                        }
+
+                        SetStatusError($"Нет ответа на get_ping;. Повтор через 5 сек...");
+                        await Task.Delay(5000);
+                        continue;
+                    }
+
+                    SetStatusSuccess($"Подключено к {_deviceIp}:{_devicePort} (ping ok)");
+                    AppendLog($"АГК {_deviceIp}:{_devicePort} готов (get_ping; → ok;)", Brushes.Green);
                 }
                 catch
                 {
                     SetStatusError($"Прибор недоступен. Повтор через 5 сек...");
                 }
+
                 await Task.Delay(5000);
+            }
+        }
+
+        /// <summary>
+        /// Проверка связи с АГК: отправляет get_ping; и ждёт ответ "ok;".
+        /// Возвращает true, если ответ получен, иначе false.
+        /// </summary>
+        private async Task<bool> SendPingAsync()
+        {
+            try
+            {
+                NetworkStream? stream;
+                lock (_streamLock) stream = _stream;
+                if (stream == null) return false;
+
+                // Отправляем get_ping;
+                byte[] cmd = Encoding.ASCII.GetBytes("get_ping;");
+                await stream.WriteAsync(cmd, 0, cmd.Length);
+                await stream.FlushAsync();
+
+                // Читаем ответ до ';' с таймаутом
+                var sb = new StringBuilder();
+                var buffer = new byte[1];
+                var start = DateTime.Now;
+                var timeout = TimeSpan.FromSeconds(3);
+
+                while ((DateTime.Now - start) < timeout)
+                {
+                    if (!stream.DataAvailable)
+                    {
+                        await Task.Delay(20);
+                        continue;
+                    }
+
+                    int n = await stream.ReadAsync(buffer, 0, 1);
+                    if (n <= 0) return false;
+
+                    char c = (char)buffer[0];
+                    sb.Append(c);
+
+                    if (c == ';')
+                        break;
+                }
+
+                string response = sb.ToString().Trim();
+
+                AppendLog($"АГК ping ответ: '{response}'", Brushes.Gray);
+
+                return response.Contains("ok", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"АГК ping ошибка: {ex.Message}", Brushes.OrangeRed);
+                return false;
             }
         }
 
@@ -79,9 +169,15 @@ namespace TERMINAL
                         await Task.Delay(200);
                         string? pointResp = await SendCommandAsync("get_point;");
                         await Task.Delay(200);
+                        string? modeResp = await SendCommandAsync("get_mode;");
+                        await Task.Delay(200);
                         string? statusResp = await SendCommandAsync("get_status;");
 
                         if (unitsResp != null) UpdateUnits(unitsResp);
+
+                        // Сохраняем текущий режим АГК
+                        if (modeResp != null)
+                            _currentAgkMode = modeResp.Trim().TrimEnd(';').ToLower();
 
                         if (pressResp != null)
                         {
@@ -97,10 +193,20 @@ namespace TERMINAL
 
                         if (pointResp != null)
                         {
-                            string parsedSp = ParsePressure(pointResp);
-                            string units = _currentPressureUnitsLabel;
-                            AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                                ? parsedSp : $"{parsedSp} {units}";
+                            if (_currentAgkMode == "vent")
+                            {
+                                // В режиме vent уставка не имеет смысла — показываем 0
+                                string units = _currentPressureUnitsLabel;
+                                AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                                    ? "0.00000" : $"0.00000 {units}";
+                            }
+                            else
+                            {
+                                string parsedSp = ParsePressure(pointResp);
+                                string units = _currentPressureUnitsLabel;
+                                AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                                    ? parsedSp : $"{parsedSp} {units}";
+                            }
                         }
 
                         if (statusResp != null)
@@ -149,6 +255,7 @@ namespace TERMINAL
                     AgkPressureText.Text = "—";
                     AgkSetPointText.Text = "—";
                     AgkStatusEllipse.Fill = Brushes.Red;
+                    _currentAgkMode = "";   // ← сброс режима
 
                     if (AgkStatusTextBox != null)
                     {
@@ -272,6 +379,12 @@ namespace TERMINAL
             string? p = await SendCommandAsync("get_press;");
             await Task.Delay(200);
             string? sp = await SendCommandAsync("get_point;");
+            await Task.Delay(200);
+            string? modeResp = await SendCommandAsync("get_mode;");
+
+            // Обновляем текущий режим
+            if (modeResp != null)
+                _currentAgkMode = modeResp.Trim().TrimEnd(';').ToLower();
 
             if (p != null)
             {
@@ -290,10 +403,20 @@ namespace TERMINAL
 
             if (sp != null)
             {
-                string parsedSp = ParsePressure(sp);
-                string units = _currentPressureUnitsLabel;
-                AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                    ? parsedSp : $"{parsedSp} {units}";
+                if (_currentAgkMode == "vent")
+                {
+                    // В режиме vent уставка не имеет смысла — показываем 0
+                    string units = _currentPressureUnitsLabel;
+                    AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                        ? "0.00000" : $"0.00000 {units}";
+                }
+                else
+                {
+                    string parsedSp = ParsePressure(sp);
+                    string units = _currentPressureUnitsLabel;
+                    AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                        ? parsedSp : $"{parsedSp} {units}";
+                }
             }
 
             return pressure;

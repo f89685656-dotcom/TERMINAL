@@ -11,19 +11,19 @@
             <RowDefinition Height="Auto"/>
             <!-- 0: toolbar -->
             <RowDefinition Height="Auto"/>
-            <!-- 1: путь к папке -->
+            <!-- 1: путь -->
             <RowDefinition Height="Auto"/>
-            <!-- 2: прогресс-бар -->
+            <!-- 2: прогресс -->
             <RowDefinition Height="Auto"/>
             <!-- 3: заголовок сводки -->
-            <RowDefinition Height="2*"/>
-            <!-- 4: DataGrid сводки -->
+            <RowDefinition Height="Auto" MaxHeight="260"/>
+            <!-- 4: DataGrid сводки → было 2* -->
             <RowDefinition Height="Auto"/>
             <!-- 5: заголовок деталей -->
             <RowDefinition Height="Auto"/>
             <!-- 6: TabControl -->
-            <RowDefinition Height="3*"/>
-            <!-- 7: область деталей -->
+            <RowDefinition Height="4*"/>
+            <!-- 7: область деталей → было 3* -->
         </Grid.RowDefinitions>
 
         <!-- ═══ Toolbar ═══ -->
@@ -128,6 +128,7 @@
             <TabItem Header="Гистерезис"/>
             <TabItem Header="ТЧХ"/>
             <TabItem Header="Погрешность"/>
+            <TabItem Header="ГСТ"/>
         </TabControl>
 
         <!-- ═══ Область деталей ═══ -->
@@ -135,11 +136,7 @@
                 BorderBrush="#FFCCCCCC" BorderThickness="1"
                 Background="#FFFCFCFC"
                 CornerRadius="2">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
-                          Padding="8">
-                <ContentControl x:Name="DetailContent"/>
-            </ScrollViewer>
+            <ContentControl x:Name="DetailContent"/>
         </Border>
     </Grid>
 </Window>
