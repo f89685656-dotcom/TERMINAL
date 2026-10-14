@@ -173,8 +173,13 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <!-- 1: путь + кнопки -->
             <RowDefinition Height="Auto"/>
+            <!-- 2: клиенты -->
             <RowDefinition Height="Auto"/>
+            <!-- 3: ТАКТ (новая строка) -->
+            <RowDefinition Height="Auto"/>
+            <!-- 4: статус + версия -->
         </Grid.RowDefinitions>
 
         <!-- ═══════════════════ ROW 0 ═══════════════════ -->
@@ -1310,42 +1315,57 @@
         </Grid>
 
         <!-- ROW 3: Статус + версия -->
-        <Grid Grid.Row="3" Margin="0,4,0,0">
+        <!-- ROW 3: Такт (вся ширина) -->
+        <!-- ROW 3: Такт (2 строки) -->
+        <Border Grid.Row="3"
+        BorderBrush="#FFE0E0E0"
+        BorderThickness="0,1,0,0"
+        Padding="0,3,0,3"
+        Margin="0,4,0,0">
+            <StackPanel Orientation="Vertical">
+                <TextBlock x:Name="TickTimingText"
+                   Text="такт: —"
+                   Foreground="#FF808080"
+                   FontSize="11"
+                   FontFamily="Consolas"
+                   TextTrimming="CharacterEllipsis"
+                   ToolTip="Суммарное время такта за секунду (без SafeDelay)"/>
+
+                <TextBlock x:Name="TickTimingText2"
+                   Text=""
+                   Foreground="#FF808080"
+                   FontSize="11"
+                   FontFamily="Consolas"
+                   TextTrimming="CharacterEllipsis"
+                   Margin="0,1,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ROW 4: Статус + версия -->
+        <Grid Grid.Row="4" Margin="0,4,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <Button x:Name="ShowLogButton" Grid.Column="0" Content="Журнал"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="22" FontSize="11" Padding="8,2"
-                        Background="#FF808080" VerticalAlignment="Bottom"
-                        Margin="0,0,8,0"
-                        Click="ShowLogButton_Click"/>
+            Style="{StaticResource ActionButtonStyle}"
+            Height="22" FontSize="11" Padding="8,2"
+            Background="#FF808080" VerticalAlignment="Bottom"
+            Margin="0,0,8,0"
+            Click="ShowLogButton_Click"/>
 
             <TextBlock x:Name="StatusText" Grid.Column="1"
-                       Text="Готов" Foreground="Gray" FontSize="12"
-                       VerticalAlignment="Bottom" TextTrimming="CharacterEllipsis"/>
+               Text="Готов" Foreground="Gray" FontSize="12"
+               VerticalAlignment="Bottom" TextTrimming="CharacterEllipsis"/>
 
-            <TextBlock x:Name="TickTimingText"
-                       Grid.Column="2"
-                       Text=""
-                       Foreground="#FF808080"
-                       FontSize="11"
-                       FontFamily="Consolas"
-                       VerticalAlignment="Bottom"
-                       Margin="10,0,10,0"
-                       ToolTip="Чистое время такта (без SafeDelay), мс"/>
-
-
-            <TextBlock x:Name="VersionText" Grid.Column="3" Text="v0.0.0"
-                       Foreground="Gray" FontSize="12" FontWeight="SemiBold"
-                       VerticalAlignment="Bottom" Margin="10,0,0,0"
-                       Cursor="Hand" TextDecorations="Underline"
-                       ToolTip="Показать историю изменений"
-                       MouseLeftButtonUp="VersionText_MouseLeftButtonUp"/>
+            <TextBlock x:Name="VersionText" Grid.Column="2" Text="v0.0.0"
+               Foreground="Gray" FontSize="12" FontWeight="SemiBold"
+               VerticalAlignment="Bottom" Margin="10,0,0,0"
+               Cursor="Hand" TextDecorations="Underline"
+               ToolTip="Показать историю изменений"
+               MouseLeftButtonUp="VersionText_MouseLeftButtonUp"/>
         </Grid>
     </Grid>
 </Window>

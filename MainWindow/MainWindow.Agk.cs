@@ -146,10 +146,12 @@ namespace TERMINAL
             SetStatusError("Соединение потеряно. Переподключение...");
         }
 
-        private async void Timer_Tick(object? sender, EventArgs e)
+        private async Task Timer_TickAsync(object? sender, EventArgs e)
         {
             if (_isRunning) return;
             if (_agkBatchBusy) return;
+
+            var agkStart = DateTime.Now;
 
             NetworkStream? stream;
             lock (_streamLock) stream = _stream;
@@ -175,7 +177,6 @@ namespace TERMINAL
 
                         if (unitsResp != null) UpdateUnits(unitsResp);
 
-                        // Сохраняем текущий режим АГК
                         if (modeResp != null)
                             _currentAgkMode = modeResp.Trim().TrimEnd(';').ToLower();
 
@@ -195,7 +196,6 @@ namespace TERMINAL
                         {
                             if (_currentAgkMode == "vent")
                             {
-                                // В режиме vent уставка не имеет смысла — показываем 0
                                 string units = _currentPressureUnitsLabel;
                                 AgkSetPointText.Text = string.IsNullOrEmpty(units)
                                     ? "0.00000" : $"0.00000 {units}";
@@ -239,7 +239,16 @@ namespace TERMINAL
                 finally
                 {
                     _agkBatchBusy = false;
+
+                    long agkMs = (long)(DateTime.Now - agkStart).TotalMilliseconds;
+                    AddTickTiming("agk-poll", agkMs);
                 }
+            }
+            else
+            {
+                // Нет соединения — тоже замеряем (быстро)
+                long agkMs = (long)(DateTime.Now - agkStart).TotalMilliseconds;
+                AddTickTiming("agk-poll", agkMs);
             }
 
             if (agkOk)
@@ -255,7 +264,7 @@ namespace TERMINAL
                     AgkPressureText.Text = "—";
                     AgkSetPointText.Text = "—";
                     AgkStatusEllipse.Fill = Brushes.Red;
-                    _currentAgkMode = "";   // ← сброс режима
+                    _currentAgkMode = "";
 
                     if (AgkStatusTextBox != null)
                     {

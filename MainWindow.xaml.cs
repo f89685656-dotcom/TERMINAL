@@ -160,6 +160,29 @@ namespace TERMINAL
         private readonly object _tickTimingLock = new();
         private long _tickTimingTotalMs = 0;
 
+        /// <summary>
+        /// Фиксированный порядок меток в плашке «такт».
+        /// </summary>
+        private static readonly string[] TickTimingOrder =
+        {
+            "main",
+            "agk-poll",
+            "furnace",
+            "platina",
+            "sensorUI",
+            "clientsUI",
+            "kosa",
+            "kosa-idle",
+            "timer-step",
+            "timer-idle",
+            "timer-max",
+            "timer-atmo",
+            "batch-stab",
+            "batch-tolerance",
+            "wait-state",
+            "wait-pressure"
+};
+
         private readonly DateTime _lastAgkStatusRequest = DateTime.MinValue;
         private const int AgkStatusRequestIntervalMs = 1000;
 
@@ -195,6 +218,10 @@ namespace TERMINAL
 
             if (StartButtonBatchBrush is SolidColorBrush sb2 && sb2.CanFreeze)
                 sb2.Freeze();
+
+            // ─── Предзаполняем аккумулятор таймингов всеми метками ───
+            foreach (var label in TickTimingOrder)
+                _tickTimingAccum[label] = 0;
 
             _uiLoaded = false;
 
@@ -239,12 +266,12 @@ namespace TERMINAL
                 _timer.Tick += async (s, e) =>
                 {
                     var start = DateTime.Now;
-                    try { Timer_Tick(s, e); }
+                    try { await Timer_TickAsync(s, e); }       // ← await!
                     finally
                     {
                         long ms = (long)(DateTime.Now - start).TotalMilliseconds;
                         AddTickTiming("main", ms);
-                        FlushTickTiming();   // ← только main-таймер показывает итог
+                        FlushTickTiming();
                     }
                 };
                 _timer.Start();
@@ -943,16 +970,26 @@ namespace TERMINAL
 
             lock (_tickTimingLock)
             {
+                // Убедимся, что все метки из TickTimingOrder присутствуют
+                foreach (var label in TickTimingOrder)
+                {
+                    if (!_tickTimingAccum.ContainsKey(label))
+                        _tickTimingAccum[label] = 0;
+                }
+
                 totalMs = _tickTimingTotalMs;
                 snapshot = new Dictionary<string, long>(_tickTimingAccum);
 
-                _tickTimingAccum.Clear();
+                foreach (var key in _tickTimingAccum.Keys.ToList())
+                    _tickTimingAccum[key] = 0;
+
                 _tickTimingTotalMs = 0;
             }
 
             if (totalMs == 0)
             {
                 TickTimingText.Text = "такт: —";
+                if (TickTimingText2 != null) TickTimingText2.Text = "";
                 return;
             }
 
@@ -961,19 +998,50 @@ namespace TERMINAL
                                       : Brushes.Red;
 
             TickTimingText.Foreground = brush;
+            if (TickTimingText2 != null) TickTimingText2.Foreground = brush;
 
-            string parts = string.Join(", ",
-                snapshot
-                    .Where(kv => kv.Value > 0)
-                    .OrderByDescending(kv => kv.Value)
-                    .Select(kv => $"{kv.Key} {kv.Value}")
-            );
+            // Сортируем по TickTimingOrder
+            var ordered = snapshot
+                .OrderBy(kv =>
+                {
+                    int idx = Array.IndexOf(TickTimingOrder, kv.Key);
+                    return idx >= 0 ? idx : int.MaxValue;
+                })
+                .ToList();
 
-            TickTimingText.Text = $"такт: {totalMs} мс ({parts})";
+            // Делим на две группы: первая — «горячие» (main, agk-poll, furnace, platina, sensorUI, clientsUI, kosa, kosa-idle)
+            // Вторая — редко используемые (timer-*, batch-*, wait-*)
+            var firstGroupKeys = new HashSet<string>
+    {
+        "main", "agk-poll", "furnace", "platina",
+        "sensorUI", "clientsUI", "kosa", "kosa-idle"
+    };
+
+            var firstParts = ordered
+                .Where(kv => firstGroupKeys.Contains(kv.Key))
+                .Select(kv => $"{kv.Key} {kv.Value}");
+
+            var secondParts = ordered
+                .Where(kv => !firstGroupKeys.Contains(kv.Key))
+                .Select(kv => $"{kv.Key} {kv.Value}");
+
+            TickTimingText.Text =
+                $"такт: {totalMs} мс ({string.Join(", ", firstParts)})";
+
+            if (TickTimingText2 != null)
+            {
+                string line2 = string.Join(", ", secondParts);
+                TickTimingText2.Text = string.IsNullOrEmpty(line2)
+                    ? ""
+                    : $"({line2})";
+            }
 
             if (totalMs > 500)
             {
-                AppendLog($"⚠ Медленный такт: {totalMs} мс ({parts})", Brushes.OrangeRed);
+                string allParts = string.Join(", ",
+                    ordered.Select(kv => $"{kv.Key} {kv.Value}"));
+                AppendLog($"⚠ Медленный такт: {totalMs} мс ({allParts})",
+                          Brushes.OrangeRed);
             }
         }
     }

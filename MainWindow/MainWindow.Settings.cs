@@ -405,11 +405,8 @@ namespace TERMINAL
             public bool ShowSktbCard { get; set; } = true;
         }
 
-        private static readonly string SettingsDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "TERMINAL");
+        private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");
 
-        private static readonly string SettingsFile = Path.Combine(
-            SettingsDir, "settings.json");
+        private static readonly string SettingsFile = Path.Combine(SettingsDir, "settings.json");
     }
 }
