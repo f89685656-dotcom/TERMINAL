@@ -405,7 +405,12 @@ namespace TERMINAL
             }
 
             SetStatus($"Все клиенты ({selected.Count}) ответили DONE_OK. Пауза 3 сек...");
-            await SafeDelayAsync(3000);
+            var pauseStart = DateTime.Now;
+            while ((DateTime.Now - pauseStart).TotalSeconds < 3)
+            {
+                if (_stopRequested) return false;
+                await SafeDelayAsync(500);
+            }
 
             foreach (var c in selected)
             {

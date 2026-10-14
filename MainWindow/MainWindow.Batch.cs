@@ -457,6 +457,8 @@ namespace TERMINAL
             {
                 if (_batchStopRequested || _stopRequested) return false;
 
+                var cycleStart = DateTime.Now;
+
                 await RefreshFurnaceCurrentTempAsync();
                 await RefreshFurnaceSetPointAsync();
 
@@ -472,7 +474,9 @@ namespace TERMINAL
                     !double.TryParse(tTxt, NumberStyles.Float,
                         CultureInfo.InvariantCulture, out double currentTemp))
                 {
-                    await Task.Delay(1000);
+                    long failMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                    int failSleep = 1000 - (int)failMs;
+                    if (failSleep > 0) await SafeDelayAsync(failSleep);
                     continue;
                 }
 
@@ -520,7 +524,12 @@ namespace TERMINAL
                     }
                 }
 
-                await Task.Delay(1000);
+                // ─── Точный интервал 1 сек ───
+                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                AddTickTiming("batch-stab", pureMs);
+
+                int sleep = 1000 - (int)pureMs;
+                if (sleep > 0) await SafeDelayAsync(sleep);
             }
         }
 
@@ -532,6 +541,8 @@ namespace TERMINAL
             while (true)
             {
                 if (_batchStopRequested || _stopRequested) return false;
+
+                var cycleStart = DateTime.Now;
 
                 await RefreshFurnaceCurrentTempAsync();
                 await RefreshFurnaceSetPointAsync();
@@ -550,7 +561,10 @@ namespace TERMINAL
                 {
                     BatchProgressText.Text =
                         $"Задание {jobIndex}/{totalJobs}: ожидание данных от печи...";
-                    await Task.Delay(1000);
+
+                    long failMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                    int failSleep = 1000 - (int)failMs;
+                    if (failSleep > 0) await SafeDelayAsync(failSleep);
                     continue;
                 }
 
@@ -569,7 +583,12 @@ namespace TERMINAL
                     $"текущая {currentTemp.ToString("0.000", CultureInfo.InvariantCulture)} °C, " +
                     $"уставка {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C";
 
-                await Task.Delay(1000);
+                // ─── Точный интервал 1 сек ───
+                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                AddTickTiming("batch-tolerance", pureMs);
+
+                int sleep = 1000 - (int)pureMs;
+                if (sleep > 0) await SafeDelayAsync(sleep);
             }
         }
 

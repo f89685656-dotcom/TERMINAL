@@ -565,17 +565,26 @@ namespace TERMINAL
 
                 while (remaining > 0)
                 {
+                    if (_stopRequested) return;
+
+                    var cycleStart = DateTime.Now;
+
                     await RefreshPressureAndSetPointAsync();
                     string? stateResponse = await SendCommandAsync("get_state_in_point;");
 
                     if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
                     {
                         remaining--;
-                        MaxTimerText.Text = remaining.ToString();
+                        MinTimerText.Text = remaining.ToString();
                     }
 
-                    SetStatus($"Максимум: {remaining} сек");
-                    await SafeDelayAsync(1000);
+                    SetStatus($"Атмосфера: {remaining} сек", log: false);
+
+                    long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                    AddTickTiming("timer-atmo", pureMs);
+
+                    int sleep = 1000 - (int)pureMs;
+                    if (sleep > 0) await SafeDelayAsync(sleep);
                 }
 
                 MinTimerText.Text = "0";
@@ -586,6 +595,10 @@ namespace TERMINAL
 
             while (remaining > 0)
             {
+                if (_stopRequested) return;
+
+                var cycleStart = DateTime.Now;
+
                 await RefreshPressureAndSetPointAsync();
                 string? stateResponse = await SendCommandAsync("get_state_in_point;");
 
@@ -596,7 +609,12 @@ namespace TERMINAL
                 }
 
                 SetStatus($"Максимум: {remaining} сек", log: false);
-                await SafeDelayAsync(1000);
+
+                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                AddTickTiming("timer-max", pureMs);
+
+                int sleep = 1000 - (int)pureMs;
+                if (sleep > 0) await SafeDelayAsync(sleep);
             }
 
             MaxTimerText.Text = "0";
@@ -607,18 +625,23 @@ namespace TERMINAL
 
             if (!waitForState)
             {
-                // Один раз пишем в журнал
                 SetStatus($"До начала съёма данных: {remaining} сек — таймер запущен");
 
                 while (remaining > 0)
                 {
+                    var cycleStart = DateTime.Now;
+
                     remaining--;
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
-                    // Обновляем только статус, без журнала
                     SetStatus($"До начала съёма данных: {remaining} сек", log: false);
-                    await SafeDelayAsync(1000);
+
+                    long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                    AddTickTiming("timer-idle", pureMs);
+
+                    int sleep = 1000 - (int)pureMs;
+                    if (sleep > 0) await SafeDelayAsync(sleep);
                 }
 
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
@@ -626,18 +649,36 @@ namespace TERMINAL
                 return;
             }
 
+            // ─── waitForState == true ───
             bool firstOkReceived = false;
 
             SetStatus($"До начала съёма данных: таймер запущен на {remaining} сек");
 
             while (remaining > 0)
             {
-                await RefreshPressureAndSetPointAsync();
+                if (_stopRequested) return;
 
+                var cycleStart = DateTime.Now;
+
+                long refreshMs = 0;
+                long unitsMs = 0;
+                long stateMs = 0;
+
+                // ─── RefreshPressure ───
+                var t1 = DateTime.Now;
+                await RefreshPressureAndSetPointAsync();
+                refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
+
+                // ─── get_units ───
+                var t2 = DateTime.Now;
                 string? unitsResponse = await SendCommandAsync("get_units;");
                 if (unitsResponse != null) UpdateUnits(unitsResponse);
+                unitsMs = (long)(DateTime.Now - t2).TotalMilliseconds;
 
+                // ─── get_state_in_point ───
+                var t3 = DateTime.Now;
                 string? stateResponse = await SendCommandAsync("get_state_in_point;");
+                stateMs = (long)(DateTime.Now - t3).TotalMilliseconds;
 
                 if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
                 {
@@ -662,6 +703,8 @@ namespace TERMINAL
 
                     while (true)
                     {
+                        if (_stopRequested) return;
+
                         SetStatus($"До начала съёма данных: {remaining} сек", log: false);
                         await SafeDelayAsync(1000);
 
@@ -672,9 +715,21 @@ namespace TERMINAL
                             break;
                         }
                     }
-                    continue;
                 }
-                await SafeDelayAsync(1000);
+
+                // ─── Замер чистого времени такта ───
+                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                AddTickTiming("timer-step", pureMs);
+
+                if (pureMs > 1000)
+                {
+                    AppendLog($"⚠ Долгий такт timer-step: {pureMs} мс " +
+                              $"(refr {refreshMs}, units {unitsMs}, state {stateMs})",
+                              Brushes.OrangeRed);
+                }
+
+                int sleep = 1000 - (int)pureMs;
+                if (sleep > 0) await SafeDelayAsync(sleep);
             }
 
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)

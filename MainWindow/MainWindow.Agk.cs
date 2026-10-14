@@ -164,13 +164,13 @@ namespace TERMINAL
                     if (stream.CanRead && stream.CanWrite)
                     {
                         string? unitsResp = await SendCommandAsync("get_units;");
-                        await Task.Delay(200);
+                        await Task.Delay(50);
                         string? pressResp = await SendCommandAsync("get_press;");
-                        await Task.Delay(200);
+                        await Task.Delay(50);
                         string? pointResp = await SendCommandAsync("get_point;");
-                        await Task.Delay(200);
+                        await Task.Delay(50);
                         string? modeResp = await SendCommandAsync("get_mode;");
-                        await Task.Delay(200);
+                        await Task.Delay(50);
                         string? statusResp = await SendCommandAsync("get_status;");
 
                         if (unitsResp != null) UpdateUnits(unitsResp);
@@ -353,17 +353,22 @@ namespace TERMINAL
 
         private async Task SafeDelayAsync(int ms)
         {
-            var end = DateTime.Now.AddMilliseconds(ms);
-            while (DateTime.Now < end)
+            var start = DateTime.Now;
+            while (true)
             {
                 if (_stopRequested) return;
 
                 while (_pauseRequested && !_stopRequested)
-                    await Task.Delay(100);
+                    await Task.Delay(50);
 
                 if (_stopRequested) return;
 
-                await Task.Delay(100);
+                long elapsed = (long)(DateTime.Now - start).TotalMilliseconds;
+                long remain = ms - elapsed;
+                if (remain <= 0) return;
+
+                int chunk = (int)Math.Min(remain, 20);   // ← шаг 20 мс вместо 100
+                await Task.Delay(chunk);
             }
         }
 
@@ -430,6 +435,8 @@ namespace TERMINAL
                 if (_stopRequested) return false;
                 if (!await WaitIfPausedAsync()) return false;
 
+                var cycleStart = DateTime.Now;
+
                 string? resp = await SendCommandAsync("get_state_in_point;");
                 if (resp != null && resp.Contains("ok;", StringComparison.Ordinal))
                 {
@@ -437,9 +444,15 @@ namespace TERMINAL
                     if (okCount >= 5) return true;
                 }
                 else okCount = 0;
+
                 await RefreshPressureAndSetPointAsync();
                 SetStatus($"Ожидание стабилизации: {okCount}/5");
-                await SafeDelayAsync(1000);
+
+                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                AddTickTiming("wait-state", pureMs);
+
+                int sleep = 1000 - (int)pureMs;
+                if (sleep > 0) await SafeDelayAsync(sleep);
             }
         }
 
@@ -468,9 +481,16 @@ namespace TERMINAL
                 if ((DateTime.Now - start - pausedTotal).TotalMilliseconds >= timeoutMs)
                     return false;
 
+                var cycleStart = DateTime.Now;
+
                 double? p = await RefreshPressureAndSetPointAsync();
                 if (p.HasValue && Math.Abs(p.Value) < threshold) return true;
-                await SafeDelayAsync(1000);
+
+                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                AddTickTiming("wait-pressure", pureMs);
+
+                int sleep = 1000 - (int)pureMs;
+                if (sleep > 0) await SafeDelayAsync(sleep);
             }
         }
 
