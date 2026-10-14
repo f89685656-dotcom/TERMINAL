@@ -340,7 +340,6 @@ namespace TERMINAL.Services
                     var headers = line.Split(';')
                         .Skip(1)
                         .Select(x => ParseDouble(x))
-                        .Where(x => x != 0)
                         .ToList();
 
                     var table = new TableData { ColumnHeaders = headers };
