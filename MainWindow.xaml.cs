@@ -16,6 +16,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -154,6 +155,11 @@ namespace TERMINAL
 
         private Settings? _loadedSettings = null;
 
+        // ─── Аккумулятор таймингов ───
+        private readonly Dictionary<string, long> _tickTimingAccum = new();
+        private readonly object _tickTimingLock = new();
+        private long _tickTimingTotalMs = 0;
+
         private readonly DateTime _lastAgkStatusRequest = DateTime.MinValue;
         private const int AgkStatusRequestIntervalMs = 1000;
 
@@ -228,22 +234,43 @@ namespace TERMINAL
 
                 _ = Task.Run(ConnectToDeviceLoopAsync);
 
+                // ─── Основной таймер ───
                 _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _timer.Tick += Timer_Tick;
+                _timer.Tick += async (s, e) =>
+                {
+                    var start = DateTime.Now;
+                    try { Timer_Tick(s, e); }
+                    finally
+                    {
+                        long ms = (long)(DateTime.Now - start).TotalMilliseconds;
+                        AddTickTiming("main", ms);
+                        FlushTickTiming();   // ← только main-таймер показывает итог
+                    }
+                };
                 _timer.Start();
 
                 await Task.Delay(500);
                 await RefreshFurnaceSetPointAsync();
 
+                // ─── Таймер печи ───
                 _furnaceTempTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromSeconds(1)
                 };
                 _furnaceTempTimer.Tick += async (s, e) =>
                 {
-                    await RefreshFurnaceCurrentTempAsync();
-                    await RefreshFurnaceSetPointAsync();
-                    UpdateStabilizationTimer();
+                    var start = DateTime.Now;
+                    try
+                    {
+                        await RefreshFurnaceCurrentTempAsync();
+                        await RefreshFurnaceSetPointAsync();
+                        UpdateStabilizationTimer();
+                    }
+                    finally
+                    {
+                        long ms = (long)(DateTime.Now - start).TotalMilliseconds;
+                        AddTickTiming("furnace", ms);
+                    }
                 };
                 _furnaceTempTimer.Start();
 
@@ -251,20 +278,40 @@ namespace TERMINAL
                 await RefreshFurnaceSetPointAsync();
                 UpdateStabilizationTimer();
 
+                // ─── Таймер платины ───
                 _platinaTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromSeconds(1)
                 };
-                _platinaTimer.Tick += async (s, e) => await RefreshPlatinaAsync();
+                _platinaTimer.Tick += async (s, e) =>
+                {
+                    var start = DateTime.Now;
+                    try { await RefreshPlatinaAsync(); }
+                    finally
+                    {
+                        long ms = (long)(DateTime.Now - start).TotalMilliseconds;
+                        AddTickTiming("platina", ms);
+                    }
+                };
                 _platinaTimer.Start();
 
                 await RefreshPlatinaAsync();
 
+                // ─── Таймер сенсоров ───
                 _sensorUiTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromSeconds(1)
                 };
-                _sensorUiTimer.Tick += (s, e) => RefreshSensorUiFromClients();
+                _sensorUiTimer.Tick += (s, e) =>
+                {
+                    var start = DateTime.Now;
+                    try { RefreshSensorUiFromClients(); }
+                    finally
+                    {
+                        long ms = (long)(DateTime.Now - start).TotalMilliseconds;
+                        AddTickTiming("sensorUI", ms);
+                    }
+                };
                 _sensorUiTimer.Start();
 
                 RefreshSensorUiFromClients();
@@ -854,6 +901,80 @@ namespace TERMINAL
             if (!_uiLoaded) return;
             AppendLog($"AutoExcelCheckBox: {(AutoExcelCheckBox.IsChecked == true ? "включено" : "выключено")}", Brushes.Gray);
             SaveSettings();
+        }
+
+        /// <summary>
+        /// Добавляет замер в аккумулятор. Вызывается из каждого таймера.
+        /// </summary>
+        private void AddTickTiming(string label, long ms)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => AddTickTiming(label, ms));
+                return;
+            }
+
+            lock (_tickTimingLock)
+            {
+                if (!_tickTimingAccum.ContainsKey(label))
+                    _tickTimingAccum[label] = 0;
+
+                _tickTimingAccum[label] += ms;
+                _tickTimingTotalMs += ms;
+            }
+        }
+
+        /// <summary>
+        /// Показывает накопленный итог и сбрасывает аккумулятор.
+        /// Вызывается раз в секунду (в main-таймере).
+        /// </summary>
+        private void FlushTickTiming()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(FlushTickTiming);
+                return;
+            }
+
+            if (TickTimingText == null) return;
+
+            long totalMs;
+            Dictionary<string, long> snapshot;
+
+            lock (_tickTimingLock)
+            {
+                totalMs = _tickTimingTotalMs;
+                snapshot = new Dictionary<string, long>(_tickTimingAccum);
+
+                _tickTimingAccum.Clear();
+                _tickTimingTotalMs = 0;
+            }
+
+            if (totalMs == 0)
+            {
+                TickTimingText.Text = "такт: —";
+                return;
+            }
+
+            var brush = totalMs < 300 ? Brushes.Green
+                      : totalMs < 600 ? Brushes.Orange
+                                      : Brushes.Red;
+
+            TickTimingText.Foreground = brush;
+
+            string parts = string.Join(", ",
+                snapshot
+                    .Where(kv => kv.Value > 0)
+                    .OrderByDescending(kv => kv.Value)
+                    .Select(kv => $"{kv.Key} {kv.Value}")
+            );
+
+            TickTimingText.Text = $"такт: {totalMs} мс ({parts})";
+
+            if (totalMs > 500)
+            {
+                AppendLog($"⚠ Медленный такт: {totalMs} мс ({parts})", Brushes.OrangeRed);
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using TERMINAL.Models;
 
@@ -30,11 +31,21 @@ namespace TERMINAL
                     }
                 });
 
+                // ─── Таймер обновления UI клиентов ───
                 _clientsUiTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromSeconds(1)
                 };
-                _clientsUiTimer.Tick += (s, e) => RefreshClientsUi();
+                _clientsUiTimer.Tick += (s, e) =>
+                {
+                    var start = DateTime.Now;
+                    try { RefreshClientsUi(); }
+                    finally
+                    {
+                        long ms = (long)(DateTime.Now - start).TotalMilliseconds;
+                        AddTickTiming("clientsUI", ms);
+                    }
+                };
                 _clientsUiTimer.Start();
 
                 string mode = BroadcastPort == 9990 ? "рабочая" : "тестовая";
@@ -567,17 +578,29 @@ namespace TERMINAL
                 while (remaining > 0)
                 {
                     if (!await WaitIfPausedAsync()) return;
-                    SetStatus($"КОСА: пауза {remaining} сек");
+
+                    var cycleStart = DateTime.Now;
+
+                    SetStatus($"КОСА: пауза {remaining} сек", running: true, log: false);
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
-                    await SafeDelayAsync(1000);
+
+                    long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                    AddTickTiming("kosa-idle", pureMs);
+
+                    int sleep = 1000 - (int)pureMs;
+                    if (sleep > 0) await SafeDelayAsync(sleep);
+
                     remaining--;
                 }
+
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].TimerText = "0";
+
                 return;
             }
 
+            // ─── waitForState == true ───
             bool firstOkReceived = false;
 
             while (!firstOkReceived)
@@ -589,27 +612,46 @@ namespace TERMINAL
                     firstOkReceived = true;
                 else
                 {
-                    SetStatus("КОСА: ожидание стабилизации давления...");
+                    SetStatus("КОСА: ожидание стабилизации давления...",
+                              running: true, log: false);
                     await SafeDelayAsync(1000);
                 }
             }
 
             while (remaining > 0)
             {
+                var cycleStart = DateTime.Now;
+
+                long refreshMs = 0;
+                long stateMs = 0;
+                long uiMs = 0;
+
+                // ─── Каждый тик — RefreshPressure ───
+                var t1 = DateTime.Now;
                 await RefreshPressureAndSetPointAsync();
+                refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
+
+                // ─── Каждый тик — get_state_in_point ───
+                var t2 = DateTime.Now;
                 string? s = await SendCommandAsync("get_state_in_point;");
+                stateMs = (long)(DateTime.Now - t2).TotalMilliseconds;
+
+                // ─── UI и логика ───
+                var t3 = DateTime.Now;
 
                 if (s != null && s.Contains("ok;", StringComparison.Ordinal))
                 {
                     remaining--;
-                    SetStatus($"КОСА: пауза {remaining} сек");
+                    SetStatus($"КОСА: пауза {remaining} сек", running: true, log: false);
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
                 else if (s != null && s.Contains("wait;", StringComparison.Ordinal))
                 {
                     remaining += 30;
-                    SetStatus($"КОСА: срыв! Таймер +30 сек. Осталось: {remaining}");
+                    SetStatus($"КОСА: срыв! Таймер +30 сек. Осталось: {remaining}",
+                              running: true, log: true);
+
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
@@ -622,7 +664,20 @@ namespace TERMINAL
                     }
                 }
 
-                await SafeDelayAsync(1000);
+                uiMs = (long)(DateTime.Now - t3).TotalMilliseconds;
+
+                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                AddTickTiming("kosa", pureMs);
+
+                if (pureMs > 1000)
+                {
+                    AppendLog($"⚠ Долгий такт kosa: {pureMs} мс " +
+                              $"(refr {refreshMs}, state {stateMs}, ui {uiMs})",
+                              Brushes.OrangeRed);
+                }
+
+                int sleep = 1000 - (int)pureMs;
+                if (sleep > 0) await SafeDelayAsync(sleep);
             }
 
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
