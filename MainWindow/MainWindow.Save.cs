@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 using TERMINAL.Models;
 
 namespace TERMINAL
@@ -205,6 +206,33 @@ namespace TERMINAL
                 return;
             }
             await ClearDataCoreAsync(silent: false);
+        }
+
+        /// <summary>
+        /// Сброс до атмосферы:
+        ///   1) сначала set_point=0 (иначе прибор может уйти в stop, а не в vent)
+        ///   2) потом set_mode=vent
+        /// Возвращает true, если vent применён.
+        /// </summary>
+        private async Task<bool> GoToVentAsync()
+        {
+            // ─── 1. Сначала уставка 0 ───
+            bool spOk = await SendWithRetryAsync("set_point=0;", "ok;");
+            if (!spOk)
+            {
+                AppendLog("GoToVentAsync: set_point=0 не сработал", Brushes.OrangeRed);
+                return false;
+            }
+
+            // ─── 2. Потом vent ───
+            bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+            if (!ventOk)
+            {
+                AppendLog("GoToVentAsync: set_mode=vent не сработал", Brushes.OrangeRed);
+                return false;
+            }
+
+            return true;
         }
 
     }

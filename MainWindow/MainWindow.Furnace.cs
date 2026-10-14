@@ -99,135 +99,61 @@ namespace TERMINAL
             });
         }
 
-        private async Task RefreshFurnaceCurrentTempAsync()
+        private Task RefreshFurnaceCurrentTempAsync()
         {
-            float? temp = await TryReadCurrentTemperatureAsync();
+            FurnaceSnapshot snap;
+            lock (_furnaceStateLock) snap = _furnaceState;
 
-            if (temp.HasValue && !float.IsNaN(temp.Value) && !float.IsInfinity(temp.Value))
+            if (snap.CurrentTemp.HasValue)
             {
                 _furnaceTempFailCount = 0;
-
-                double rounded = Math.Round((double)temp.Value, 3);
+                double rounded = Math.Round((double)snap.CurrentTemp.Value, 3);
                 string sign = rounded >= 0 ? "+" : "";
                 FurnaceCurrentTempText.Text =
                     $"{sign}{rounded.ToString("0.000", CultureInfo.InvariantCulture)} °C";
                 FurnaceCurrentTempText.Foreground = Brushes.White;
-
                 if (FurnaceStatusEllipse != null)
                     FurnaceStatusEllipse.Fill = Brushes.Green;
             }
             else
             {
                 _furnaceTempFailCount++;
-
                 if (_furnaceTempFailCount >= ConnectionLostThreshold)
                 {
                     FurnaceCurrentTempText.Text = "— °C";
                     FurnaceCurrentTempText.Foreground =
                         new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
-
                     if (FurnaceStatusEllipse != null)
                         FurnaceStatusEllipse.Fill = Brushes.Red;
                 }
             }
+
+            return Task.CompletedTask;
         }
 
-        private async Task<bool> RefreshFurnaceSetPointAsync()
+        private Task<bool> RefreshFurnaceSetPointAsync()
         {
-            if (FurnaceSetPointBox.IsKeyboardFocused) return false;
+            if (FurnaceSetPointBox.IsKeyboardFocused) return Task.FromResult(false);
 
-            try
+            FurnaceSnapshot snap;
+            lock (_furnaceStateLock) snap = _furnaceState;
+
+            if (snap.SetPoint.HasValue)
             {
-                string result = await Task.Run(() =>
-                {
-                    System.Net.Sockets.Socket? sock = null;
-                    try
-                    {
-                        sock = new System.Net.Sockets.Socket(
-                            System.Net.Sockets.AddressFamily.InterNetwork,
-                            System.Net.Sockets.SocketType.Stream,
-                            System.Net.Sockets.ProtocolType.Tcp);
-
-                        sock.ReceiveTimeout = 1000;
-                        sock.SendTimeout = 1000;
-
-                        var endpoint = new System.Net.IPEndPoint(
-                            System.Net.IPAddress.Parse(FurnaceIp), FurnacePort);
-
-                        var ar = sock.BeginConnect(endpoint, null, null);
-                        if (!ar.AsyncWaitHandle.WaitOne(3000))
-                            return "CONNECT_TIMEOUT";
-                        sock.EndConnect(ar);
-
-                        byte[] request = new byte[]
-                        {
-                            0x00, 0x01,
-                            0x00, 0x00,
-                            0x00, 0x06,
-                            0x00,
-                            0x03,
-                            0x00, 0xCA,
-                            0x00, 0x02
-                        };
-
-                        sock.Send(request);
-
-                        byte[] buf = new byte[20];
-                        int n = sock.Receive(buf);
-
-                        if (n >= 13 && buf[7] == 0x03)
-                        {
-                            byte b1 = buf[9], b2 = buf[10], b3 = buf[11], b4 = buf[12];
-                            float val = BitConverter.ToSingle(new byte[] { b4, b3, b2, b1 }, 0);
-                            return "OK:" + val.ToString(CultureInfo.InvariantCulture);
-                        }
-                        return "FAIL";
-                    }
-                    catch (Exception ex)
-                    {
-                        return "EXC:" + ex.GetType().Name;
-                    }
-                    finally
-                    {
-                        try { sock?.Close(); } catch { }
-                    }
-                });
-
-                if (result.StartsWith("OK:"))
-                {
-                    string valStr = result.Substring(3);
-                    if (float.TryParse(valStr, NumberStyles.Float,
-                        CultureInfo.InvariantCulture, out float v)
-                        && !float.IsNaN(v) && !float.IsInfinity(v))
-                    {
-                        _furnaceSetPointFailCount = 0;
-
-                        double rounded = Math.Round((double)v, 2);
-                        FurnaceSetPointBox.Text =
-                            rounded.ToString("0.##", CultureInfo.InvariantCulture);
-                        _lastValidFurnaceSetPoint = v;
-                        return true;
-                    }
-                }
-
-                _furnaceSetPointFailCount++;
-                if (_furnaceSetPointFailCount >= ConnectionLostThreshold)
-                {
-                    FurnaceSetPointBox.Text = "—";
-                }
-                return false;
+                _furnaceSetPointFailCount = 0;
+                double rounded = Math.Round((double)snap.SetPoint.Value, 2);
+                FurnaceSetPointBox.Text =
+                    rounded.ToString("0.##", CultureInfo.InvariantCulture);
+                _lastValidFurnaceSetPoint = snap.SetPoint.Value;
+                return Task.FromResult(true);
             }
-            catch
-            {
-                _furnaceSetPointFailCount++;
-                if (_furnaceSetPointFailCount >= ConnectionLostThreshold)
-                {
-                    FurnaceSetPointBox.Text = "—";
-                }
-                return false;
-            }
+
+            _furnaceSetPointFailCount++;
+            if (_furnaceSetPointFailCount >= ConnectionLostThreshold)
+                FurnaceSetPointBox.Text = "—";
+
+            return Task.FromResult(false);
         }
-
         private void FurnaceSetPointBox_TextChanged(object sender,
             System.Windows.Controls.TextChangedEventArgs e)
         {

@@ -165,23 +165,59 @@ namespace TERMINAL
         /// </summary>
         private static readonly string[] TickTimingOrder =
         {
-            "main",
-            "agk-poll",
-            "furnace",
-            "platina",
-            "sensorUI",
-            "clientsUI",
-            "kosa",
-            "kosa-idle",
-            "timer-step",
-            "timer-idle",
-            "timer-max",
-            "timer-atmo",
-            "batch-stab",
-            "batch-tolerance",
-            "wait-state",
-            "wait-pressure"
+                        "main",
+                        "agk-poll",
+                        "furnace",
+                        "platina",
+                        "sensorUI",
+                        "clientsUI",
+                        "kosa",
+                        "kosa-idle",
+                        "timer-step",
+                        "timer-idle",
+                        "timer-max",
+                        "timer-atmo",
+                        "batch-stab",
+                        "batch-tolerance",
+                        "wait-state",
+                        "wait-pressure"
 };
+
+        // ─── Кэш состояния АГК ───
+        // ─── Кэш состояния АГК ───
+        private class AgkSnapshot
+        {
+            public string Units = "";
+            public double? Pressure;
+            public double? SetPoint;
+            public string Mode = "";
+            public string Status = "";
+
+            public bool StateInPointOk;          // ответ "ok;"
+            public bool StateInPointWait;        // ответ "wait;"
+            public string StateInPointRaw = "";  // сырой ответ (для отладки)
+
+            public bool Connected;
+            public DateTime UpdatedAt = DateTime.MinValue;
+        }
+
+        private AgkSnapshot _agkState = new();
+        private readonly object _agkStateLock = new();
+
+        // ─── Кэш состояния печи ───
+        private class FurnaceSnapshot
+        {
+            public float? CurrentTemp;
+            public float? SetPoint;
+            public bool Connected;
+            public DateTime UpdatedAt = DateTime.MinValue;
+        }
+
+        private FurnaceSnapshot _furnaceState = new();
+        private readonly object _furnaceStateLock = new();
+
+        // ─── Таймер обновления кэша ───
+        private DispatcherTimer? _stateRefreshTimer;
 
         private readonly DateTime _lastAgkStatusRequest = DateTime.MinValue;
         private const int AgkStatusRequestIntervalMs = 1000;
@@ -263,10 +299,10 @@ namespace TERMINAL
 
                 // ─── Основной таймер ───
                 _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _timer.Tick += async (s, e) =>
+                _timer.Tick += (s, e) =>
                 {
                     var start = DateTime.Now;
-                    try { await Timer_TickAsync(s, e); }       // ← await!
+                    try { Timer_Tick(s, e); }
                     finally
                     {
                         long ms = (long)(DateTime.Now - start).TotalMilliseconds;
@@ -276,28 +312,34 @@ namespace TERMINAL
                 };
                 _timer.Start();
 
+                // ─── Таймер обновления кэша состояния ───
+                _stateRefreshTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(1)
+                };
+                _stateRefreshTimer.Tick += async (s, e) =>
+                {
+                    await RefreshAgkStateAsync();
+                    await RefreshFurnaceStateAsync();
+                };
+                _stateRefreshTimer.Start();
+
                 await Task.Delay(500);
+                await RefreshFurnaceCurrentTempAsync();
                 await RefreshFurnaceSetPointAsync();
 
                 // ─── Таймер печи ───
+                // ─── Таймер стабилизации (обновляет UI из кэша) ───
+                // ─── Таймер стабилизации (обновляет UI из кэша) ───
                 _furnaceTempTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromSeconds(1)
                 };
-                _furnaceTempTimer.Tick += async (s, e) =>
+                _furnaceTempTimer.Tick += (s, e) =>
                 {
-                    var start = DateTime.Now;
-                    try
-                    {
-                        await RefreshFurnaceCurrentTempAsync();
-                        await RefreshFurnaceSetPointAsync();
-                        UpdateStabilizationTimer();
-                    }
-                    finally
-                    {
-                        long ms = (long)(DateTime.Now - start).TotalMilliseconds;
-                        AddTickTiming("furnace", ms);
-                    }
+                    RefreshFurnaceCurrentTempAsync();
+                    RefreshFurnaceSetPointAsync();
+                    UpdateStabilizationTimer();
                 };
                 _furnaceTempTimer.Start();
 

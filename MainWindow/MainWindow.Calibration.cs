@@ -90,6 +90,8 @@ namespace TERMINAL
 
                 ResetStepTimers();
             }
+            await SendCommandAsync("set_point=0;");       // сначала
+            await Task.Delay(100);                        // небольшая пауза
             string? resp = await SendCommandAsync("set_mode=vent;");
             SetStatus($"Сброс отправлен: {resp}");
         }
@@ -301,7 +303,7 @@ namespace TERMINAL
                     if (!currentP.HasValue || Math.Abs(currentP.Value) >= atmoThreshold)
                     {
                         SetStatus($"Шаг {human}: ТЕСТ — сброс до атмосферы (vent)");
-                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        bool ventOk = await GoToVentAsync();
                         if (!ventOk) return;
 
                         SetStatus($"Шаг {human}: ТЕСТ — ожидание снижения давления");
@@ -332,7 +334,7 @@ namespace TERMINAL
                     if (v == 0)
                     {
                         SetStatus("Шаг 1: сброс до атмосферы (vent)");
-                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        bool ventOk = await GoToVentAsync();
                         if (!ventOk) return;
 
                         SetStatus($"Шаг 1: измерение {duration} сек");
@@ -386,7 +388,7 @@ namespace TERMINAL
                     if (v == 0)
                     {
                         SetStatus($"Шаг {human}: сброс до атмосферы (vent)");
-                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        bool ventOk = await GoToVentAsync();
                         if (!ventOk) return;
 
                         SetStatus($"Шаг {human}: ожидание снижения давления");
@@ -472,8 +474,8 @@ namespace TERMINAL
             if (lastPressure != 0)
             {
                 SetStatus("Программа завершена — финальный сброс до атмосферы");
-                bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
-                if (ventOk)
+                bool ventOk = await GoToVentAsync();
+                if (!ventOk) return;
                 {
                     SetStatus("Ожидание снижения давления");
                     await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
@@ -534,7 +536,7 @@ namespace TERMINAL
                 await RunTimerWithRightBlockAsync(300, true);
 
                 SetStatus($"[Цикл {cycle}] сброс (vent)");
-                bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                bool ventOk = await GoToVentAsync();
                 if (!ventOk) return;
 
                 MaxArrow.Text = "  ";
@@ -664,30 +666,34 @@ namespace TERMINAL
                 long unitsMs = 0;
                 long stateMs = 0;
 
-                // ─── RefreshPressure ───
+                // ─── RefreshPressure (из кэша) ───
                 var t1 = DateTime.Now;
                 await RefreshPressureAndSetPointAsync();
                 refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
 
-                // ─── get_units ───
+                // ─── get_units (из кэша) ───
                 var t2 = DateTime.Now;
-                string? unitsResponse = await SendCommandAsync("get_units;");
-                if (unitsResponse != null) UpdateUnits(unitsResponse);
+                AgkSnapshot snap;
+                lock (_agkStateLock) snap = _agkState;
+
+                if (!string.IsNullOrEmpty(snap.Units))
+                    UpdateUnits(snap.Units);
                 unitsMs = (long)(DateTime.Now - t2).TotalMilliseconds;
 
-                // ─── get_state_in_point ───
+                // ─── get_state_in_point (из кэша) ───
                 var t3 = DateTime.Now;
-                string? stateResponse = await SendCommandAsync("get_state_in_point;");
+                bool stateOk = snap.StateInPointOk;
+                bool stateWait = snap.StateInPointWait;
                 stateMs = (long)(DateTime.Now - t3).TotalMilliseconds;
 
-                if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
+                if (stateOk)
                 {
                     firstOkReceived = true;
                     remaining--;
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
-                else if (stateResponse != null && stateResponse.Contains("wait;", StringComparison.Ordinal))
+                else if (stateWait)
                 {
                     if (firstOkReceived)
                     {
@@ -708,8 +714,8 @@ namespace TERMINAL
                         SetStatus($"До начала съёма данных: {remaining} сек", log: false);
                         await SafeDelayAsync(1000);
 
-                        string? s = await SendCommandAsync("get_state_in_point;");
-                        if (s != null && s.Contains("ok;", StringComparison.Ordinal))
+                        lock (_agkStateLock) snap = _agkState;
+                        if (snap.StateInPointOk)
                         {
                             firstOkReceived = true;
                             break;
@@ -735,6 +741,8 @@ namespace TERMINAL
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
         }
+
+
         private string GetUnitsCode(string? tp)
         {
             if (string.IsNullOrEmpty(tp)) return "kgs";
