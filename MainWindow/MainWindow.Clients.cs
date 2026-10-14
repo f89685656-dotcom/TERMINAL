@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using TERMINAL.Models;
 
@@ -30,11 +31,21 @@ namespace TERMINAL
                     }
                 });
 
+                // ─── Таймер обновления UI клиентов ───
                 _clientsUiTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromSeconds(1)
                 };
-                _clientsUiTimer.Tick += (s, e) => RefreshClientsUi();
+                _clientsUiTimer.Tick += (s, e) =>
+                {
+                    var start = DateTime.Now;
+                    try { RefreshClientsUi(); }
+                    finally
+                    {
+                        long ms = (long)(DateTime.Now - start).TotalMilliseconds;
+                        AddTickTiming("clientsUI", ms);
+                    }
+                };
                 _clientsUiTimer.Start();
 
                 string mode = BroadcastPort == 9990 ? "рабочая" : "тестовая";
@@ -570,18 +581,22 @@ namespace TERMINAL
 
                     var cycleStart = DateTime.Now;
 
-                    SetStatus($"КОСА: пауза {remaining} сек", running: true, log: false);   // ← log: false
+                    SetStatus($"КОСА: пауза {remaining} сек", running: true, log: false);
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
-                    int elapsed = (int)(DateTime.Now - cycleStart).TotalMilliseconds;
-                    int sleep = 1000 - elapsed;
+                    long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                    AddTickTiming("kosa-idle", pureMs);
+
+                    int sleep = 1000 - (int)pureMs;
                     if (sleep > 0) await SafeDelayAsync(sleep);
 
                     remaining--;
                 }
+
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].TimerText = "0";
+
                 return;
             }
 
@@ -603,17 +618,26 @@ namespace TERMINAL
                 }
             }
 
-            int tick = 0;
             while (remaining > 0)
             {
                 var cycleStart = DateTime.Now;
 
-                // ─── Раз в 5 тиков обновляем показания прибора (для UI) ───
-                if (tick % 5 == 0)
-                    await RefreshPressureAndSetPointAsync();
+                long refreshMs = 0;
+                long stateMs = 0;
+                long uiMs = 0;
 
-                // ─── Каждый тик — запрос состояния точки (обязательно) ───
+                // ─── Каждый тик — RefreshPressure ───
+                var t1 = DateTime.Now;
+                await RefreshPressureAndSetPointAsync();
+                refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
+
+                // ─── Каждый тик — get_state_in_point ───
+                var t2 = DateTime.Now;
                 string? s = await SendCommandAsync("get_state_in_point;");
+                stateMs = (long)(DateTime.Now - t2).TotalMilliseconds;
+
+                // ─── UI и логика ───
+                var t3 = DateTime.Now;
 
                 if (s != null && s.Contains("ok;", StringComparison.Ordinal))
                 {
@@ -631,7 +655,6 @@ namespace TERMINAL
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
-                    // Ждём, пока не вернётся "ok"
                     while (true)
                     {
                         await SafeDelayAsync(1000);
@@ -641,13 +664,20 @@ namespace TERMINAL
                     }
                 }
 
-                // ─── Дожидаемся конца 1-секундного интервала от начала цикла ───
-                int elapsed = (int)(DateTime.Now - cycleStart).TotalMilliseconds;
-                int sleep = 1000 - elapsed;
-                if (sleep > 0)
-                    await SafeDelayAsync(sleep);
+                uiMs = (long)(DateTime.Now - t3).TotalMilliseconds;
 
-                tick++;
+                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
+                AddTickTiming("kosa", pureMs);
+
+                if (pureMs > 1000)
+                {
+                    AppendLog($"⚠ Долгий такт kosa: {pureMs} мс " +
+                              $"(refr {refreshMs}, state {stateMs}, ui {uiMs})",
+                              Brushes.OrangeRed);
+                }
+
+                int sleep = 1000 - (int)pureMs;
+                if (sleep > 0) await SafeDelayAsync(sleep);
             }
 
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
