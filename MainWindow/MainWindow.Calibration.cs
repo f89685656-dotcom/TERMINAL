@@ -223,7 +223,7 @@ namespace TERMINAL
                             await ClearDataCoreAsync(silent: true);
 
                             // ─── Автозапуск Excel ───
-                            bool autoExcelEnabled = AutoExcelCheckBox?.IsChecked == true;
+                            bool autoExcelEnabled = _autoExcelEnabled;
 
                             if (autoExcelEnabled && !_stopRequested && !_batchStopRequested)
                             {

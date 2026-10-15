@@ -206,8 +206,6 @@ namespace TERMINAL
             BatchList.IsEnabled = false;
             BatchTargetPressureCombo.IsEnabled = false;
             BatchTimerSetCombo.IsEnabled = false;
-            BatchKosaCheckBox.IsEnabled = false;
-            BatchKosaTimerBox.IsEnabled = false;
 
             foreach (var job in _batchJobs)
                 job.IsEditable = false;
@@ -380,8 +378,6 @@ namespace TERMINAL
                 ClearBatchButton.IsEnabled = true;
                 BatchTargetPressureCombo.IsEnabled = true;
                 BatchTimerSetCombo.IsEnabled = true;
-                BatchKosaCheckBox.IsEnabled = true;
-                BatchKosaTimerBox.IsEnabled = true;
                 SetExternalButtonsEnabled(true);
                 BatchList.IsEnabled = true;
 
@@ -592,39 +588,6 @@ namespace TERMINAL
             }
         }
 
-        private void BatchKosaCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            _batchKosaEnabled = BatchKosaCheckBox.IsChecked == true;
-
-            foreach (var item in _stepItems)
-            {
-                if (item.KosaCounterText == "0/3" || item.KosaCounterText == "0/1")
-                    item.KosaCounterText = _batchKosaEnabled ? "0/3" : "0/1";
-            }
-
-            UpdateKosaBadge();
-            SaveSettings();
-        }
-
-        private void BatchKosaTimerBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
-        {
-            e.Handled = !e.Text.All(char.IsDigit);
-        }
-
-        private void BatchKosaTimerBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            if (BatchKosaTimerBox == null) return;
-
-            string val = BatchKosaTimerBox.Text?.Trim() ?? "";
-            if (int.TryParse(val, out int v) && v > 0)
-            {
-                _batchKosaTimerSeconds = v;
-                UpdateKosaBadge();
-                SaveSettings();
-            }
-        }
 
         private void BatchTargetPressureCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {

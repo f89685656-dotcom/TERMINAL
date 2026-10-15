@@ -71,6 +71,9 @@ namespace TERMINAL
                 _batchKosaEnabled = _loadedSettings.BatchKosaEnabled;
                 _batchKosaTimerSeconds = _loadedSettings.BatchKosaTimerSeconds > 0
                     ? _loadedSettings.BatchKosaTimerSeconds : 25;
+                _batchTimerEnabled = _loadedSettings.BatchTimerEnabled;
+                _autoExcelEnabled = _loadedSettings.AutoExcelEnabled;
+
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
                 {
@@ -143,15 +146,6 @@ namespace TERMINAL
             if (!string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
                 SavePathBox.Text = _loadedSettings.SavePath;
 
-            if (BatchKosaCheckBox != null)
-                BatchKosaCheckBox.IsChecked = _loadedSettings?.BatchKosaEnabled ?? false;
-
-            if (AutoExcelCheckBox != null)
-                AutoExcelCheckBox.IsChecked = _loadedSettings?.AutoExcelEnabled ?? true;
-
-            if (BatchKosaTimerBox != null)
-                BatchKosaTimerBox.Text = _batchKosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
-
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
 
@@ -217,8 +211,9 @@ namespace TERMINAL
                     BatchTimerSetIndex = BatchTimerSetCombo.SelectedIndex,
                     SavePath = SavePathBox.Text,
                     BatchKosaEnabled = _batchKosaEnabled,
+                    BatchTimerEnabled = _batchTimerEnabled,
                     BatchKosaTimerSeconds = _batchKosaTimerSeconds,
-                    AutoExcelEnabled = AutoExcelCheckBox?.IsChecked == true,
+                    AutoExcelEnabled = _autoExcelEnabled,
 
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
@@ -378,6 +373,7 @@ namespace TERMINAL
         {
             public string SavePath { get; set; } = "";
             public bool BatchKosaEnabled { get; set; } = false;
+            public bool BatchTimerEnabled { get; set; } = true;
             public int BatchKosaTimerSeconds { get; set; } = 25;
             public int BatchTargetPressureIndex { get; set; } = 0;
             public int BatchTimerSetIndex { get; set; } = 0;

@@ -141,6 +141,10 @@ namespace TERMINAL
         private bool _batchKosaEnabled = false;
         private int _batchKosaTimerSeconds = 25;
 
+        private bool _batchTimerEnabled = true;
+        private bool _autoExcelEnabled = true;
+        public bool BatchTimerEnabled { get; set; } = true;
+
         private string _currentPressureUnitsLabel = "";
         private double? _lastKnownPressure = null;
 
@@ -399,44 +403,50 @@ namespace TERMINAL
 
         private void DeviceSettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            OpenDeviceSettings(0);
+            OpenDeviceSettings(1);
         }
 
         private void FurnaceTitle_Click(object sender, MouseButtonEventArgs e)
         {
-            OpenDeviceSettings(0);
+            OpenDeviceSettings(1);
         }
 
         private void FurnaceSettings_Click(object sender, RoutedEventArgs e)
         {
-            OpenDeviceSettings(0);
+            OpenDeviceSettings(1);
         }
 
         private void AgkTitle_Click(object sender, MouseButtonEventArgs e)
         {
-            OpenDeviceSettings(1);
+            OpenDeviceSettings(2);
         }
 
         private void AgkSettings_Click(object sender, RoutedEventArgs e)
         {
-            OpenDeviceSettings(1);
+            OpenDeviceSettings(2);
         }
 
         private void SktbTitle_Click(object sender, MouseButtonEventArgs e)
         {
-            OpenDeviceSettings(2);
+            OpenDeviceSettings(3);
         }
 
         private void SktbSettings_Click(object sender, RoutedEventArgs e)
         {
-            OpenDeviceSettings(2);
+            OpenDeviceSettings(3);
         }
 
         private void OpenDeviceSettings(int initialTab)
         {
             try
             {
-                var win = new TERMINAL.Windows.DeviceSettingsWindow(initialTab);
+                var win = new TERMINAL.Windows.DeviceSettingsWindow(
+                    initialTab,
+                    _batchKosaEnabled,
+                    _batchTimerEnabled,
+                    _batchKosaTimerSeconds,
+                    _autoExcelEnabled);
+
                 win.Owner = this;
                 win.ShowDialog();
             }
@@ -965,13 +975,6 @@ namespace TERMINAL
             }
         }
 
-        private void AutoExcelCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            AppendLog($"AutoExcelCheckBox: {(AutoExcelCheckBox.IsChecked == true ? "включено" : "выключено")}", Brushes.Gray);
-            SaveSettings();
-        }
-
         /// <summary>
         /// Добавляет замер в аккумулятор. Вызывается из каждого таймера.
         /// </summary>
@@ -1086,5 +1089,18 @@ namespace TERMINAL
                           Brushes.OrangeRed);
             }
         }
+
+        public void ApplyGeneralSettings(
+            bool q2viewEnabled, bool timerEnabled, int timerSeconds, bool autoExcelEnabled)
+        {
+            _batchKosaEnabled = q2viewEnabled;
+            _batchTimerEnabled = timerEnabled;
+            _batchKosaTimerSeconds = timerSeconds;
+            _autoExcelEnabled = autoExcelEnabled;
+
+            UpdateKosaBadge();
+            SaveSettings();
+        }
+
     }
 }
