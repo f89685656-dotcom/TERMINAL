@@ -9,18 +9,20 @@ namespace TERMINAL.Windows
     public partial class DeviceSettingsWindow : Window
     {
         public DeviceSettingsWindow(int initialTab = 0,
-                                    bool q2viewEnabled = false,
-                                    bool timerEnabled = true,
-                                    int timerSeconds = 25,
-                                    bool autoExcelEnabled = true)
+                             bool q2viewEnabled = false,
+                             bool timerEnabled = true,
+                             int timerSeconds = 25,
+                             bool autoExcelEnabled = true,
+                             bool tickTimingEnabled = true)
         {
             InitializeComponent();
 
-            // ─── Заполняем вкладку «Общие» ───
+            // ─── Общие настройки ───
             GeneralQ2ViewCheck.IsChecked = q2viewEnabled;
             GeneralTimerBox.Text = timerSeconds.ToString(CultureInfo.InvariantCulture);
-            GeneralTimerBox.IsEnabled = q2viewEnabled;   // таймер активен ⇔ q2view активен
+            GeneralTimerBox.IsEnabled = q2viewEnabled;
             GeneralAutoExcelCheck.IsChecked = autoExcelEnabled;
+            GeneralTickTimingCheck.IsChecked = tickTimingEnabled;
 
             GeneralQ2ViewCheck.Checked += (s, e) => GeneralTimerBox.IsEnabled = true;
             GeneralQ2ViewCheck.Unchecked += (s, e) => GeneralTimerBox.IsEnabled = false;
@@ -33,7 +35,6 @@ namespace TERMINAL.Windows
             };
 
             // ─── Вкладка по умолчанию ───
-            // initialTab теперь сдвинут: 0 = Общие, 1 = ST-351, 2 = АГК, 3 = СКТБ
             if (initialTab < 0 || initialTab >= DeviceTabs.Items.Count)
                 initialTab = 0;
             DeviceTabs.SelectedIndex = initialTab;
@@ -95,6 +96,7 @@ namespace TERMINAL.Windows
             GeneralTimerBox.Text = "25";
             GeneralTimerBox.IsEnabled = false;   // таймер неактивен, пока q2view выключен
             GeneralAutoExcelCheck.IsChecked = true;
+            GeneralTickTimingCheck.IsChecked = true;
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -176,6 +178,8 @@ namespace TERMINAL.Windows
 
             bool autoExcelEnabled = GeneralAutoExcelCheck.IsChecked == true;
 
+            bool tickTimingEnabled = GeneralTickTimingCheck.IsChecked == true;
+
             // ═══════════════════════════════════════════════════════════════
             // 5. Применяем настройки приборов к MainWindow
             // ═══════════════════════════════════════════════════════════════
@@ -195,7 +199,8 @@ namespace TERMINAL.Windows
                 q2viewEnabled,
                 timerEnabled,
                 timerSeconds,
-                autoExcelEnabled);
+                autoExcelEnabled,
+                tickTimingEnabled);
 
             // ═══════════════════════════════════════════════════════════════
             // 7. Закрываем окно

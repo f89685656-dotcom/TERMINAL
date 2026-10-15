@@ -73,6 +73,7 @@ namespace TERMINAL
                     ? _loadedSettings.BatchKosaTimerSeconds : 25;
                 _batchTimerEnabled = _loadedSettings.BatchTimerEnabled;
                 _autoExcelEnabled = _loadedSettings.AutoExcelEnabled;
+                _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
 
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
@@ -173,6 +174,7 @@ namespace TERMINAL
                 BatchPresetCombo.SelectedIndex = _loadedSettings.LastUsedPresetIndex;
             }
 
+            ApplyTickTimingVisibility();
             UpdateStartButtonMode();
         }
 
@@ -214,6 +216,7 @@ namespace TERMINAL
                     BatchTimerEnabled = _batchTimerEnabled,
                     BatchKosaTimerSeconds = _batchKosaTimerSeconds,
                     AutoExcelEnabled = _autoExcelEnabled,
+                    TickTimingEnabled = _tickTimingEnabled,
 
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
@@ -385,6 +388,8 @@ namespace TERMINAL
             public List<BatchPreset> BatchPresets { get; set; } = new();
             public int LastUsedPresetIndex { get; set; } = -1;
             public bool AutoExcelEnabled { get; set; } = true;
+
+            public bool TickTimingEnabled { get; set; } = true;
 
             public string FurnaceIp { get; set; } = "192.168.0.167";
             public int FurnacePort { get; set; } = 502;

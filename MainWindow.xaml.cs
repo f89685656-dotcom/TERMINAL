@@ -143,6 +143,7 @@ namespace TERMINAL
 
         private bool _batchTimerEnabled = true;
         private bool _autoExcelEnabled = true;
+        private bool _tickTimingEnabled = true;
         public bool BatchTimerEnabled { get; set; } = true;
 
         private string _currentPressureUnitsLabel = "";
@@ -445,7 +446,8 @@ namespace TERMINAL
                     _batchKosaEnabled,
                     _batchTimerEnabled,
                     _batchKosaTimerSeconds,
-                    _autoExcelEnabled);
+                    _autoExcelEnabled,
+                    _tickTimingEnabled);       // ← новая строка
 
                 win.Owner = this;
                 win.ShowDialog();
@@ -980,6 +982,8 @@ namespace TERMINAL
         /// </summary>
         private void AddTickTiming(string label, long ms)
         {
+            if (!_tickTimingEnabled) return;
+
             if (!Dispatcher.CheckAccess())
             {
                 Dispatcher.Invoke(() => AddTickTiming(label, ms));
@@ -1002,6 +1006,8 @@ namespace TERMINAL
         /// </summary>
         private void FlushTickTiming()
         {
+            if (!_tickTimingEnabled) return;
+
             if (!Dispatcher.CheckAccess())
             {
                 Dispatcher.Invoke(FlushTickTiming);
@@ -1091,15 +1097,27 @@ namespace TERMINAL
         }
 
         public void ApplyGeneralSettings(
-            bool q2viewEnabled, bool timerEnabled, int timerSeconds, bool autoExcelEnabled)
+            bool q2viewEnabled, bool timerEnabled,
+            int timerSeconds, bool autoExcelEnabled,
+            bool tickTimingEnabled)
         {
             _batchKosaEnabled = q2viewEnabled;
             _batchTimerEnabled = timerEnabled;
             _batchKosaTimerSeconds = timerSeconds;
             _autoExcelEnabled = autoExcelEnabled;
+            _tickTimingEnabled = tickTimingEnabled;
 
+            ApplyTickTimingVisibility();
             UpdateKosaBadge();
             SaveSettings();
+        }
+
+        private void ApplyTickTimingVisibility()
+        {
+            if (TickTimingPanel != null)
+                TickTimingPanel.Visibility = _tickTimingEnabled
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
         }
 
     }
