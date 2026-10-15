@@ -670,16 +670,16 @@ namespace TERMINAL
             {
                 candidates = new[]
                 {
-                    Path.Combine(dataFolder, setpoint + ".csv"),
-                };
+            Path.Combine(dataFolder, setpoint + ".csv"),
+        };
             }
             else
             {
                 candidates = new[]
                 {
-                    Path.Combine(dataFolder, "+" + setpoint + ".csv"),
-                    Path.Combine(dataFolder, setpoint + ".csv"),
-                };
+            Path.Combine(dataFolder, "+" + setpoint + ".csv"),
+            Path.Combine(dataFolder, setpoint + ".csv"),
+        };
             }
 
             string? csvPath = candidates.FirstOrDefault(File.Exists);
@@ -702,7 +702,7 @@ namespace TERMINAL
                 StatusText.Text = $"Excel: использован свежий файл {Path.GetFileName(csvPath)}";
             }
 
-            // ─── 4. Количество датчиков (Case) для первого макроса ────────
+            // ─── 4. Количество датчиков (Case) ────────────────────────────
             int sensorCount = GetSelectedClientCase();
             if (sensorCount < 1)
             {
@@ -713,7 +713,7 @@ namespace TERMINAL
                 return;
             }
 
-            // ─── 5. CASE для второго макроса — из активного задания ────────
+            // ─── 5. CASE для второго макроса ──────────────────────────────
             int caseForCopy = GetCurrentBatchCase();
             if (caseForCopy == 0)
             {
@@ -724,12 +724,12 @@ namespace TERMINAL
                 return;
             }
 
-            // ─── 6. Папка для второго макроса = родительская от "Данные" ───
+            // ─── 6. Родительская папка ────────────────────────────────────
             string parentFolder = dataFolder.EndsWith("Данные", StringComparison.OrdinalIgnoreCase)
                 ? dataFolder.Substring(0, dataFolder.Length - "Данные".Length).TrimEnd('\\')
                 : (Directory.GetParent(dataFolder)?.FullName ?? dataFolder);
 
-            // ─── 7. Путь к надстройке IvanoFF.xlam ─────────────────────────
+            // ─── 7. Путь к надстройке IvanoFF.xlam ────────────────────────
             string addinPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 @"Microsoft\AddIns\IvanoFF.xlam");
@@ -774,10 +774,14 @@ namespace TERMINAL
                 xlApp = xl;
                 xl.Visible = false;
                 xl.DisplayAlerts = false;
+                xl.ScreenUpdating = false;
+                xl.EnableEvents = false;
+                xl.Calculation = -4135;   // xlCalculationManual
 
                 dynamic tempBook = xl.Workbooks.Add();
                 tempBook.Close(false);
 
+                // ─── Загрузка надстройки IvanoFF ───
                 bool addinLoaded = false;
                 dynamic addins = xl.AddIns;
 
@@ -808,6 +812,7 @@ namespace TERMINAL
 
                 AppendLog("Excel: надстройка IvanoFF загружена", Brushes.Gray);
 
+                // ─── Открываем CSV ───
                 csvBook = xl.Workbooks.Open(csvPath);
                 dynamic wb = csvBook;
                 wb.Activate();
@@ -817,10 +822,26 @@ namespace TERMINAL
                 sheet.Range("Z2").Value = caseForCopy;
                 sheet.Range("Z3").Value = parentFolder;
 
-                AppendLog("Excel: запуск макроса «Фильтр КОСА»", Brushes.Blue);
-                xl.Run("Filter_KOSA_GUI_Auto");
-                AppendLog("Excel: макрос «Фильтр КОСА» выполнен", Brushes.Green);
+                // ═══════════════════════════════════════════════════════
+                // ★ МАКРОС 1: Filter_KOSA_GUI_Auto
+                // ═══════════════════════════════════════════════════════
+                try
+                {
+                    AppendLog("Excel: запуск макроса «Фильтр КОСА»", Brushes.Blue);
+                    xl.Run("Filter_KOSA_GUI_Auto");
+                    AppendLog("Excel: макрос «Фильтр КОСА» выполнен", Brushes.Green);
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"Excel: ошибка в Filter_KOSA_GUI — {ex.Message}", Brushes.OrangeRed);
+                    throw;
+                }
 
+                // Ждём, пока Excel завершит пересчёт
+                WaitForExcelIdle(xl, timeoutMs: 30000);
+                System.Threading.Thread.Sleep(800);
+
+                // ─── Перезаписываем Z1/Z2/Z3 в новой книге ───
                 try
                 {
                     dynamic activeBook = xl.ActiveWorkbook;
@@ -835,12 +856,27 @@ namespace TERMINAL
                     AppendLog($"Excel: не удалось перезаписать Z1/Z2/Z3 — {ex.Message}", Brushes.OrangeRed);
                 }
 
-                AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
-                xl.Run("Universal_Insert_FULL_Auto");
-
+                // ═══════════════════════════════════════════════════════
+                // ★ МАКРОС 2: Universal_Insert_FULL_Auto
+                // ═══════════════════════════════════════════════════════
                 try
                 {
-                    var sensors = new List<TERMINAL.Models.SensorSummary>();
+                    AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
+                    xl.Run("Universal_Insert_FULL_Auto");
+                    AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"Excel: ошибка в Universal_Insert — {ex.Message}", Brushes.OrangeRed);
+                    throw;
+                }
+
+                WaitForExcelIdle(xl, timeoutMs: 60000);
+                System.Threading.Thread.Sleep(500);
+
+                // ─── Чтение первого датчика из активной книги ───
+                try
+                {
                     foreach (dynamic ws in xl.ActiveWorkbook.Sheets)
                     {
                         string wsName = ws.Name;
@@ -851,8 +887,6 @@ namespace TERMINAL
 
                         SensorSummary s = TERMINAL.Services.SummaryService.ReadSensorFromOpenWorkbook(
                             (object)xl.ActiveWorkbook);
-                        sensors.Add(s);
-
                         AppendLog($"Прочитан датчик №{s.Number}: " +
                                   $"опис.град={s.GradDescription}, " +
                                   $"проверок={s.CheckDescriptions.Count(x => x.HasValue)}, " +
@@ -867,8 +901,7 @@ namespace TERMINAL
                     AppendLog($"Ошибка чтения: {ex.Message}", Brushes.Red);
                 }
 
-                AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
-
+                // ─── Закрываем CSV-книгу (без сохранения) ───
                 try { wb.Close(false); } catch { }
                 csvBook = null;
 
@@ -925,6 +958,36 @@ namespace TERMINAL
 
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
+            }
+        }
+
+        /// <summary>
+        /// Ждёт, пока Excel завершит все вычисления (CalculationState == xlDone).
+        /// </summary>
+        private void WaitForExcelIdle(dynamic xl, int timeoutMs = 30000)
+        {
+            const int xlDone = 0;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                while (sw.ElapsedMilliseconds < timeoutMs)
+                {
+                    int state = (int)xl.CalculationState;
+                    if (state == xlDone)
+                    {
+                        AppendLog($"Excel: готов (за {sw.ElapsedMilliseconds} мс)", Brushes.Gray);
+                        return;
+                    }
+
+                    System.Threading.Thread.Sleep(100);
+                }
+
+                AppendLog($"Excel: WaitForExcelIdle таймаут {timeoutMs} мс", Brushes.OrangeRed);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Excel: WaitForExcelIdle ошибка — {ex.Message}", Brushes.Orange);
             }
         }
 
