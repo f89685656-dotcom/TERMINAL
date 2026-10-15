@@ -750,6 +750,7 @@ namespace TERMINAL.Windows
                 };
             }
 
+            // ─── 1. Определяем, какие колонки вообще имеют данные ───
             bool[] hasData = new bool[table.ColumnHeaders.Count];
             for (int c = 0; c < table.ColumnHeaders.Count; c++)
             {
@@ -763,19 +764,45 @@ namespace TERMINAL.Windows
                 }
             }
 
-            double maxAbs = 0;
+            // ─── 2. Считаем maxPos / maxNeg по ВСЕЙ таблице (все колонки) ───
+            double maxPos = 0, maxNeg = 0;
             for (int r = 0; r < table.Values.GetLength(0); r++)
             {
                 for (int c = 0; c < table.Values.GetLength(1); c++)
                 {
                     var v = table.Values[r, c];
-                    if (v.HasValue && Math.Abs(v.Value) > maxAbs)
-                        maxAbs = Math.Abs(v.Value);
+                    if (!v.HasValue) continue;
+                    if (v.Value > maxPos) maxPos = v.Value;
+                    if (v.Value < 0 && Math.Abs(v.Value) > maxNeg) maxNeg = Math.Abs(v.Value);
                 }
             }
-            if (maxAbs < 0.0001) maxAbs = 1.0;
-            maxAbs *= 1.05;
 
+            // ─── 3. Ширина «температурной» колонки и позиция оси ───
+            double cellWidth = forPrint ? 55 : 70;   // столько же, сколько было в Width
+            double axisPos;                          // пикселей от левого края ячейки
+
+            double total = maxPos + maxNeg;
+            if (total < 1e-9)
+            {
+                axisPos = cellWidth / 2.0;
+                maxPos = maxNeg = 1.0;
+            }
+            else
+            {
+                axisPos = cellWidth * (maxNeg / total);
+
+                const double minPad = 6.0;
+                if (axisPos < minPad) axisPos = minPad;
+                if (axisPos > cellWidth - minPad) axisPos = cellWidth - minPad;
+
+                if (maxNeg < 1e-9) maxNeg = maxPos;
+                if (maxPos < 1e-9) maxPos = maxNeg;
+            }
+
+            double leftHalf = axisPos;
+            double rightHalf = cellWidth - axisPos;
+
+            // ─── 4. Конструируем DataGrid ───
             var grid = new DataGrid
             {
                 AutoGenerateColumns = false,
@@ -789,14 +816,13 @@ namespace TERMINAL.Windows
                 HorizontalAlignment = HorizontalAlignment.Left
             };
 
-            // Контекстное меню
             var contextMenu = new ContextMenu();
             var miCopy = new MenuItem { Header = "Копировать" };
             miCopy.Click += (s, ev) => CopyTableToClipboard(grid);
             contextMenu.Items.Add(miCopy);
             grid.ContextMenu = contextMenu;
 
-            // Колонка P
+            // ─── Колонка P ───
             grid.Columns.Add(new DataGridTextColumn
             {
                 Header = "P, кгс/см²",
@@ -804,7 +830,7 @@ namespace TERMINAL.Windows
                 Width = forPrint ? 80 : 110
             });
 
-            // Колонки температур
+            // ─── Температурные колонки ───
             for (int c = 0; c < table.ColumnHeaders.Count; c++)
             {
                 if (!hasData[c]) continue;
@@ -815,28 +841,65 @@ namespace TERMINAL.Windows
                 var template = new DataTemplate();
                 var gridFactory = new FrameworkElementFactory(typeof(Grid));
 
-                // Полоска
-                var barFactory = new FrameworkElementFactory(typeof(Border));
-                barFactory.SetBinding(Border.WidthProperty,
+                // ★★ АБСОЛЮТНЫЕ ширины — ось не поедет
+                var colLeft = new FrameworkElementFactory(typeof(ColumnDefinition));
+                colLeft.SetValue(ColumnDefinition.WidthProperty,
+                    new GridLength(leftHalf, GridUnitType.Pixel));
+
+                var colRight = new FrameworkElementFactory(typeof(ColumnDefinition));
+                colRight.SetValue(ColumnDefinition.WidthProperty,
+                    new GridLength(rightHalf, GridUnitType.Pixel));
+
+                gridFactory.AppendChild(colLeft);
+                gridFactory.AppendChild(colRight);
+
+                // Левая полоска (отрицательные), прижата к оси справа
+                var barLeftFactory = new FrameworkElementFactory(typeof(Border));
+                barLeftFactory.SetValue(Grid.ColumnProperty, 0);
+                barLeftFactory.SetValue(Border.HorizontalAlignmentProperty,
+                    HorizontalAlignment.Right);
+                barLeftFactory.SetBinding(Border.WidthProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
-                        Converter = new TERMINAL.Converters.ValueToBarWidthConverter
+                        Converter = new TERMINAL.Converters.ValueToLeftBarWidthConverter
                         {
-                            MaxWidth = forPrint ? 40 : 60,
-                            MaxAbsValue = maxAbs
+                            MaxWidth = leftHalf,       // ★ не константа
+                            MaxAbsValue = maxNeg       // ★ общий по таблице
                         }
                     });
-                barFactory.SetBinding(Border.BackgroundProperty,
+                barLeftFactory.SetBinding(Border.BackgroundProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
                         Converter = new TERMINAL.Converters.ValueToBarBrushConverter()
                     });
-                barFactory.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Left);
-                barFactory.SetValue(Border.MarginProperty, new Thickness(2));
-                barFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
-                gridFactory.AppendChild(barFactory);
+                barLeftFactory.SetValue(Border.MarginProperty, new Thickness(1));
+                barLeftFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
+                gridFactory.AppendChild(barLeftFactory);
 
-                // Текст
+                // Правая полоска (положительные), прижата к оси слева
+                var barRightFactory = new FrameworkElementFactory(typeof(Border));
+                barRightFactory.SetValue(Grid.ColumnProperty, 1);
+                barRightFactory.SetValue(Border.HorizontalAlignmentProperty,
+                    HorizontalAlignment.Left);
+                barRightFactory.SetBinding(Border.WidthProperty,
+                    new System.Windows.Data.Binding(bindingPath)
+                    {
+                        Converter = new TERMINAL.Converters.ValueToRightBarWidthConverter
+                        {
+                            MaxWidth = rightHalf,      // ★ не константа
+                            MaxAbsValue = maxPos       // ★ общий по таблице
+                        }
+                    });
+                barRightFactory.SetBinding(Border.BackgroundProperty,
+                    new System.Windows.Data.Binding(bindingPath)
+                    {
+                        Converter = new TERMINAL.Converters.ValueToBarBrushConverter()
+                    });
+                barRightFactory.SetValue(Border.MarginProperty, new Thickness(1));
+                barRightFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
+                gridFactory.AppendChild(barRightFactory);
+
+                // Текст поверх обеих колонок
                 var textFactory = new FrameworkElementFactory(typeof(TextBlock));
                 textFactory.SetBinding(TextBlock.TextProperty,
                     new System.Windows.Data.Binding(bindingPath)
@@ -844,9 +907,13 @@ namespace TERMINAL.Windows
                         StringFormat = "0.000"
                     });
                 textFactory.SetValue(TextBlock.ForegroundProperty, Brushes.Black);
-                textFactory.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-                textFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+                textFactory.SetValue(TextBlock.HorizontalAlignmentProperty,
+                    HorizontalAlignment.Center);
+                textFactory.SetValue(TextBlock.VerticalAlignmentProperty,
+                    VerticalAlignment.Center);
                 textFactory.SetValue(TextBlock.FontSizeProperty, forPrint ? 10.0 : 12.0);
+                textFactory.SetValue(Grid.ColumnProperty, 0);
+                textFactory.SetValue(Grid.ColumnSpanProperty, 2);
                 gridFactory.AppendChild(textFactory);
 
                 template.VisualTree = gridFactory;
@@ -855,19 +922,17 @@ namespace TERMINAL.Windows
                 {
                     Header = table.ColumnHeaders[c].ToString("0.##"),
                     CellTemplate = template,
-                    Width = forPrint ? 55 : 70,
+                    Width = new DataGridLength(cellWidth),   // ★ фиксированная ширина
                     SourceColumnIndex = colIndex
                 };
 
                 grid.Columns.Add(column);
             }
 
-            // Строки
+            // ─── Строки ───
             var rows = new List<object>();
-
             for (int r = 0; r < table.Values.GetLength(0); r++)
             {
-                // ✅ ИСПРАВЛЕНО: без dynamic, сразу IDictionary
                 IDictionary<string, object> dict = new ExpandoObject();
 
                 dict["P"] = table.RowHeaders.Count > r
@@ -875,15 +940,12 @@ namespace TERMINAL.Windows
                     : "";
 
                 for (int c = 0; c < table.Values.GetLength(1); c++)
-                {
                     dict[$"C{c}"] = table.Values[r, c];
-                }
 
                 rows.Add(dict);
             }
 
             grid.ItemsSource = rows;
-
             return grid;
         }
 
@@ -1141,18 +1203,49 @@ namespace TERMINAL.Windows
             contextMenu.Items.Add(miCopy);
             grid.ContextMenu = contextMenu;
 
-            double maxAbs = 0;
+            // ─── Ширина колонки ΔF/Δt (фиксированная!) ───
+            double cellWidth = forPrint ? 90 : 130;
+
+            // ─── Считаем maxPos и maxNeg по последней колонке (ΔF / Δt) ───
+            double maxPos = 0, maxNeg = 0;
             int lastCol = 3;
             for (int r = 0; r < tchx.Values.GetLength(0); r++)
             {
                 var v = tchx.Values[r, lastCol];
-                if (v.HasValue && Math.Abs(v.Value) > maxAbs)
-                    maxAbs = Math.Abs(v.Value);
-            }
-            if (maxAbs < 0.0001) maxAbs = 1.0;
-            maxAbs *= 1.05;
+                if (!v.HasValue) continue;
 
-            // ─── Колонки 0..2 — обычные (с сокращением заголовков) ───
+                if (v.Value > maxPos) maxPos = v.Value;
+                if (v.Value < 0 && Math.Abs(v.Value) > maxNeg) maxNeg = Math.Abs(v.Value);
+            }
+
+            // ─── Позиция оси внутри ячейки (в пикселях) ───
+            double total = maxPos + maxNeg;
+            double axisPos; // от левого края ячейки
+
+            if (total < 1e-9)
+            {
+                // все нули / пусто — ось по центру
+                axisPos = cellWidth / 2.0;
+                maxPos = maxNeg = 1.0;
+            }
+            else
+            {
+                axisPos = cellWidth * (maxNeg / total);
+
+                // не даём оси прилипнуть к самому краю — минимум 8px
+                const double minPad = 8.0;
+                if (axisPos < minPad) axisPos = minPad;
+                if (axisPos > cellWidth - minPad) axisPos = cellWidth - minPad;
+
+                // защита от нуля в MaxAbsValue
+                if (maxNeg < 1e-9) maxNeg = maxPos;
+                if (maxPos < 1e-9) maxPos = maxNeg;
+            }
+
+            double leftHalf = axisPos;
+            double rightHalf = cellWidth - axisPos;
+
+            // ─── Колонки 0..2 — обычные ───
             for (int c = 0; c < 3; c++)
             {
                 var col = new DataGridTextColumn
@@ -1167,7 +1260,7 @@ namespace TERMINAL.Windows
                 grid.Columns.Add(col);
             }
 
-            // ─── Колонка 3 — с полоской ───
+            // ─── Колонка 3 — ΔF/Δt с плавающей осью ───
             {
                 int colIndex = 3;
                 string bindingPath = $"C{colIndex}";
@@ -1175,26 +1268,65 @@ namespace TERMINAL.Windows
                 var template = new DataTemplate();
                 var gridFactory = new FrameworkElementFactory(typeof(Grid));
 
-                var barFactory = new FrameworkElementFactory(typeof(Border));
-                barFactory.SetBinding(Border.WidthProperty,
+                // 2 колонки: [axisPos] | [cellWidth - axisPos]
+                var colLeft = new FrameworkElementFactory(typeof(ColumnDefinition));
+                colLeft.SetValue(ColumnDefinition.WidthProperty,
+                    new GridLength(leftHalf, GridUnitType.Pixel));
+
+                var colRight = new FrameworkElementFactory(typeof(ColumnDefinition));
+                colRight.SetValue(ColumnDefinition.WidthProperty,
+                    new GridLength(rightHalf, GridUnitType.Pixel));
+
+                gridFactory.AppendChild(colLeft);
+                gridFactory.AppendChild(colRight);
+
+                // ═══ Левая полоска (отрицательные) ═══
+                var barLeftFactory = new FrameworkElementFactory(typeof(Border));
+                barLeftFactory.SetValue(Grid.ColumnProperty, 0);
+                barLeftFactory.SetValue(Border.HorizontalAlignmentProperty,
+                    HorizontalAlignment.Right);         // прижата к оси
+                barLeftFactory.SetBinding(Border.WidthProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
-                        Converter = new TERMINAL.Converters.ValueToBarWidthConverter
+                        Converter = new TERMINAL.Converters.ValueToLeftBarWidthConverter
                         {
-                            MaxWidth = forPrint ? 40 : 60,
-                            MaxAbsValue = maxAbs
+                            MaxWidth = leftHalf,        // вся левая половина
+                            MaxAbsValue = maxNeg
                         }
                     });
-                barFactory.SetBinding(Border.BackgroundProperty,
+                barLeftFactory.SetBinding(Border.BackgroundProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
                         Converter = new TERMINAL.Converters.ValueToBarBrushConverter()
                     });
-                barFactory.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Left);
-                barFactory.SetValue(Border.MarginProperty, new Thickness(2));
-                barFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
-                gridFactory.AppendChild(barFactory);
+                barLeftFactory.SetValue(Border.MarginProperty, new Thickness(1));
+                barLeftFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
+                gridFactory.AppendChild(barLeftFactory);
 
+                // ═══ Правая полоска (положительные) ═══
+                var barRightFactory = new FrameworkElementFactory(typeof(Border));
+                barRightFactory.SetValue(Grid.ColumnProperty, 1);
+                barRightFactory.SetValue(Border.HorizontalAlignmentProperty,
+                    HorizontalAlignment.Left);          // прижата к оси
+                barRightFactory.SetBinding(Border.WidthProperty,
+                    new System.Windows.Data.Binding(bindingPath)
+                    {
+                        Converter = new TERMINAL.Converters.ValueToRightBarWidthConverter
+                        {
+                            MaxWidth = rightHalf,       // вся правая половина
+                            MaxAbsValue = maxPos
+                        }
+                    });
+                barRightFactory.SetBinding(Border.BackgroundProperty,
+                    new System.Windows.Data.Binding(bindingPath)
+                    {
+                        Converter = new TERMINAL.Converters.ValueToBarBrushConverter()
+                    });
+                barRightFactory.SetValue(Border.MarginProperty, new Thickness(1));
+                barRightFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
+                gridFactory.AppendChild(barRightFactory);
+
+                // ═══ Текст поверх обеих колонок ═══
                 var textFactory = new FrameworkElementFactory(typeof(TextBlock));
                 textFactory.SetBinding(TextBlock.TextProperty,
                     new System.Windows.Data.Binding(bindingPath)
@@ -1202,9 +1334,13 @@ namespace TERMINAL.Windows
                         StringFormat = "0.000"
                     });
                 textFactory.SetValue(TextBlock.ForegroundProperty, Brushes.Black);
-                textFactory.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-                textFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+                textFactory.SetValue(TextBlock.HorizontalAlignmentProperty,
+                    HorizontalAlignment.Center);
+                textFactory.SetValue(TextBlock.VerticalAlignmentProperty,
+                    VerticalAlignment.Center);
                 textFactory.SetValue(TextBlock.FontSizeProperty, forPrint ? 10.0 : 12.0);
+                textFactory.SetValue(Grid.ColumnProperty, 0);
+                textFactory.SetValue(Grid.ColumnSpanProperty, 2);
                 gridFactory.AppendChild(textFactory);
 
                 template.VisualTree = gridFactory;
@@ -1213,7 +1349,7 @@ namespace TERMINAL.Windows
                 {
                     Header = ShortenTchxHeader(tchx.ColumnHeaders[colIndex]),
                     CellTemplate = template,
-                    Width = DataGridLength.Auto
+                    Width = new DataGridLength(cellWidth)   // ★ фиксированная ширина
                 };
                 grid.Columns.Add(column);
             }
@@ -1225,20 +1361,14 @@ namespace TERMINAL.Windows
                 bool hasAny = false;
                 for (int c = 0; c < 4; c++)
                 {
-                    if (tchx.Values[r, c].HasValue)
-                    {
-                        hasAny = true;
-                        break;
-                    }
+                    if (tchx.Values[r, c].HasValue) { hasAny = true; break; }
                 }
                 if (!hasAny) continue;
 
                 IDictionary<string, object> dict = new ExpandoObject();
-
                 for (int c = 0; c < 4; c++)
-                {
                     dict[$"C{c}"] = tchx.Values[r, c];
-                }
+
                 rows.Add(dict);
             }
 
