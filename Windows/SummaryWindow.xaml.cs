@@ -489,12 +489,10 @@ namespace TERMINAL.Windows
             }
 
             var rows = _currentBatch.Sensors
-                .OrderBy(s => s.Number)
                 .Select(s => new SummaryRow
                 {
                     Number = s.Number,
                     GradDescription = s.GradDescription,
-                    // ✅ ИСПРАВЛЕНО: динамическое заполнение Check1..Check5 через хелпер
                     Check1 = GetCheck(s.CheckDescriptions, 0),
                     Check2 = GetCheck(s.CheckDescriptions, 1),
                     Check3 = GetCheck(s.CheckDescriptions, 2),
