@@ -390,15 +390,15 @@ namespace TERMINAL.Windows
         {
             var root = new Grid
             {
-                Width = pageWidth - 20,
-                Margin = new Thickness(10, 8, 10, 8),
+                Width = pageWidth - 60,
+                Margin = new Thickness(35, 35, 25, 25),
                 RowDefinitions =
-        {
-            new RowDefinition { Height = GridLength.Auto },   // 0: шапка
-            new RowDefinition { Height = GridLength.Auto },   // 1: гистерезисы
-            new RowDefinition { Height = GridLength.Auto },   // 2: ТЧХ
-            new RowDefinition { Height = new GridLength(280) }, // 3: погрешность + ГСТ (фиксированная высота)
-        }
+                    {
+                        new RowDefinition { Height = GridLength.Auto },   // 0: шапка
+                        new RowDefinition { Height = GridLength.Auto },   // 1: гистерезисы
+                        new RowDefinition { Height = GridLength.Auto },   // 2: ТЧХ
+                        new RowDefinition { Height = new GridLength(280) }, // 3: погрешность + ГСТ (фиксированная высота)
+                    }
             };
 
             // ─── 0. Шапка ───
@@ -629,6 +629,13 @@ namespace TERMINAL.Windows
                 Height = pageHeight,
                 Background = Brushes.White
             };
+
+            // ─── явное выравнивание по верхнему-левому углу ───
+            FixedPage.SetLeft(root, 0);
+            FixedPage.SetTop(root, 0);
+            FixedPage.SetRight(root, 0);
+            FixedPage.SetBottom(root, 0);
+
             page.Children.Add(root);
 
             return page;
@@ -811,7 +818,7 @@ namespace TERMINAL.Windows
                 CanUserSortColumns = false,
                 GridLinesVisibility = DataGridGridLinesVisibility.All,
                 HeadersVisibility = DataGridHeadersVisibility.Column,
-                RowHeight = forPrint ? 16 : 22,
+                RowHeight = forPrint ? 14 : 22,
                 FontSize = forPrint ? 10 : 12,
                 HorizontalAlignment = HorizontalAlignment.Left
             };
