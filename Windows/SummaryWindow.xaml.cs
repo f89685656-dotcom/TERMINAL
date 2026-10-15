@@ -350,7 +350,7 @@ namespace TERMINAL.Windows
             var doc = new FixedDocument();
             doc.DocumentPaginator.PageSize = new Size(pageWidth, pageHeight);
 
-            var sensors = _currentBatch!.Sensors.OrderBy(s => s.Number).ToList();
+            var sensors = _currentBatch!.Sensors.ToList();
 
             foreach (var sensor in sensors)
             {
