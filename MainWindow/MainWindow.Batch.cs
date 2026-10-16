@@ -333,7 +333,7 @@ namespace TERMINAL
                     // ──────────────────────────────────────────────
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(
-    TaskCreationOptions.RunContinuationsAsynchronously);
+                        TaskCreationOptions.RunContinuationsAsynchronously);
 
                     if (job.IsCalibrationMode)
                     {
@@ -371,6 +371,21 @@ namespace TERMINAL
                 }
 
                 SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
+            }
+            catch (Exception ex)
+            {
+                // ★ Ловим ВСЁ, что прорвалось сквозь внутренние проверки
+                AppendLog($"ПАКЕТ: необработанное исключение — " +
+                          $"{ex.GetType().Name}: {ex.Message}", Brushes.Red);
+
+                if (ex.StackTrace != null)
+                    AppendLog($"ПАКЕТ: stack trace — {ex.StackTrace}", Brushes.Red);
+
+                if (ex.InnerException != null)
+                    AppendLog($"ПАКЕТ: inner — {ex.InnerException.GetType().Name}: " +
+                              $"{ex.InnerException.Message}", Brushes.Red);
+
+                SetStatusError($"Пакет: необработанная ошибка — {ex.Message}");
             }
             finally
             {

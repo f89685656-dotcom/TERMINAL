@@ -494,7 +494,11 @@ namespace TERMINAL
 
             SetStatus($"Установка единиц: {unitsCode}");
             bool unitsOk = await SendWithRetryAsync($"set_units={unitsCode};", "ok;");
-            if (!unitsOk) return false;
+            if (!unitsOk)
+            {
+                AppendLog("[Жамки] set_units не подтвердился — прерывание", Brushes.OrangeRed);
+                return false;
+            }
 
             _currentPressureUnitsLabel = unitsLabel;
 
@@ -513,13 +517,23 @@ namespace TERMINAL
 
                 SetStatus($"[Цикл {cycle}] set_mode=control (1)");
                 bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m1) return false;
+                if (!m1)
+                {
+                    AppendLog($"[Цикл {cycle}] set_mode=control (1) не подтвердился — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 await SafeDelayAsync(1000);
 
                 SetStatus($"[Цикл {cycle}] set_mode=control (2)");
                 bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m2) return false;
+                if (!m2)
+                {
+                    AppendLog($"[Цикл {cycle}] set_mode=control (2) не подтвердился — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 SetStatus($"[Цикл {cycle}] установка {maxPressure}");
                 bool setOk = await SendWithRetryAsync(
@@ -578,6 +592,9 @@ namespace TERMINAL
             SetStatus($"«Жамкать» завершено ({totalCycles} циклов)");
             return true;
         }
+
+
+
         /// <summary>
         /// Таймер выдержки. Идёт по часам (DateTime), не зависит от get_state_in_point.
         /// 
