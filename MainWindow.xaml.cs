@@ -776,9 +776,14 @@ namespace TERMINAL
                 xl.DisplayAlerts = false;
                 xl.ScreenUpdating = false;
                 xl.EnableEvents = false;
+
+                // ✅ Сначала создаём временную книгу — чтобы Calculation можно было менять
+                dynamic tempBook = xl.Workbooks.Add();
+
+                // ✅ Теперь можно ставить Manual
                 xl.Calculation = -4135;   // xlCalculationManual
 
-                dynamic tempBook = xl.Workbooks.Add();
+                // Закрываем временную книгу
                 tempBook.Close(false);
 
                 // ─── Загрузка надстройки IvanoFF ───
@@ -823,17 +828,45 @@ namespace TERMINAL
                 sheet.Range("Z3").Value = parentFolder;
 
                 // ═══════════════════════════════════════════════════════
-                // ★ МАКРОС 1: Filter_KOSA_GUI_Auto
+                // ★ МАКРОС 1: выбор фильтра по _sktbFilterScript
                 // ═══════════════════════════════════════════════════════
+                string filterMacro = _sktbFilterScript switch
+                {
+                    "Фильтр_данных_ПДС" => "Фильтр_данных_ПДС",
+                    "Фильтр_данных_БИДТ" => "Фильтр_данных_БИДТ",
+                    "Фильтр_РЧ" => "Фильтр_РЧ",
+                    "Filter_for_KOSA_GUI" => "Filter_KOSA_GUI_Auto",
+                    _ => "Filter_KOSA_GUI_Auto"
+                };
+
+                AppendLog($"Excel: выбран фильтр «{_sktbFilterScript}» → макрос «{filterMacro}»", Brushes.Gray);
+
                 try
                 {
-                    AppendLog("Excel: запуск макроса «Фильтр КОСА»", Brushes.Blue);
-                    xl.Run("Filter_KOSA_GUI_Auto");
-                    AppendLog("Excel: макрос «Фильтр КОСА» выполнен", Brushes.Green);
+                    AppendLog($"Excel: запуск макроса «{filterMacro}»", Brushes.Blue);
+                    xl.Run(filterMacro);
+                    AppendLog($"Excel: макрос «{filterMacro}» выполнен", Brushes.Green);
+                }
+                catch (System.Runtime.InteropServices.COMException comEx)
+                {
+                    string msg = comEx.Message;
+
+                    if (msg.Contains("Cannot run the macro"))
+                    {
+                        string friendly = $"Макрос «{filterMacro}» не найден в надстройке IvanoFF.xlam.\n\n" +
+                                          "Проверьте, что в настройках СКТБ ЭлПА выбран существующий скрипт.";
+                        AppendLog($"Excel: {friendly}", Brushes.Red);
+                        if (!silent)
+                            MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                        throw;
+                    }
+
+                    AppendLog($"Excel: ошибка в {filterMacro} — {msg}", Brushes.OrangeRed);
+                    throw;
                 }
                 catch (Exception ex)
                 {
-                    AppendLog($"Excel: ошибка в Filter_KOSA_GUI — {ex.Message}", Brushes.OrangeRed);
+                    AppendLog($"Excel: ошибка в {filterMacro} — {ex.Message}", Brushes.OrangeRed);
                     throw;
                 }
 
@@ -873,33 +906,6 @@ namespace TERMINAL
 
                 WaitForExcelIdle(xl, timeoutMs: 60000);
                 System.Threading.Thread.Sleep(500);
-
-                // ─── Чтение первого датчика из активной книги ───
-                try
-                {
-                    foreach (dynamic ws in xl.ActiveWorkbook.Sheets)
-                    {
-                        string wsName = ws.Name;
-                        if (wsName == "TERMINAL" || wsName == "БЧХ" ||
-                            wsName == "ТЧХ" || wsName == "Проверка" ||
-                            wsName == "ChangeLog" || wsName == "Данные")
-                            continue;
-
-                        SensorSummary s = TERMINAL.Services.SummaryService.ReadSensorFromOpenWorkbook(
-                            (object)xl.ActiveWorkbook);
-                        AppendLog($"Прочитан датчик №{s.Number}: " +
-                                  $"опис.град={s.GradDescription}, " +
-                                  $"проверок={s.CheckDescriptions.Count(x => x.HasValue)}, " +
-                                  $"гист.град={s.GradHysteresis.Values.GetLength(0)}x{s.GradHysteresis.Values.GetLength(1)}, " +
-                                  $"погр={s.Errors.Values.GetLength(0)}x{s.Errors.Values.GetLength(1)}",
-                                  Brushes.Green);
-                        break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AppendLog($"Ошибка чтения: {ex.Message}", Brushes.Red);
-                }
 
                 // ─── Закрываем CSV-книгу (без сохранения) ───
                 try { wb.Close(false); } catch { }

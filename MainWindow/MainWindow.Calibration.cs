@@ -568,17 +568,16 @@ namespace TERMINAL
                 while (remaining > 0)
                 {
                     if (_stopRequested) return;
+                    if (!await WaitIfPausedAsync()) return;
 
                     var cycleStart = DateTime.Now;
 
+                    // ★ Просто обновляем показания давления в UI.
+                    // get_state_in_point; в режиме vent НЕ спрашиваем — он не даёт "ok;"
                     await RefreshPressureAndSetPointAsync();
-                    string? stateResponse = await SendCommandAsync("get_state_in_point;");
 
-                    if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
-                    {
-                        remaining--;
-                        MinTimerText.Text = remaining.ToString();
-                    }
+                    remaining--;
+                    MinTimerText.Text = remaining.ToString();
 
                     SetStatus($"Атмосфера: {remaining} сек", log: false);
 
