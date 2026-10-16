@@ -100,7 +100,7 @@ namespace TERMINAL.Windows
                 LoadProgressBar.Visibility = Visibility.Visible;
                 LoadProgressText.Visibility = Visibility.Visible;
                 LoadProgressBar.Minimum = 0;
-                LoadProgressBar.Maximum = files.Count;
+                LoadProgressBar.Maximum = files.Count*2;
                 LoadProgressBar.Value = 0;
 
                 var batch = new SummaryBatch
@@ -118,18 +118,26 @@ namespace TERMINAL.Windows
                             files.ToArray(),
                             progress: (index, total, fileName, success, error) =>
                             {
-                                // ★ Callback приходит из фонового потока — обновляем UI через Dispatcher
+                                // ★ Двухэтапный прогресс:
+                                //   1) датчики — index 0..N-1
+                                //   2) ГСТ     — index 0..N-1, но глобально идут 0..2N-1
+                                int globalIndex = fileName.Contains("(ГСТ)")
+                                    ? files.Count + index
+                                    : index;
+
                                 Dispatcher.Invoke(() =>
                                 {
-                                    LoadProgressBar.Value = index + 1;
+                                    LoadProgressBar.Value = globalIndex + 1;
 
                                     if (success)
                                     {
-                                        LoadProgressText.Text = $"Прочитан {index + 1}/{total}: {fileName}";
+                                        LoadProgressText.Text =
+                                            $"Прочитан {globalIndex + 1}/{files.Count * 2}: {fileName}";
                                     }
                                     else
                                     {
-                                        LoadProgressText.Text = $"Ошибка {index + 1}/{total}: {fileName}";
+                                        LoadProgressText.Text =
+                                            $"Ошибка {globalIndex + 1}/{files.Count * 2}: {fileName}";
                                         LogToMainWindow($"Сводка: ошибка чтения {fileName} — {error}",
                                                         Brushes.OrangeRed);
                                     }

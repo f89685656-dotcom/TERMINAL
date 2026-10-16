@@ -212,8 +212,8 @@ namespace TERMINAL.Services
         }
 
         public static SensorSummary?[] ReadAllFiles(
-string[] files,
-Action<int, int, string, bool, string?>? progress = null)
+    string[] files,
+    Action<int, int, string, bool, string?>? progress = null)
         {
             if (files == null || files.Length == 0)
                 return Array.Empty<SensorSummary?>();
@@ -221,6 +221,7 @@ Action<int, int, string, bool, string?>? progress = null)
             var results = new SensorSummary?[files.Length];
             var errors = new string?[files.Length];
 
+            // ★ Один STA-поток, один Excel на всё
             var thread = new System.Threading.Thread(() =>
             {
                 object? xlApp = null;
@@ -239,10 +240,14 @@ Action<int, int, string, bool, string?>? progress = null)
                     xl.ScreenUpdating = false;
                     xl.EnableEvents = false;
 
+                    // ─── Временная книга для Calculation ───
                     dynamic tempBook = xl.Workbooks.Add();
-                    xl.Calculation = -4135;
+                    xl.Calculation = -4135;   // Manual
                     tempBook.Close(false);
 
+                    // ═══════════════════════════════════════════════════════
+                    // ЭТАП 1. Читаем датчики из .xlsm файлов
+                    // ═══════════════════════════════════════════════════════
                     for (int i = 0; i < files.Length; i++)
                     {
                         string file = files[i];
@@ -253,35 +258,16 @@ Action<int, int, string, bool, string?>? progress = null)
                             wb = xl.Workbooks.Open(file);
                             results[i] = ReadSensorFromOpenWorkbook((object)wb);
 
-                            var s = results[i];
-                            if (s != null)
-                            {
-                                try
-                                {
-                                    if (!string.IsNullOrEmpty(s.ResonatorNumber) &&
-                                        !string.IsNullOrEmpty(s.ResonatorModel))
-                                    {
-                                        s.Gst = GstService.ReadGst(s.ResonatorNumber, s.ResonatorModel);
-                                    }
-                                    else
-                                    {
-                                        s.Gst = new GstInfo { Error = "Не заданы номер резонатора или модель" };
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    s.Gst = new GstInfo { Error = $"Ошибка ГСТ: {ex.Message}" };
-                                }
-                            }
-
-                            progress?.Invoke(i, files.Length, Path.GetFileName(file), true, null);
+                            progress?.Invoke(i, files.Length,
+                                Path.GetFileName(file) + " (датчик)", true, null);
                         }
                         catch (Exception ex)
                         {
                             errors[i] = ex.Message;
                             results[i] = null;
 
-                            progress?.Invoke(i, files.Length, Path.GetFileName(file), false, ex.Message);
+                            progress?.Invoke(i, files.Length,
+                                Path.GetFileName(file) + " (датчик)", false, ex.Message);
                         }
                         finally
                         {
@@ -292,7 +278,42 @@ Action<int, int, string, bool, string?>? progress = null)
                         }
                     }
 
-                    try { xl.Calculation = -4105; } catch { }
+                    // ═══════════════════════════════════════════════════════
+                    // ЭТАП 2. Читаем ГСТ для каждого датчика — в ТОМ ЖЕ Excel
+                    // ═══════════════════════════════════════════════════════
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        var s = results[i];
+                        if (s == null) continue;
+
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(s.ResonatorNumber) &&
+                                !string.IsNullOrEmpty(s.ResonatorModel))
+                            {
+                                s.Gst = GstService.ReadGst(
+                                    xl,                    // ★ передаём уже открытый Excel
+                                    s.ResonatorNumber,
+                                    s.ResonatorModel);
+                            }
+                            else
+                            {
+                                s.Gst = new GstInfo
+                                {
+                                    Error = "Не заданы номер резонатора или модель"
+                                };
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            s.Gst = new GstInfo { Error = $"Ошибка ГСТ: {ex.Message}" };
+                        }
+
+                        progress?.Invoke(i, files.Length,
+                            Path.GetFileName(files[i]) + " (ГСТ)", true, null);
+                    }
+
+                    try { xl.Calculation = -4105; } catch { }   // Automatic
                 }
                 catch (Exception ex)
                 {
@@ -301,7 +322,8 @@ Action<int, int, string, bool, string?>? progress = null)
                         if (results[i] == null && errors[i] == null)
                         {
                             errors[i] = "Excel: " + ex.Message;
-                            progress?.Invoke(i, files.Length, Path.GetFileName(files[i]), false, ex.Message);
+                            progress?.Invoke(i, files.Length,
+                                Path.GetFileName(files[i]), false, ex.Message);
                         }
                     }
                 }

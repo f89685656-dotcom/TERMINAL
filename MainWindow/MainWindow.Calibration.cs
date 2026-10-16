@@ -578,6 +578,22 @@ namespace TERMINAL
             SetStatus($"«Жамкать» завершено ({totalCycles} циклов)");
             return true;
         }
+        /// <summary>
+        /// Таймер выдержки. Идёт по часам (DateTime), не зависит от get_state_in_point.
+        /// 
+        /// Максимум (isMax = true):
+        ///   • раз в секунду проверяет get_state_in_point;
+        ///   • при срыве (ok → не ok) прибавляет +30 сек к оставшемуся времени;
+        ///   • если ok; не приходит — штраф больше не начисляется, просто ждём;
+        ///   • если ok; снова пришёл и снова пропал — новый +30.
+        /// 
+        /// Атмосфера (isMax = false):
+        ///   • get_state_in_point; НЕ проверяется вообще;
+        ///   • чистый отсчёт времени.
+        /// 
+        /// Пауза останавливает таймер (сдвигает startTime).
+        /// UI обновляется только при смене значения.
+        /// </summary>
         private async Task RunTimerWithRightBlockAsync(int seconds, bool isMax)
         {
             var startTime = DateTime.Now;
@@ -608,8 +624,8 @@ namespace TERMINAL
                     startTime += (DateTime.Now - pauseStart);
                 }
 
-                // ─── Раз в секунду проверяем state_in_point ───
-                if ((DateTime.Now - lastStateCheck).TotalMilliseconds >= 1000)
+                // ─── Проверка state_in_point — ТОЛЬКО для максимума ───
+                if (isMax && (DateTime.Now - lastStateCheck).TotalMilliseconds >= 1000)
                 {
                     lastStateCheck = DateTime.Now;
 
@@ -617,29 +633,25 @@ namespace TERMINAL
                     bool stateOk = stateResponse != null &&
                                    stateResponse.Contains("ok;", StringComparison.Ordinal);
 
-                    // ★ Срыв с регулировки
                     if (!stateOk)
                     {
                         if (lastStateOk)
                         {
-                            // срыв только что случился — пишем в лог и отодвигаем таймер
-                            AppendLog($"{(isMax ? "Максимум" : "Атмосфера")}: " +
-                                      $"срыв с регулировки → +30 сек", Brushes.OrangeRed);
+                            // ★ Срыв только что случился — штраф один раз
+                            AppendLog($"Максимум: срыв с регулировки → +30 сек", Brushes.OrangeRed);
 
                             startTime += TimeSpan.FromSeconds(30);
 
-                            // пересчитываем remaining, чтобы UI сразу отобразил новые +30
                             int newRemaining = seconds - (int)((DateTime.Now - startTime).TotalSeconds);
                             if (newRemaining > 0)
                             {
-                                if (isMax) MaxTimerText.Text = newRemaining.ToString();
-                                else MinTimerText.Text = newRemaining.ToString();
+                                MaxTimerText.Text = newRemaining.ToString();
                                 lastDisplayed = newRemaining;
                             }
                         }
 
                         lastStateOk = false;
-                        // ★ ВАЖНО: не выходим, продолжаем таймер
+                        // не выходим, продолжаем таймер
                     }
                     else
                     {
