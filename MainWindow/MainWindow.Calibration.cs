@@ -560,66 +560,97 @@ namespace TERMINAL
         }
         private async Task RunTimerWithRightBlockAsync(int seconds, bool isMax)
         {
-            int remaining = seconds;
+            var startTime = DateTime.Now;
+            int lastDisplayed = seconds;
 
-            if (!isMax)
-            {
-                SetStatus($"Атмосфера: таймер запущен на {remaining} сек");
+            if (isMax) MaxTimerText.Text = seconds.ToString();
+            else MinTimerText.Text = seconds.ToString();
 
-                while (remaining > 0)
-                {
-                    if (_stopRequested) return;
-                    if (!await WaitIfPausedAsync()) return;
+            SetStatus($"{(isMax ? "Максимум" : "Атмосфера")}: таймер запущен на {seconds} сек");
 
-                    var cycleStart = DateTime.Now;
+            var lastStateCheck = DateTime.MinValue;
+            bool lastStateOk = true;   // считаем, что в начале всё ок
 
-                    // ★ Просто обновляем показания давления в UI.
-                    // get_state_in_point; в режиме vent НЕ спрашиваем — он не даёт "ok;"
-                    await RefreshPressureAndSetPointAsync();
-
-                    remaining--;
-                    MinTimerText.Text = remaining.ToString();
-
-                    SetStatus($"Атмосфера: {remaining} сек", log: false);
-
-                    long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
-                    AddTickTiming("timer-atmo", pureMs);
-
-                    int sleep = 1000 - (int)pureMs;
-                    if (sleep > 0) await SafeDelayAsync(sleep);
-                }
-
-                MinTimerText.Text = "0";
-                return;
-            }
-
-            SetStatus($"Максимум: таймер запущен на {remaining} сек");
-
-            while (remaining > 0)
+            while (true)
             {
                 if (_stopRequested) return;
+                if (!await WaitIfPausedAsync()) return;
 
-                var cycleStart = DateTime.Now;
-
-                await RefreshPressureAndSetPointAsync();
-                string? stateResponse = await SendCommandAsync("get_state_in_point;");
-
-                if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
+                // ─── Пауза: сдвигаем старт, чтобы «потерянное» время не считалось ───
+                if (_pauseRequested)
                 {
-                    remaining--;
-                    MaxTimerText.Text = remaining.ToString();
+                    var pauseStart = DateTime.Now;
+                    while (_pauseRequested && !_stopRequested)
+                        await Task.Delay(100);
+
+                    if (_stopRequested) return;
+
+                    startTime += (DateTime.Now - pauseStart);
                 }
 
-                SetStatus($"Максимум: {remaining} сек", log: false);
+                // ─── Раз в секунду проверяем state_in_point ───
+                if ((DateTime.Now - lastStateCheck).TotalMilliseconds >= 1000)
+                {
+                    lastStateCheck = DateTime.Now;
 
-                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
-                AddTickTiming("timer-max", pureMs);
+                    string? stateResponse = await SendCommandAsync("get_state_in_point;");
+                    bool stateOk = stateResponse != null &&
+                                   stateResponse.Contains("ok;", StringComparison.Ordinal);
 
-                int sleep = 1000 - (int)pureMs;
-                if (sleep > 0) await SafeDelayAsync(sleep);
+                    // ★ Срыв с регулировки
+                    if (!stateOk)
+                    {
+                        if (lastStateOk)
+                        {
+                            // срыв только что случился — пишем в лог и отодвигаем таймер
+                            AppendLog($"{(isMax ? "Максимум" : "Атмосфера")}: " +
+                                      $"срыв с регулировки → +30 сек", Brushes.OrangeRed);
+
+                            startTime += TimeSpan.FromSeconds(30);
+
+                            // пересчитываем remaining, чтобы UI сразу отобразил новые +30
+                            int newRemaining = seconds - (int)((DateTime.Now - startTime).TotalSeconds);
+                            if (newRemaining > 0)
+                            {
+                                if (isMax) MaxTimerText.Text = newRemaining.ToString();
+                                else MinTimerText.Text = newRemaining.ToString();
+                                lastDisplayed = newRemaining;
+                            }
+                        }
+
+                        lastStateOk = false;
+                        // ★ ВАЖНО: не выходим, продолжаем таймер
+                    }
+                    else
+                    {
+                        lastStateOk = true;
+                    }
+                }
+
+                // ─── Основной расчёт времени ───
+                var elapsed = DateTime.Now - startTime;
+                int remaining = seconds - (int)elapsed.TotalSeconds;
+
+                if (remaining <= 0)
+                {
+                    if (isMax) MaxTimerText.Text = "0";
+                    else MinTimerText.Text = "0";
+                    return;
+                }
+
+                // ─── Обновляем UI только когда значение изменилось ───
+                if (remaining != lastDisplayed)
+                {
+                    lastDisplayed = remaining;
+
+                    if (isMax) MaxTimerText.Text = remaining.ToString();
+                    else MinTimerText.Text = remaining.ToString();
+
+                    SetStatus($"{(isMax ? "Максимум" : "Атмосфера")}: {remaining} сек", log: false);
+                }
+
+                await Task.Delay(200);   // 5 раз в секунду
             }
-
-            MaxTimerText.Text = "0";
         }
         private async Task RunTimerWithStepAsync(int seconds, int stepIndex, bool waitForState)
         {

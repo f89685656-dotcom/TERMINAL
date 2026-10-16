@@ -272,7 +272,7 @@ namespace TERMINAL
                 var sb = new StringBuilder();
                 byte[] one = new byte[1];
                 var start = DateTime.Now;
-                while ((DateTime.Now - start).TotalMilliseconds < 2000)
+                while ((DateTime.Now - start).TotalMilliseconds < 500)
                 {
                     if (stream.DataAvailable)
                     {
