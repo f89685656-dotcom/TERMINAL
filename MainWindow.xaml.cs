@@ -598,9 +598,109 @@ namespace TERMINAL
         // Работа с Excel
         // ═══════════════════════════════════════════════════════════════════
 
-        private void RunExcelMacroButton_Click(object sender, RoutedEventArgs e)
+        private async void RunExcelMacroButton_Click(object sender, RoutedEventArgs e)
         {
-            RunExcelMacroInternal(silent: false);
+            await RunExcelMacroInternalAsync(silent: false);
+        }
+
+        /// <summary>
+        /// Асинхронная версия RunExcelMacroInternal — не блокирует UI.
+        /// Подготовка (пути, sensorCount, caseForCopy) — синхронно,
+        /// работа с Excel — в фоне через Task.Run.
+        /// </summary>
+        private async Task RunExcelMacroInternalAsync(bool silent)
+        {
+            // ═══════════════════════════════════════════════════════════════
+            // 1. Подготовка — синхронно, в UI-потоке
+            // ═══════════════════════════════════════════════════════════════
+
+            string dataFolder = SavePathBox.Text ?? "";
+            if (string.IsNullOrWhiteSpace(dataFolder) || !Directory.Exists(dataFolder))
+            {
+                string msg = "Папка сохранения не существует:\n" + dataFolder;
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ─── Уставка для имени CSV ───
+            string setpoint = "";
+            if (_batchRunning && _currentBatchSetPointForSave > 0)
+            {
+                setpoint = ((int)_currentBatchSetPointForSave).ToString();
+            }
+            else
+            {
+                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
+                    .TrimStart('+').Replace(',', '.');
+                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
+            }
+
+            if (string.IsNullOrEmpty(setpoint))
+            {
+                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
+                    .TrimStart('+').Replace(',', '.');
+                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
+            }
+
+            // ─── CSV-файл ───
+            string? csvPath = FindCsvFile(dataFolder, setpoint);
+            if (csvPath == null)
+            {
+                string msg = "CSV-файл не найден в " + dataFolder;
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ─── Количество датчиков (Case) ───
+            int sensorCount = GetSelectedClientCase();
+            if (sensorCount < 1)
+            {
+                string msg = "Количество датчиков должно быть не меньше 1.\n\n" +
+                             "Убедитесь, что клиент подключён и передал CASE.";
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ─── CASE для второго макроса ───
+            int caseForCopy = GetCurrentBatchCase();
+            if (caseForCopy == 0)
+            {
+                string msg = "Не удалось определить номер текущего задания пакета.\n" +
+                             "Убедитесь, что пакетный режим запущен.";
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ─── Родительская папка ───
+            string parentFolder = dataFolder.EndsWith("Данные", StringComparison.OrdinalIgnoreCase)
+                ? dataFolder.Substring(0, dataFolder.Length - "Данные".Length).TrimEnd('\\')
+                : (Directory.GetParent(dataFolder)?.FullName ?? dataFolder);
+
+            // ─── Путь к надстройке IvanoFF.xlam ───
+            string? addinPath = FindAddinPath();
+            if (addinPath == null)
+            {
+                string msg = "Не найден файл надстройки IvanoFF.xlam.";
+                AppendLog($"Excel: {msg}", Brushes.Red);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            AppendLog($"Excel: запуск макросов для {Path.GetFileName(csvPath)} " +
+                      $"(Case={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
+
+            // ═══════════════════════════════════════════════════════════════
+            // 2. Работа с Excel — в фоне, UI не блокируется
+            // ═══════════════════════════════════════════════════════════════
+
+            await Task.Run(() =>
+            {
+                RunExcelPipeline(csvPath, sensorCount, caseForCopy, parentFolder, addinPath, silent);
+            });
         }
 
         private string GetCurrentBatchSetPoint()
@@ -631,131 +731,18 @@ namespace TERMINAL
             return "";
         }
 
-        private void RunExcelMacroInternal(bool silent)
+        /// <summary>
+        /// Синхронная часть работы с Excel. Вызывается из Task.Run — фон.
+        /// Внутри — только COM-вызовы и AppendLog/SetStatus (уже потокобезопасные).
+        /// </summary>
+        private void RunExcelPipeline(
+            string csvPath,
+            int sensorCount,
+            int caseForCopy,
+            string parentFolder,
+            string addinPath,
+            bool silent)
         {
-            // ─── 1. Данные из UI ────────────────────────────────────────────
-            string dataFolder = SavePathBox.Text ?? "";
-            if (string.IsNullOrWhiteSpace(dataFolder) || !Directory.Exists(dataFolder))
-            {
-                string msg = "Папка сохранения не существует:\n" + dataFolder;
-                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // ─── 2. Уставка для имени CSV ──────────────────────────────────
-            string setpoint = "";
-            if (_batchRunning && _currentBatchSetPointForSave > 0)
-            {
-                setpoint = ((int)_currentBatchSetPointForSave).ToString();
-            }
-            else
-            {
-                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
-                    .TrimStart('+').Replace(',', '.');
-                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
-            }
-
-            if (string.IsNullOrEmpty(setpoint))
-            {
-                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
-                    .TrimStart('+').Replace(',', '.');
-                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
-            }
-
-            // ─── 3. Поиск CSV-файла ────────────────────────────────────────
-            string[] candidates;
-
-            if (setpoint.StartsWith("-"))
-            {
-                candidates = new[]
-                {
-            Path.Combine(dataFolder, setpoint + ".csv"),
-        };
-            }
-            else
-            {
-                candidates = new[]
-                {
-            Path.Combine(dataFolder, "+" + setpoint + ".csv"),
-            Path.Combine(dataFolder, setpoint + ".csv"),
-        };
-            }
-
-            string? csvPath = candidates.FirstOrDefault(File.Exists);
-
-            if (csvPath == null)
-            {
-                csvPath = Directory.GetFiles(dataFolder, "*.csv")
-                    .OrderByDescending(File.GetLastWriteTime)
-                    .FirstOrDefault();
-
-                if (csvPath == null)
-                {
-                    string msg = "CSV-файл не найден. Пробовал:\n" + string.Join("\n", candidates);
-                    AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                AppendLog($"Excel: использован свежий файл {Path.GetFileName(csvPath)}", Brushes.Gray);
-                StatusText.Text = $"Excel: использован свежий файл {Path.GetFileName(csvPath)}";
-            }
-
-            // ─── 4. Количество датчиков (Case) ────────────────────────────
-            int sensorCount = GetSelectedClientCase();
-            if (sensorCount < 1)
-            {
-                string msg = "Количество датчиков должно быть не меньше 1.\n\n" +
-                             "Убедитесь, что клиент подключён и передал CASE.";
-                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // ─── 5. CASE для второго макроса ──────────────────────────────
-            int caseForCopy = GetCurrentBatchCase();
-            if (caseForCopy == 0)
-            {
-                string msg = "Не удалось определить номер текущего задания пакета.\n" +
-                             "Убедитесь, что пакетный режим запущен.";
-                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // ─── 6. Родительская папка ────────────────────────────────────
-            string parentFolder = dataFolder.EndsWith("Данные", StringComparison.OrdinalIgnoreCase)
-                ? dataFolder.Substring(0, dataFolder.Length - "Данные".Length).TrimEnd('\\')
-                : (Directory.GetParent(dataFolder)?.FullName ?? dataFolder);
-
-            // ─── 7. Путь к надстройке IvanoFF.xlam ────────────────────────
-            string addinPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                @"Microsoft\AddIns\IvanoFF.xlam");
-
-            if (!File.Exists(addinPath))
-            {
-                string altPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    @"Microsoft\Excel\XLSTART\IvanoFF.xlam");
-
-                if (File.Exists(altPath))
-                    addinPath = altPath;
-                else
-                {
-                    string msg = "Не найден файл надстройки IvanoFF.xlam.\n\n" +
-                                 "Проверьте путь:\n" + addinPath + "\n" + altPath;
-                    AppendLog($"Excel: {msg}", Brushes.Red);
-                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-            }
-
-            AppendLog($"Excel: запуск макросов для {Path.GetFileName(csvPath)} " +
-                      $"(Case={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
-
-            // ─── 8. Запускаем Excel ────────────────────────────────────────
             object? xlApp = null;
             object? csvBook = null;
 
@@ -764,9 +751,10 @@ namespace TERMINAL
                 Type? excelType = Type.GetTypeFromProgID("Excel.Application");
                 if (excelType == null)
                 {
-                    string msg = "Excel не установлен на этой машине.";
-                    AppendLog($"Excel: {msg}", Brushes.Red);
-                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                    AppendLog("Excel: Excel не установлен на этой машине.", Brushes.Red);
+                    if (!silent)
+                        UI(() => MessageBox.Show("Excel не установлен на этой машине.",
+                            "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
                     return;
                 }
 
@@ -777,13 +765,9 @@ namespace TERMINAL
                 xl.ScreenUpdating = false;
                 xl.EnableEvents = false;
 
-                // ✅ Сначала создаём временную книгу — чтобы Calculation можно было менять
+                // ─── Временная книга, чтобы Calculation можно было менять ───
                 dynamic tempBook = xl.Workbooks.Add();
-
-                // ✅ Теперь можно ставить Manual
                 xl.Calculation = -4135;   // xlCalculationManual
-
-                // Закрываем временную книгу
                 tempBook.Close(false);
 
                 // ─── Загрузка надстройки IvanoFF ───
@@ -854,23 +838,19 @@ namespace TERMINAL
                     if (msg.Contains("Cannot run the macro"))
                     {
                         string friendly = $"Макрос «{filterMacro}» не найден в надстройке IvanoFF.xlam.\n\n" +
-                                          "Проверьте, что в настройках СКТБ ЭлПА выбран существующий скрипт.";
+                                          "Проверьте, что в настройках СКТБ ЭлПа выбран существующий скрипт.";
                         AppendLog($"Excel: {friendly}", Brushes.Red);
                         if (!silent)
-                            MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                            UI(() => MessageBox.Show(friendly, "Excel",
+                                MessageBoxButton.OK, MessageBoxImage.Error));
                         throw;
                     }
 
                     AppendLog($"Excel: ошибка в {filterMacro} — {msg}", Brushes.OrangeRed);
                     throw;
                 }
-                catch (Exception ex)
-                {
-                    AppendLog($"Excel: ошибка в {filterMacro} — {ex.Message}", Brushes.OrangeRed);
-                    throw;
-                }
 
-                // Ждём, пока Excel завершит пересчёт
+                // Ждём завершения пересчёта
                 WaitForExcelIdle(xl, timeoutMs: 30000);
                 System.Threading.Thread.Sleep(800);
 
@@ -907,12 +887,12 @@ namespace TERMINAL
                 WaitForExcelIdle(xl, timeoutMs: 60000);
                 System.Threading.Thread.Sleep(500);
 
-                // ─── Закрываем CSV-книгу (без сохранения) ───
+                // ─── Закрываем CSV-книгу ───
                 try { wb.Close(false); } catch { }
                 csvBook = null;
 
                 AppendLog($"Excel: обработка завершена — {Path.GetFileName(csvPath)}", Brushes.Green);
-                StatusText.Text = $"Excel: обработка завершена — {Path.GetFileName(csvPath)}";
+                SetStatus($"Excel: обработка завершена — {Path.GetFileName(csvPath)}");
             }
             catch (System.Runtime.InteropServices.COMException comEx)
             {
@@ -930,23 +910,17 @@ namespace TERMINAL
 
                 AppendLog($"Excel: {friendly}", Brushes.OrangeRed);
                 if (!silent)
-                    MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Excel: ошибка — см. журнал";
-            }
-            catch (FileNotFoundException fnf)
-            {
-                string friendly = $"Файл не найден: {fnf.FileName}";
-                AppendLog($"Excel: {friendly}", Brushes.OrangeRed);
-                if (!silent)
-                    MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Excel: файл не найден";
+                    UI(() => MessageBox.Show(friendly, "Excel",
+                        MessageBoxButton.OK, MessageBoxImage.Error));
+                SetStatusError("Excel: ошибка — см. журнал");
             }
             catch (Exception ex)
             {
                 AppendLog($"Excel: {ex.GetType().Name} — {ex.Message}", Brushes.OrangeRed);
                 if (!silent)
-                    MessageBox.Show($"Ошибка: {ex.Message}", "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Excel: ошибка — см. журнал";
+                    UI(() => MessageBox.Show($"Ошибка: {ex.Message}", "Excel",
+                        MessageBoxButton.OK, MessageBoxImage.Error));
+                SetStatusError("Excel: ошибка — см. журнал");
             }
             finally
             {
@@ -959,13 +933,74 @@ namespace TERMINAL
                 {
                     try { ((dynamic)xlApp).Quit(); } catch { }
                     try { Marshal.ReleaseComObject(xlApp); } catch { }
-                    xlApp = null;
                 }
 
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
             }
         }
+
+        private void UI(Action action)
+        {
+            if (Dispatcher.CheckAccess()) action();
+            else Dispatcher.Invoke(action);
+        }
+
+        /// <summary>
+        /// Ищет CSV-файл по уставке. Если не найден — берёт самый свежий.
+        /// </summary>
+        private static string? FindCsvFile(string dataFolder, string setpoint)
+        {
+            string[] candidates;
+
+            if (setpoint.StartsWith("-"))
+            {
+                candidates = new[]
+                {
+            Path.Combine(dataFolder, setpoint + ".csv"),
+        };
+            }
+            else
+            {
+                candidates = new[]
+                {
+            Path.Combine(dataFolder, "+" + setpoint + ".csv"),
+            Path.Combine(dataFolder, setpoint + ".csv"),
+        };
+            }
+
+            string? csvPath = candidates.FirstOrDefault(File.Exists);
+
+            if (csvPath == null)
+            {
+                csvPath = Directory.GetFiles(dataFolder, "*.csv")
+                    .OrderByDescending(File.GetLastWriteTime)
+                    .FirstOrDefault();
+            }
+
+            return csvPath;
+        }
+
+        /// <summary>
+        /// Ищет путь к надстройке IvanoFF.xlam.
+        /// </summary>
+        private static string? FindAddinPath()
+        {
+            string addinPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"Microsoft\AddIns\IvanoFF.xlam");
+
+            if (File.Exists(addinPath)) return addinPath;
+
+            string altPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"Microsoft\Excel\XLSTART\IvanoFF.xlam");
+
+            if (File.Exists(altPath)) return altPath;
+
+            return null;
+        }
+
 
         /// <summary>
         /// Ждёт, пока Excel завершит все вычисления (CalculationState == xlDone).
@@ -985,10 +1020,8 @@ namespace TERMINAL
                         AppendLog($"Excel: готов (за {sw.ElapsedMilliseconds} мс)", Brushes.Gray);
                         return;
                     }
-
                     System.Threading.Thread.Sleep(100);
                 }
-
                 AppendLog($"Excel: WaitForExcelIdle таймаут {timeoutMs} мс", Brushes.OrangeRed);
             }
             catch (Exception ex)

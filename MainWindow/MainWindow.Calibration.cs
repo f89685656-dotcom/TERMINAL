@@ -230,7 +230,7 @@ namespace TERMINAL
                                 try
                                 {
                                     AppendLog("Excel: автозапуск после градуировки", Brushes.Blue);
-                                    RunExcelMacroInternal(silent: true);
+                                    await RunExcelMacroInternalAsync(silent: true);
                                 }
                                 catch (Exception ex)
                                 {
