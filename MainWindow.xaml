@@ -416,7 +416,7 @@
                                                               IsEnabled="{Binding IsEditable}"
                                                               ToolTip="Режим">
                                                         <ComboBoxItem Content="Градуировка"/>
-                                                        <ComboBoxItem Content="Жамкать"/>
+                                                        <ComboBoxItem Content="Бароциклирование"/>
                                                     </ComboBox>
 
                                                     <TextBox Grid.Column="7"

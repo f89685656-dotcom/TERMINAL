@@ -125,7 +125,7 @@ namespace TERMINAL
         {
             if (_isRunning || _batchRunning)
             {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                MessageBox.Show("Идёт градуировка/Бароциклирование. Дождитесь завершения.");
                 return;
             }
             await SaveDataCoreAsync(silent: false);
@@ -202,7 +202,7 @@ namespace TERMINAL
         {
             if (_isRunning || _batchRunning)
             {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                MessageBox.Show("Идёт градуировка/Бароциклирование. Дождитесь завершения.");
                 return;
             }
             await ClearDataCoreAsync(silent: false);
@@ -216,22 +216,21 @@ namespace TERMINAL
         /// </summary>
         private async Task<bool> GoToVentAsync()
         {
-            // ─── 1. Сначала уставка 0 ───
-            bool spOk = await SendWithRetryAsync("set_point=0;", "ok;");
-            if (!spOk)
-            {
-                AppendLog("GoToVentAsync: set_point=0 не сработал", Brushes.OrangeRed);
-                return false;
-            }
+            // ★ Ставим флаг, что мы в vent
+            _agkInVentMode = true;
 
-            // ─── 2. Потом vent ───
+            // ★ УБРАЛИ set_point=0 перед vent
+            // Прибор сам стравливает до атмосферы. set_point=0 отправим ПОСЛЕ.
+
             bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
             if (!ventOk)
             {
                 AppendLog("GoToVentAsync: set_mode=vent не сработал", Brushes.OrangeRed);
+                _agkInVentMode = false;
                 return false;
             }
 
+            AppendLog("GoToVentAsync: vent запущен, _agkInVentMode = true", Brushes.Gray);
             return true;
         }
 

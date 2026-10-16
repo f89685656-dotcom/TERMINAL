@@ -462,7 +462,7 @@ namespace TERMINAL
         {
             if (_isRunning || _batchRunning)
             {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                MessageBox.Show("Идёт градуировка/Бароциклирование. Дождитесь завершения.");
                 return;
             }
 

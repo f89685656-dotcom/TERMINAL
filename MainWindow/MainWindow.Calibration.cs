@@ -99,7 +99,7 @@ namespace TERMINAL
         {
             if (_isRunning || _batchRunning)
             {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                MessageBox.Show("Идёт градуировка/Бароциклирование. Дождитесь завершения.");
                 return;
             }
 
@@ -589,7 +589,7 @@ namespace TERMINAL
             MaxTimerText.Text = "";
             MinTimerText.Text = "";
 
-            SetStatus($"«Жамкать» завершено ({totalCycles} циклов)");
+            SetStatus($"Режим «Бароциклирование» завершён, сделано ({totalCycles} циклов)");
             return true;
         }
 
@@ -642,13 +642,20 @@ namespace TERMINAL
                 }
 
                 // ─── Проверка state_in_point — ТОЛЬКО для максимума ───
-                if (isMax && (DateTime.Now - lastStateCheck).TotalMilliseconds >= 1000)
+                if (isMax && (DateTime.Now - lastStateCheck).TotalMilliseconds >= 3000)
                 {
                     lastStateCheck = DateTime.Now;
 
                     string? stateResponse = await SendCommandAsync("get_state_in_point;");
                     bool stateOk = stateResponse != null &&
                                    stateResponse.Contains("ok;", StringComparison.Ordinal);
+
+                    // ★ Временно: логируем сырой ответ
+                    //    (только первые 30 секунд после запуска таймера, чтобы не залить журнал)
+                    //if ((DateTime.Now - startTime).TotalSeconds < 30)
+                    //{
+                    //    AppendLog($"Максимум: state='{stateResponse}'", Brushes.Gray);
+                    //}
 
                     if (!stateOk)
                     {

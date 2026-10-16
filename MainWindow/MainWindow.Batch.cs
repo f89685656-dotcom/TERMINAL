@@ -315,7 +315,7 @@ namespace TERMINAL
                     job.StatusText = job.IsCalibrationMode ? "Идёт съём данных" : "Идёт бароциклирование";
                     job.StatusColor = Brushes.Blue;
 
-                    string modeName = job.IsCalibrationMode ? "Градуировка" : "Жамкать";
+                    string modeName = job.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» " +
                               $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
 
@@ -419,7 +419,7 @@ namespace TERMINAL
         {
             if (BatchTargetPressureCombo.SelectedItem == null)
             {
-                MessageBox.Show("Не выбран диапазон давлений для «Жамкать»");
+                MessageBox.Show("Не выбран диапазон давлений для «Бароциклирования»");
                 _batchRunDoneSignal?.TrySetResult(false);
                 return;
             }

@@ -211,6 +211,15 @@ namespace TERMINAL
         private AgkSnapshot _agkState = new();
         private readonly object _agkStateLock = new();
 
+        // ★ Счётчик для медленных команд АГК (get_units, get_point, get_state_in_point)
+        private int _agkSlowCounter = 0;
+
+        // ★ Мьютекс: только одна команда АГК за раз (чтобы ответы не перепутывались)
+        private readonly SemaphoreSlim _agkCommandLock = new SemaphoreSlim(1, 1);
+
+        // ★ Флаг: сейчас идёт vent — щадящий опрос АГК
+        private volatile bool _agkInVentMode = false;
+
         // ─── Кэш состояния печи ───
         private class FurnaceSnapshot
         {

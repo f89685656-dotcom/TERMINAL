@@ -150,7 +150,9 @@ namespace TERMINAL
 
         private void Timer_Tick(object? sender, EventArgs e)
         {
-            if (_isRunning) return;
+            // ═══════════════════════════════════════════════════════════════
+            // UI ИЗ КЭША — обновляется ВСЕГДА, даже во время пакета
+            // ═══════════════════════════════════════════════════════════════
 
             AgkSnapshot snap;
             lock (_agkStateLock) snap = _agkState;
@@ -159,39 +161,41 @@ namespace TERMINAL
 
             if (agkOk)
             {
+                // ─── Единицы измерения ───
                 if (!string.IsNullOrEmpty(snap.Units))
                     UpdateUnits(snap.Units);
 
+                // ─── Режим АГК ───
                 if (!string.IsNullOrEmpty(snap.Mode))
                     _currentAgkMode = snap.Mode;
 
+                // ─── Текущее давление ───
                 if (snap.Pressure.HasValue)
                 {
                     string units = _currentPressureUnitsLabel;
                     string parsed = Math.Round(snap.Pressure.Value, 5)
                         .ToString("F5", CultureInfo.InvariantCulture);
+
                     AgkPressureText.Text = string.IsNullOrEmpty(units)
-                        ? parsed : $"{parsed} {units}";
+                        ? parsed
+                        : $"{parsed} {units}";
+
                     _lastKnownPressure = snap.Pressure;
                 }
 
+                // ─── Уставка ───
                 if (snap.SetPoint.HasValue)
                 {
                     string units = _currentPressureUnitsLabel;
-                    if (_currentAgkMode == "vent")
-                    {
-                        AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                            ? "0.00000" : $"0.00000 {units}";
-                    }
-                    else
-                    {
-                        string parsedSp = Math.Round(snap.SetPoint.Value, 5)
-                            .ToString("F5", CultureInfo.InvariantCulture);
-                        AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                            ? parsedSp : $"{parsedSp} {units}";
-                    }
+                    string parsedSp = Math.Round(snap.SetPoint.Value, 5)
+                        .ToString("F5", CultureInfo.InvariantCulture);
+
+                    AgkSetPointText.Text = string.IsNullOrEmpty(units)
+                        ? parsedSp
+                        : $"{parsedSp} {units}";
                 }
 
+                // ─── Статус АГК ───
                 if (!string.IsNullOrEmpty(snap.Status) && AgkStatusTextBox != null)
                 {
                     string display = snap.Status.Trim();
@@ -210,6 +214,7 @@ namespace TERMINAL
             else
             {
                 _agkFailCount++;
+
                 if (_agkFailCount >= ConnectionLostThreshold)
                 {
                     AgkPressureText.Text = "—";
@@ -225,6 +230,11 @@ namespace TERMINAL
                     }
                 }
             }
+
+            // ═══════════════════════════════════════════════════════════════
+            // ★ Всё, что относится к таймерам пакета, — оставляем как есть.
+            //   Но UI обновление АГК — выше, оно работает всегда.
+            // ═══════════════════════════════════════════════════════════════
         }
 
         private void UpdateUnits(string response)
@@ -253,40 +263,50 @@ namespace TERMINAL
 
         private async Task<string?> SendCommandAsync(string command)
         {
-            NetworkStream? stream;
-            lock (_streamLock) stream = _stream;
-            if (stream == null) return null;
+            // ★ Только одна команда за раз
+            await _agkCommandLock.WaitAsync();
 
             try
             {
-                byte[] flush = new byte[1024];
-                while (stream.DataAvailable)
-                {
-                    await stream.ReadAsync(flush, 0, flush.Length);
-                    await Task.Delay(20);
-                }
+                NetworkStream? stream;
+                lock (_streamLock) stream = _stream;
+                if (stream == null) return null;
 
-                byte[] req = Encoding.ASCII.GetBytes(command);
-                await stream.WriteAsync(req, 0, req.Length);
-
-                var sb = new StringBuilder();
-                byte[] one = new byte[1];
-                var start = DateTime.Now;
-                while ((DateTime.Now - start).TotalMilliseconds < 500)
+                try
                 {
-                    if (stream.DataAvailable)
+                    byte[] flush = new byte[1024];
+                    while (stream.DataAvailable)
                     {
-                        int n = await stream.ReadAsync(one, 0, 1);
-                        if (n == 0) break;
-                        char c = (char)one[0];
-                        sb.Append(c);
-                        if (c == ';') break;
+                        await stream.ReadAsync(flush, 0, flush.Length);
+                        await Task.Delay(20);
                     }
-                    else await Task.Delay(10);
+
+                    byte[] req = Encoding.ASCII.GetBytes(command);
+                    await stream.WriteAsync(req, 0, req.Length);
+
+                    var sb = new StringBuilder();
+                    byte[] one = new byte[1];
+                    var start = DateTime.Now;
+                    while ((DateTime.Now - start).TotalMilliseconds < 500)
+                    {
+                        if (stream.DataAvailable)
+                        {
+                            int n = await stream.ReadAsync(one, 0, 1);
+                            if (n == 0) break;
+                            char c = (char)one[0];
+                            sb.Append(c);
+                            if (c == ';') break;
+                        }
+                        else await Task.Delay(10);
+                    }
+                    return sb.Length > 0 ? sb.ToString().Trim() : null;
                 }
-                return sb.Length > 0 ? sb.ToString().Trim() : null;
+                catch { ResetDeviceConnection(); return null; }
             }
-            catch { ResetDeviceConnection(); return null; }
+            finally
+            {
+                _agkCommandLock.Release();
+            }
         }
 
         private async Task SendCommandNoWaitAsync(string command)
@@ -345,35 +365,14 @@ namespace TERMINAL
             AgkSnapshot snap;
             lock (_agkStateLock) snap = _agkState;
 
-            if (snap.Pressure.HasValue)
-            {
-                string units = _currentPressureUnitsLabel;
-                string parsed = Math.Round(snap.Pressure.Value, 5)
-                    .ToString("F5", CultureInfo.InvariantCulture);
-                AgkPressureText.Text = string.IsNullOrEmpty(units)
-                    ? parsed : $"{parsed} {units}";
-                _lastKnownPressure = snap.Pressure;
-            }
-
-            if (snap.SetPoint.HasValue)
-            {
-                string units = _currentPressureUnitsLabel;
-                if (_currentAgkMode == "vent")
-                {
-                    AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                        ? "0.00000" : $"0.00000 {units}";
-                }
-                else
-                {
-                    string parsedSp = Math.Round(snap.SetPoint.Value, 5)
-                        .ToString("F5", CultureInfo.InvariantCulture);
-                    AgkSetPointText.Text = string.IsNullOrEmpty(units)
-                        ? parsedSp : $"{parsedSp} {units}";
-                }
-            }
+            // ★ Никаких AgkPressureText.Text = ... и AgkSetPointText.Text = ...
+            //   Всё это делает Timer_Tick раз в секунду.
+            //   Здесь — только возврат данных для логики.
 
             if (!string.IsNullOrEmpty(snap.Mode))
                 _currentAgkMode = snap.Mode;
+
+            _lastKnownPressure = snap.Pressure;
 
             return Task.FromResult(snap.Pressure);
         }
@@ -433,36 +432,86 @@ namespace TERMINAL
             var start = DateTime.Now;
             var pausedTotal = TimeSpan.Zero;
             var pauseStartedAt = DateTime.MinValue;
+            var lastVentCheck = DateTime.MinValue;
+            var lastDebugLog = DateTime.MinValue;
 
-            while (true)
+            try
             {
-                if (_stopRequested) return false;
-
-                if (_pauseRequested)
+                while (true)
                 {
-                    if (pauseStartedAt == DateTime.MinValue) pauseStartedAt = DateTime.Now;
-                    await Task.Delay(100);
-                    continue;
-                }
-                else if (pauseStartedAt != DateTime.MinValue)
-                {
-                    pausedTotal += DateTime.Now - pauseStartedAt;
-                    pauseStartedAt = DateTime.MinValue;
-                }
+                    if (_stopRequested) return false;
 
-                var elapsed = DateTime.Now - start - pausedTotal;
-                if (elapsed.TotalMilliseconds >= effectiveTimeoutMs)
-                {
-                    AppendLog($"WaitUntilPressureBelow: таймаут {_agkPressureTimeoutMinutes} мин — " +
-                              $"давление не снизилось ниже {threshold}", Brushes.OrangeRed);
-                    SetStatusError($"Таймаут ожидания сброса давления ({_agkPressureTimeoutMinutes} мин)");
-                    return false;
+                    // ─── Пауза ───
+                    if (_pauseRequested)
+                    {
+                        if (pauseStartedAt == DateTime.MinValue) pauseStartedAt = DateTime.Now;
+                        await Task.Delay(100);
+                        continue;
+                    }
+                    else if (pauseStartedAt != DateTime.MinValue)
+                    {
+                        pausedTotal += DateTime.Now - pauseStartedAt;
+                        pauseStartedAt = DateTime.MinValue;
+                    }
+
+                    // ─── Проверка таймаута ───
+                    var elapsed = DateTime.Now - start - pausedTotal;
+                    if (elapsed.TotalMilliseconds >= effectiveTimeoutMs)
+                    {
+                        AppendLog($"WaitUntilPressureBelow: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                                  $"давление не снизилось ниже {threshold}", Brushes.OrangeRed);
+                        SetStatusError($"Таймаут ожидания сброса давления ({_agkPressureTimeoutMinutes} мин)");
+                        return false;
+                    }
+
+                    // ─── Раз в 3 секунды проверяем, что прибор всё ещё в vent ───
+                    if ((DateTime.Now - lastVentCheck).TotalMilliseconds >= 3000)
+                    {
+                        lastVentCheck = DateTime.Now;
+
+                        AgkSnapshot snap;
+                        lock (_agkStateLock) snap = _agkState;
+
+                        // Если режим не vent и не пустой — прибор вышел из vent
+                        if (!string.IsNullOrEmpty(snap.Mode) && snap.Mode != "vent")
+                        {
+                            AppendLog($"WaitUntilPressureBelow: прибор вышел из vent " +
+                                      $"(mode={snap.Mode}) — повторно отправляем set_mode=vent;",
+                                      Brushes.OrangeRed);
+
+                            await SendCommandAsync("set_mode=vent;");
+                        }
+
+                        // ★ Отладка: раз в 5 секунд пишем режим и давление
+                        if ((DateTime.Now - lastDebugLog).TotalSeconds >= 5)
+                        {
+                            lastDebugLog = DateTime.Now;
+                        }
+                    }
+
+                    // ─── Проверка давления ───
+                    double? p = await RefreshPressureAndSetPointAsync();
+                    if (p.HasValue && Math.Abs(p.Value) < threshold)
+                    {
+                        AppendLog($"WaitUntilPressureBelow: давление достигло {p.Value:F3}, vent завершён",
+                                  Brushes.Green);
+
+                        // ★ Теперь, когда давление упало — обнуляем уставку
+                        await Task.Delay(300);
+                        await SendCommandAsync("set_point=0;");
+                        AppendLog("WaitUntilPressureBelow: уставка обнулена (set_point=0)", Brushes.Gray);
+
+                        return true;
+                    }
+
+                    await Task.Delay(1000);
                 }
-
-                double? p = await RefreshPressureAndSetPointAsync();
-                if (p.HasValue && Math.Abs(p.Value) < threshold) return true;
-
-                await Task.Delay(1000);
+            }
+            finally
+            {
+                // ★ Сбрасываем флаг в любом случае
+                _agkInVentMode = false;
+                AppendLog("WaitUntilPressureBelow: _agkInVentMode = false", Brushes.Gray);
             }
         }
 
@@ -521,16 +570,82 @@ namespace TERMINAL
 
             try
             {
-                snap.Units = await SendCommandAsync("get_units;") ?? "";
-                snap.Pressure = ParseDoubleOrNull(await SendCommandAsync("get_press;"));
-                snap.SetPoint = ParseDoubleOrNull(await SendCommandAsync("get_point;"));
-                snap.Mode = (await SendCommandAsync("get_mode;"))?.Trim().TrimEnd(';').ToLower() ?? "";
-                snap.Status = await SendCommandAsync("get_status;") ?? "";
+                // ★ Сохраняем предыдущее состояние
+                AgkSnapshot prev;
+                lock (_agkStateLock) prev = _agkState;
 
-                string? stateResp = await SendCommandAsync("get_state_in_point;");
-                snap.StateInPointRaw = stateResp ?? "";
-                snap.StateInPointOk = stateResp?.Contains("ok;", StringComparison.Ordinal) == true;
-                snap.StateInPointWait = stateResp?.Contains("wait;", StringComparison.Ordinal) == true;
+                // ═══════════════════════════════════════════════════════
+                // ★ Во время vent — минимальный опрос
+                // ═══════════════════════════════════════════════════════
+                if (_agkInVentMode)
+                {
+                    var ventPressureResp = await SendCommandAsync("get_press;");
+                    await Task.Delay(50);
+
+                    snap.Pressure = ventPressureResp != null
+                        ? ParseDoubleOrNull(ventPressureResp)
+                        : prev.Pressure;
+
+                    snap.Units = prev.Units;
+                    snap.SetPoint = prev.SetPoint;
+                    snap.Mode = "vent";
+                    snap.Status = prev.Status;
+                    snap.StateInPointRaw = prev.StateInPointRaw;
+                    snap.StateInPointOk = prev.StateInPointOk;
+                    snap.StateInPointWait = prev.StateInPointWait;
+
+                    snap.Connected = true;
+
+                    lock (_agkStateLock) _agkState = snap;
+
+                    long msVent = (long)(DateTime.Now - start).TotalMilliseconds;
+                    AddTickTiming("agk-poll", msVent);
+                    return;
+                }
+
+                // ═══════════════════════════════════════════════════════
+                // ★ Все команды — КАЖДЫЙ вызов. Без _agkSlowCounter.
+                // ═══════════════════════════════════════════════════════
+
+                var unitsResp = await SendCommandAsync("get_units;");
+                snap.Units = unitsResp ?? prev.Units;
+                await Task.Delay(30);
+
+                var pressureResp = await SendCommandAsync("get_press;");
+                snap.Pressure = pressureResp != null
+                    ? ParseDoubleOrNull(pressureResp)
+                    : prev.Pressure;
+                await Task.Delay(30);
+
+                var pointResp = await SendCommandAsync("get_point;");
+                snap.SetPoint = pointResp != null
+                    ? ParseDoubleOrNull(pointResp)
+                    : prev.SetPoint;
+                await Task.Delay(30);
+
+                var modeResp = await SendCommandAsync("get_mode;");
+                snap.Mode = modeResp != null
+                    ? modeResp.Trim().TrimEnd(';').ToLower()
+                    : prev.Mode;
+                await Task.Delay(30);
+
+                var statusResp = await SendCommandAsync("get_status;");
+                snap.Status = statusResp ?? prev.Status;
+                await Task.Delay(30);
+
+                var stateResp = await SendCommandAsync("get_state_in_point;");
+                if (stateResp != null)
+                {
+                    snap.StateInPointRaw = stateResp;
+                    snap.StateInPointOk = stateResp.Contains("ok;", StringComparison.Ordinal);
+                    snap.StateInPointWait = stateResp.Contains("wait;", StringComparison.Ordinal);
+                }
+                else
+                {
+                    snap.StateInPointRaw = prev.StateInPointRaw;
+                    snap.StateInPointOk = prev.StateInPointOk;
+                    snap.StateInPointWait = prev.StateInPointWait;
+                }
 
                 snap.Connected = true;
             }
