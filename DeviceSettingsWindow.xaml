@@ -73,9 +73,14 @@
                     <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
                     <TextBox x:Name="AgkPortBox" Height="24" Padding="4,2"/>
 
+                    <TextBlock Text="Таймаут ожидания давления, мин:"
+                   FontWeight="Bold" Margin="0,10,0,0"
+                   ToolTip="Если давление не набралось или не сбросилось за это время — задание прерывается"/>
+                    <TextBox x:Name="AgkPressureTimeoutBox" Height="24" Padding="4,2"/>
+
                     <CheckBox x:Name="ShowAgkCardCheck"
-                              Content="Показывать карточку"
-                              Margin="0,15,0,0"/>
+                  Content="Показывать карточку"
+                  Margin="0,15,0,0"/>
                 </StackPanel>
             </TabItem>
 

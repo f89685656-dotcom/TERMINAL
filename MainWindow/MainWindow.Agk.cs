@@ -378,13 +378,30 @@ namespace TERMINAL
             return Task.FromResult(snap.Pressure);
         }
 
+        /// <summary>
+        /// Ждёт стабилизацию (5 подряд ok;) после set_point.
+        /// Прерывается по таймауту (AgkPressureTimeoutMinutes).
+        /// </summary>
         private async Task<bool> WaitForStateInPointAsync()
         {
+            var start = DateTime.Now;
+            int timeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
             int okCount = 0;
+
             while (true)
             {
                 if (_stopRequested) return false;
                 if (!await WaitIfPausedAsync()) return false;
+
+                // ★ Проверка таймаута
+                var elapsed = DateTime.Now - start;
+                if (elapsed.TotalMilliseconds >= timeoutMs)
+                {
+                    AppendLog($"WaitForStateInPoint: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                              $"давление не набралось", Brushes.OrangeRed);
+                    SetStatusError($"Таймаут ожидания набора давления ({_agkPressureTimeoutMinutes} мин)");
+                    return false;
+                }
 
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
@@ -396,13 +413,23 @@ namespace TERMINAL
                 }
                 else okCount = 0;
 
-                SetStatus($"Ожидание стабилизации: {okCount}/5");
+                int elapsedMin = (int)elapsed.TotalMinutes;
+                SetStatus($"Ожидание стабилизации: {okCount}/5 " +
+                          $"({elapsedMin} / {_agkPressureTimeoutMinutes} мин)");
                 await Task.Delay(1000);
             }
         }
 
+        /// <summary>
+        /// Ждёт снижения давления ниже порога после vent.
+        /// Прерывается по таймауту (AgkPressureTimeoutMinutes) или по переданному лимиту.
+        /// </summary>
         private async Task<bool> WaitUntilPressureBelowAsync(double threshold, int timeoutMs)
         {
+            // ★ Таймаут задаётся из настроек (в минутах), но не больше переданного лимита
+            int settingsTimeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
+            int effectiveTimeoutMs = Math.Min(timeoutMs, settingsTimeoutMs);
+
             var start = DateTime.Now;
             var pausedTotal = TimeSpan.Zero;
             var pauseStartedAt = DateTime.MinValue;
@@ -423,33 +450,40 @@ namespace TERMINAL
                     pauseStartedAt = DateTime.MinValue;
                 }
 
-                if ((DateTime.Now - start - pausedTotal).TotalMilliseconds >= timeoutMs)
+                var elapsed = DateTime.Now - start - pausedTotal;
+                if (elapsed.TotalMilliseconds >= effectiveTimeoutMs)
+                {
+                    AppendLog($"WaitUntilPressureBelow: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                              $"давление не снизилось ниже {threshold}", Brushes.OrangeRed);
+                    SetStatusError($"Таймаут ожидания сброса давления ({_agkPressureTimeoutMinutes} мин)");
                     return false;
+                }
 
                 double? p = await RefreshPressureAndSetPointAsync();
                 if (p.HasValue && Math.Abs(p.Value) < threshold) return true;
+
                 await Task.Delay(1000);
             }
         }
 
         private async Task<bool> SendWithRetryAsync(string command, string expected)
         {
-            while (true)
+            for (int attempt = 1; attempt <= 5; attempt++)
             {
-                for (int attempt = 1; attempt <= 5; attempt++)
-                {
-                    if (_stopRequested) return false;
-                    if (!await WaitIfPausedAsync()) return false;
+                if (_stopRequested) return false;
+                if (!await WaitIfPausedAsync()) return false;
 
-                    SetStatus($"{command} — попытка {attempt}/5");
-                    string? response = await SendCommandAsync(command);
-                    if (response != null && response.Contains(expected, StringComparison.Ordinal))
-                        return true;
-                    await SafeDelayAsync(1000);
-                }
-                if (MessageBox.Show($"Команда «{command}» не получила ответ после 5 попыток.",
-                    "Ошибка", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return false;
+                SetStatus($"{command} — попытка {attempt}/5");
+                string? response = await SendCommandAsync(command);
+                if (response != null && response.Contains(expected, StringComparison.Ordinal))
+                    return true;
+
+                await SafeDelayAsync(1000);
             }
+
+            AppendLog($"SendWithRetry: команда «{command}» не получила «{expected}» после 5 попыток",
+                      Brushes.OrangeRed);
+            return false;
         }
 
         private async Task<bool> WaitIfPausedAsync()

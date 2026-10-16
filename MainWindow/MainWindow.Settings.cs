@@ -126,6 +126,8 @@ namespace TERMINAL
             _deviceIp = _loadedSettings.DeviceIp;
             _devicePort = _loadedSettings.DevicePort;
             _showAgkCard = _loadedSettings.ShowAgkCard;
+            _agkPressureTimeoutMinutes = _loadedSettings.AgkPressureTimeoutMinutes > 0
+                ? _loadedSettings.AgkPressureTimeoutMinutes : 5;
 
             _sktbFilterScript = _loadedSettings.SktbFilterScript;
             _showSktbCard = _loadedSettings.ShowSktbCard;
@@ -239,6 +241,7 @@ namespace TERMINAL
                     DeviceIp = _deviceIp,
                     DevicePort = _devicePort,
                     ShowAgkCard = _showAgkCard,
+                    AgkPressureTimeoutMinutes = _agkPressureTimeoutMinutes,
 
                     SktbFilterScript = _sktbFilterScript,
                     ShowSktbCard = _showSktbCard,
@@ -401,6 +404,9 @@ namespace TERMINAL
             public string DeviceIp { get; set; } = "192.168.0.159";
             public int DevicePort { get; set; } = 8888;
             public bool ShowAgkCard { get; set; } = true;
+
+            // ★ Таймаут ожидания (набор/сброс давления), в минутах
+            public int AgkPressureTimeoutMinutes { get; set; } = 5;
 
             public string SktbFilterScript { get; set; } = "Filter_for_KOSA_GUI";
             public bool ShowSktbCard { get; set; } = true;

@@ -524,27 +524,47 @@ namespace TERMINAL
                 SetStatus($"[Цикл {cycle}] установка {maxPressure}");
                 bool setOk = await SendWithRetryAsync(
                     $"set_point={maxPressure.ToString(CultureInfo.InvariantCulture)};", "ok;");
-                if (!setOk) return false;
+                if (!setOk)
+                {
+                    AppendLog($"[Цикл {cycle}] set_point не подтвердился — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 MaxArrow.Text = "→";
 
                 SetStatus($"[Цикл {cycle}] ожидание стабилизации");
                 bool stable = await WaitForStateInPointAsync();
-                if (!stable) return false;
+                if (!stable)
+                {
+                    AppendLog($"[Цикл {cycle}] стабилизация не достигнута — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем максимальное давление");
                 await RunTimerWithRightBlockAsync(300, true);
 
                 SetStatus($"[Цикл {cycle}] сброс (vent)");
                 bool ventOk = await GoToVentAsync();
-                if (!ventOk) return false;
+                if (!ventOk)
+                {
+                    AppendLog($"[Цикл {cycle}] vent не подтвердился — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 MaxArrow.Text = "  ";
                 MinArrow.Text = "→";
 
                 SetStatus($"[Цикл {cycle}] ожидание снижения");
                 bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
-                if (!lowOk) return false;
+                if (!lowOk)
+                {
+                    AppendLog($"[Цикл {cycle}] давление не снизилось ниже порога — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем атмосферное давление");
                 await RunTimerWithRightBlockAsync(300, false);

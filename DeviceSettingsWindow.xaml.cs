@@ -58,6 +58,7 @@ namespace TERMINAL.Windows
             // АГК
             AgkIpBox.Text = mw.DeviceIp;
             AgkPortBox.Text = mw.DevicePort.ToString();
+            AgkPressureTimeoutBox.Text = mw.AgkPressureTimeoutMinutes.ToString();
             ShowAgkCardCheck.IsChecked = mw.ShowAgkCard;
 
             // СКТБ
@@ -87,6 +88,7 @@ namespace TERMINAL.Windows
 
             AgkIpBox.Text = "192.168.0.159";
             AgkPortBox.Text = "8888";
+            AgkPressureTimeoutBox.Text = "5";
             ShowAgkCardCheck.IsChecked = true;
 
             SktbFilterScriptCombo.SelectedIndex = 3;
@@ -147,6 +149,11 @@ namespace TERMINAL.Windows
             if (!int.TryParse(AgkPortBox.Text, out agkPort) || agkPort <= 0 || agkPort > 65535)
                 agkPort = 8888;
 
+            int agkPressureTimeoutMinutes = 5;
+            if (!int.TryParse(AgkPressureTimeoutBox.Text, out agkPressureTimeoutMinutes) ||
+                agkPressureTimeoutMinutes <= 0)
+                agkPressureTimeoutMinutes = 5;
+
             bool showAgkCard = ShowAgkCardCheck.IsChecked == true;
 
             // ═══════════════════════════════════════════════════════════════
@@ -189,6 +196,7 @@ namespace TERMINAL.Windows
                 furnaceSetPointReg, furnaceCurrentTempReg, furnaceModeReg,
                 showFurnaceCard,
                 agkIp, agkPort, showAgkCard,
+                agkPressureTimeoutMinutes,
                 sktbFilterScript, showSktbCard);
 
             // ═══════════════════════════════════════════════════════════════

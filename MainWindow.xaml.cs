@@ -77,6 +77,8 @@ namespace TERMINAL
         // ── АГК карточка ──
         private bool _showAgkCard = true;
 
+        private int _agkPressureTimeoutMinutes = 5;
+
         // ── СКТБ ЭлПА ──
         private string _sktbFilterScript = "Filter_for_KOSA_GUI";
         private bool _showSktbCard = true;
@@ -246,6 +248,8 @@ namespace TERMINAL
         public string DeviceIp => _deviceIp;
         public int DevicePort => _devicePort;
         public bool ShowAgkCard => _showAgkCard;
+
+        public int AgkPressureTimeoutMinutes => _agkPressureTimeoutMinutes;
 
         public string SktbFilterScript => _sktbFilterScript;
         public bool ShowSktbCard => _showSktbCard;
@@ -460,11 +464,12 @@ namespace TERMINAL
         }
 
         public void ApplyDeviceSettings(
-            string furnaceIp, int furnacePort,
-            ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
-            bool showFurnaceCard,
-            string agkIp, int agkPort, bool showAgkCard,
-            string sktbFilterScript, bool showSktbCard)
+    string furnaceIp, int furnacePort,
+    ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
+    bool showFurnaceCard,
+    string agkIp, int agkPort, bool showAgkCard,
+    int agkPressureTimeoutMinutes,
+    string sktbFilterScript, bool showSktbCard)
         {
             _furnaceIp = furnaceIp;
             _furnacePort = furnacePort;
@@ -476,6 +481,8 @@ namespace TERMINAL
             _deviceIp = agkIp;
             _devicePort = agkPort;
             _showAgkCard = showAgkCard;
+            _agkPressureTimeoutMinutes = agkPressureTimeoutMinutes > 0
+                ? agkPressureTimeoutMinutes : 5;
 
             _sktbFilterScript = sktbFilterScript;
             _showSktbCard = showSktbCard;
