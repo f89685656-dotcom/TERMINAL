@@ -210,8 +210,129 @@ namespace TERMINAL.Services
 
             return sensor;
         }
-        
-        
+
+        public static SensorSummary?[] ReadAllFiles(
+string[] files,
+Action<int, int, string, bool, string?>? progress = null)
+        {
+            if (files == null || files.Length == 0)
+                return Array.Empty<SensorSummary?>();
+
+            var results = new SensorSummary?[files.Length];
+            var errors = new string?[files.Length];
+
+            var thread = new System.Threading.Thread(() =>
+            {
+                object? xlApp = null;
+
+                try
+                {
+                    Type? excelType = Type.GetTypeFromProgID("Excel.Application");
+                    if (excelType == null)
+                        throw new Exception("Excel не установлен на этой машине");
+
+                    dynamic xl = Activator.CreateInstance(excelType)!;
+                    xlApp = xl;
+
+                    xl.Visible = false;
+                    xl.DisplayAlerts = false;
+                    xl.ScreenUpdating = false;
+                    xl.EnableEvents = false;
+
+                    dynamic tempBook = xl.Workbooks.Add();
+                    xl.Calculation = -4135;
+                    tempBook.Close(false);
+
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        string file = files[i];
+                        dynamic? wb = null;
+
+                        try
+                        {
+                            wb = xl.Workbooks.Open(file);
+                            results[i] = ReadSensorFromOpenWorkbook((object)wb);
+
+                            var s = results[i];
+                            if (s != null)
+                            {
+                                try
+                                {
+                                    if (!string.IsNullOrEmpty(s.ResonatorNumber) &&
+                                        !string.IsNullOrEmpty(s.ResonatorModel))
+                                    {
+                                        s.Gst = GstService.ReadGst(s.ResonatorNumber, s.ResonatorModel);
+                                    }
+                                    else
+                                    {
+                                        s.Gst = new GstInfo { Error = "Не заданы номер резонатора или модель" };
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    s.Gst = new GstInfo { Error = $"Ошибка ГСТ: {ex.Message}" };
+                                }
+                            }
+
+                            progress?.Invoke(i, files.Length, Path.GetFileName(file), true, null);
+                        }
+                        catch (Exception ex)
+                        {
+                            errors[i] = ex.Message;
+                            results[i] = null;
+
+                            progress?.Invoke(i, files.Length, Path.GetFileName(file), false, ex.Message);
+                        }
+                        finally
+                        {
+                            if (wb != null)
+                            {
+                                try { ((dynamic)wb).Close(false); } catch { }
+                            }
+                        }
+                    }
+
+                    try { xl.Calculation = -4105; } catch { }
+                }
+                catch (Exception ex)
+                {
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        if (results[i] == null && errors[i] == null)
+                        {
+                            errors[i] = "Excel: " + ex.Message;
+                            progress?.Invoke(i, files.Length, Path.GetFileName(files[i]), false, ex.Message);
+                        }
+                    }
+                }
+                finally
+                {
+                    if (xlApp != null)
+                    {
+                        try { ((dynamic)xlApp).Quit(); } catch { }
+                        try { System.Runtime.InteropServices.Marshal.ReleaseComObject(xlApp); } catch { }
+                    }
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                }
+            });
+
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.IsBackground = true;
+            thread.Start();
+            thread.Join();
+
+            var firstError = errors.FirstOrDefault(e => !string.IsNullOrEmpty(e));
+            if (firstError != null && results.All(r => r == null))
+            {
+                throw new Exception("Не удалось прочитать ни одного файла. Первая ошибка: " + firstError);
+            }
+
+            return results;
+        }
+
+
+
         private static TableData ReadTable(dynamic ws,int tempRow, int tempColStart, int tempColCount,int pressRowStart, int pressRowCount, int pressCol,int dataRowStart, int dataColStart,int dataRows, int dataCols)
         {
             var table = new TableData();
@@ -347,6 +468,8 @@ namespace TERMINAL.Services
 
             return table;
         }
+
+
 
     }
 }

@@ -93,7 +93,10 @@ namespace TERMINAL.Windows
                 LogToMainWindow($"Сводка: начало чтения {files.Count} файлов",
                                 Brushes.Blue);
 
-                // Прогресс-бар
+                // ═══════════════════════════════════════════════════════════════
+                // ★ Читаем все файлы ОДНИМ запуском Excel в фоне
+                // ═══════════════════════════════════════════════════════════════
+
                 LoadProgressBar.Visibility = Visibility.Visible;
                 LoadProgressText.Visibility = Visibility.Visible;
                 LoadProgressBar.Minimum = 0;
@@ -106,53 +109,57 @@ namespace TERMINAL.Windows
                     SavedAt = DateTime.Now
                 };
 
-                for (int i = 0; i < files.Count; i++)
+                try
                 {
-                    string file = files[i];
-                    LoadProgressBar.Value = i;
-                    LoadProgressText.Text = $"Чтение {i + 1}/{files.Count}: {Path.GetFileName(file)}";
-
-                    await Dispatcher.InvokeAsync(() => { },
-                        System.Windows.Threading.DispatcherPriority.Background);
-                    await Task.Yield();
-
-                    try
+                    // ★ Вызов в фоне — UI не блокируется
+                    var sensors = await Task.Run(() =>
                     {
-                        var sensor = SummaryService.ReadSingleFile(file);
-
-                        // ─── Чтение ГСТ ───
-                        try
-                        {
-                            if (!string.IsNullOrEmpty(sensor.ResonatorNumber) &&
-                                !string.IsNullOrEmpty(sensor.ResonatorModel))
+                        return SummaryService.ReadAllFiles(
+                            files.ToArray(),
+                            progress: (index, total, fileName, success, error) =>
                             {
-                                sensor.Gst = GstService.ReadGst(
-                                    sensor.ResonatorNumber,
-                                    sensor.ResonatorModel);
-                            }
-                            else
-                            {
-                                sensor.Gst = new GstInfo
+                                // ★ Callback приходит из фонового потока — обновляем UI через Dispatcher
+                                Dispatcher.Invoke(() =>
                                 {
-                                    Error = "Не заданы номер резонатора или модель"
-                                };
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            sensor.Gst = new GstInfo { Error = $"Ошибка ГСТ: {ex.Message}" };
-                        }
+                                    LoadProgressBar.Value = index + 1;
+
+                                    if (success)
+                                    {
+                                        LoadProgressText.Text = $"Прочитан {index + 1}/{total}: {fileName}";
+                                    }
+                                    else
+                                    {
+                                        LoadProgressText.Text = $"Ошибка {index + 1}/{total}: {fileName}";
+                                        LogToMainWindow($"Сводка: ошибка чтения {fileName} — {error}",
+                                                        Brushes.OrangeRed);
+                                    }
+                                });
+                            });
+                    });
+
+                    // ★ ГСТ уже прочитан внутри ReadAllFiles (в том же STA-потоке).
+                    //   Здесь только собираем результаты — без COM.
+                    for (int i = 0; i < sensors.Length; i++)
+                    {
+                        var sensor = sensors[i];
+                        if (sensor == null) continue;   // ошибка уже залогирована
 
                         batch.Sensors.Add(sensor);
                     }
-                    catch (Exception ex)
-                    {
-                        LogToMainWindow($"Сводка: ошибка чтения {Path.GetFileName(file)} — {ex.Message}",
-                                        Brushes.OrangeRed);
-                    }
+                }
+                catch (Exception ex)
+                {
+                    LogToMainWindow($"Сводка: критическая ошибка чтения — {ex.Message}",
+                                    Brushes.Red);
+                    MessageBox.Show($"Ошибка чтения .xlsm:\n{ex.Message}",
+                        "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                finally
+                {
+                    LoadProgressBar.Visibility = Visibility.Collapsed;
+                    LoadProgressText.Visibility = Visibility.Collapsed;
                 }
 
-                LoadProgressBar.Value = files.Count;
                 _currentBatch = batch;
 
                 BatchNameText.Text = $"Партия: {_currentBatch.BatchName}";
