@@ -487,21 +487,21 @@ namespace TERMINAL
 
             SetStatus("Программа завершена");
         }
-        private async Task RunPumpSequenceAsync(double maxPressure, int totalCycles, string unitsCode, string unitsLabel, double atmoThreshold)
+        private async Task<bool> RunPumpSequenceAsync(double maxPressure, int totalCycles, string unitsCode, string unitsLabel, double atmoThreshold)
         {
             MaxArrow.Text = "  ";
             MinArrow.Text = "  ";
 
             SetStatus($"Установка единиц: {unitsCode}");
             bool unitsOk = await SendWithRetryAsync($"set_units={unitsCode};", "ok;");
-            if (!unitsOk) return;
+            if (!unitsOk) return false;
 
             _currentPressureUnitsLabel = unitsLabel;
 
             for (int cycle = 1; cycle <= totalCycles; cycle++)
             {
-                if (_stopRequested) return;
-                if (!await WaitIfPausedAsync()) return;
+                if (_stopRequested) return false;
+                if (!await WaitIfPausedAsync()) return false;
 
                 MaxArrow.Text = "  ";
                 MinArrow.Text = "  ";
@@ -513,38 +513,38 @@ namespace TERMINAL
 
                 SetStatus($"[Цикл {cycle}] set_mode=control (1)");
                 bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m1) return;
+                if (!m1) return false;
 
                 await SafeDelayAsync(1000);
 
                 SetStatus($"[Цикл {cycle}] set_mode=control (2)");
                 bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m2) return;
+                if (!m2) return false;
 
                 SetStatus($"[Цикл {cycle}] установка {maxPressure}");
                 bool setOk = await SendWithRetryAsync(
                     $"set_point={maxPressure.ToString(CultureInfo.InvariantCulture)};", "ok;");
-                if (!setOk) return;
+                if (!setOk) return false;
 
                 MaxArrow.Text = "→";
 
                 SetStatus($"[Цикл {cycle}] ожидание стабилизации");
                 bool stable = await WaitForStateInPointAsync();
-                if (!stable) return;
+                if (!stable) return false;
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем максимальное давление");
                 await RunTimerWithRightBlockAsync(300, true);
 
                 SetStatus($"[Цикл {cycle}] сброс (vent)");
                 bool ventOk = await GoToVentAsync();
-                if (!ventOk) return;
+                if (!ventOk) return false;
 
                 MaxArrow.Text = "  ";
                 MinArrow.Text = "→";
 
                 SetStatus($"[Цикл {cycle}] ожидание снижения");
                 bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
-                if (!lowOk) return;
+                if (!lowOk) return false;
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем атмосферное давление");
                 await RunTimerWithRightBlockAsync(300, false);
@@ -556,6 +556,7 @@ namespace TERMINAL
             MinTimerText.Text = "";
 
             SetStatus($"«Жамкать» завершено ({totalCycles} циклов)");
+            return true;
         }
         private async Task RunTimerWithRightBlockAsync(int seconds, bool isMax)
         {

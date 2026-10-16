@@ -333,7 +333,7 @@ namespace TERMINAL
                     // ──────────────────────────────────────────────
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(
-                        TaskCreationOptions.RunContinuationsAsynchronously);
+    TaskCreationOptions.RunContinuationsAsynchronously);
 
                     if (job.IsCalibrationMode)
                     {
@@ -346,12 +346,21 @@ namespace TERMINAL
                         _ = Dispatcher.InvokeAsync(() => RunPumpForBatchAsync(cycles));
                     }
 
-                    await _batchRunDoneSignal.Task;
+                    // ★ Читаем результат — true = все циклы/шаги отработаны, false = прервано
+                    bool taskCompleted = await _batchRunDoneSignal.Task;
                     _batchRunDoneSignal = null;
 
                     if (_batchStopRequested || _stopRequested)
                     {
                         SetStatusWarning("Пакетный режим остановлен оператором");
+                        return;
+                    }
+
+                    if (!taskCompleted)
+                    {
+                        job.StatusText = "прервано (см. журнал)";
+                        job.StatusColor = Brushes.Red;
+                        SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано — пакет остановлен");
                         return;
                     }
 
@@ -396,6 +405,7 @@ namespace TERMINAL
             if (BatchTargetPressureCombo.SelectedItem == null)
             {
                 MessageBox.Show("Не выбран диапазон давлений для «Жамкать»");
+                _batchRunDoneSignal?.TrySetResult(false);
                 return;
             }
 
@@ -404,6 +414,7 @@ namespace TERMINAL
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure!, out var steps))
             {
                 MessageBox.Show($"Шаги не заданы для «{_selectedTargetPressure}»");
+                _batchRunDoneSignal?.TrySetResult(false);
                 return;
             }
 
@@ -412,6 +423,7 @@ namespace TERMINAL
             if (noConnection)
             {
                 MessageBox.Show("Нет соединения с прибором.");
+                _batchRunDoneSignal?.TrySetResult(false);
                 return;
             }
 
@@ -426,21 +438,25 @@ namespace TERMINAL
 
             _totalTimerStart = DateTime.Now;
 
+            bool completedAllCycles = false;
+
             try
             {
-                await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold);
+                completedAllCycles = await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold);
             }
             catch (Exception ex)
             {
                 StatusText.Text = $"Ошибка: {ex.Message}";
                 StatusText.Foreground = Brushes.Red;
+                completedAllCycles = false;
             }
             finally
             {
                 _isRunning = false;
                 _pauseRequested = false;
 
-                _batchRunDoneSignal?.TrySetResult(true);
+                // ★ Сигналим только реальный успех
+                _batchRunDoneSignal?.TrySetResult(completedAllCycles);
             }
         }
 
