@@ -389,25 +389,28 @@ namespace TERMINAL
                 if (_stopRequested) return false;
                 if (!await WaitIfPausedAsync()) return false;
 
-                // ★ Проверка таймаута
                 var elapsed = DateTime.Now - start;
                 if (elapsed.TotalMilliseconds >= timeoutMs)
                 {
                     AppendLog($"WaitForStateInPoint: таймаут {_agkPressureTimeoutMinutes} мин — " +
-                              $"давление не набралось", Brushes.OrangeRed);
-                    SetStatusError($"Таймаут ожидания набора давления ({_agkPressureTimeoutMinutes} мин)");
+                              $"прибор не вышел на стабильность (wait;)", Brushes.OrangeRed);
+                    SetStatusError($"Таймаут ожидания стабилизации ({_agkPressureTimeoutMinutes} мин)");
                     return false;
                 }
 
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
 
+                // ★ Строгая проверка: ждём 5 подряд реальных ответов 'ok;'
                 if (snap.StateInPointOk)
                 {
                     okCount++;
                     if (okCount >= 5) return true;
                 }
-                else okCount = 0;
+                else
+                {
+                    okCount = 0;
+                }
 
                 int elapsedMin = (int)elapsed.TotalMinutes;
                 SetStatus($"Ожидание стабилизации: {okCount}/5 " +
@@ -631,6 +634,7 @@ namespace TERMINAL
                 await Task.Delay(30);
 
                 var stateResp = await SendCommandAsync("get_state_in_point;");
+
                 if (stateResp != null)
                 {
                     snap.StateInPointRaw = stateResp;
