@@ -74,6 +74,7 @@ namespace TERMINAL
                 _batchTimerEnabled = _loadedSettings.BatchTimerEnabled;
                 _autoExcelEnabled = _loadedSettings.AutoExcelEnabled;
                 _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
+                _logSlowTicks = _loadedSettings.LogSlowTicks;
 
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
@@ -219,6 +220,7 @@ namespace TERMINAL
                     BatchKosaTimerSeconds = _batchKosaTimerSeconds,
                     AutoExcelEnabled = _autoExcelEnabled,
                     TickTimingEnabled = _tickTimingEnabled,
+                    LogSlowTicks = _logSlowTicks,
 
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
@@ -393,6 +395,8 @@ namespace TERMINAL
             public bool AutoExcelEnabled { get; set; } = true;
 
             public bool TickTimingEnabled { get; set; } = true;
+
+            public bool LogSlowTicks { get; set; } = true;
 
             public string FurnaceIp { get; set; } = "192.168.0.167";
             public int FurnacePort { get; set; } = 502;

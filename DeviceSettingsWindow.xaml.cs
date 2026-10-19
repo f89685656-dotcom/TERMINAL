@@ -13,7 +13,8 @@ namespace TERMINAL.Windows
                              bool timerEnabled = true,
                              int timerSeconds = 25,
                              bool autoExcelEnabled = true,
-                             bool tickTimingEnabled = true)
+                             bool tickTimingEnabled = true,
+                             bool logSlowTicksEnabled = true)
         {
             InitializeComponent();
 
@@ -23,6 +24,8 @@ namespace TERMINAL.Windows
             GeneralTimerBox.IsEnabled = q2viewEnabled;
             GeneralAutoExcelCheck.IsChecked = autoExcelEnabled;
             GeneralTickTimingCheck.IsChecked = tickTimingEnabled;
+            GeneralLogSlowTicksCheck.IsChecked = logSlowTicksEnabled;
+
 
             GeneralQ2ViewCheck.Checked += (s, e) => GeneralTimerBox.IsEnabled = true;
             GeneralQ2ViewCheck.Unchecked += (s, e) => GeneralTimerBox.IsEnabled = false;
@@ -99,6 +102,7 @@ namespace TERMINAL.Windows
             GeneralTimerBox.IsEnabled = false;   // таймер неактивен, пока q2view выключен
             GeneralAutoExcelCheck.IsChecked = true;
             GeneralTickTimingCheck.IsChecked = true;
+            GeneralLogSlowTicksCheck.IsChecked = true;
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -187,6 +191,8 @@ namespace TERMINAL.Windows
 
             bool tickTimingEnabled = GeneralTickTimingCheck.IsChecked == true;
 
+            bool logSlowTicksEnabled = GeneralLogSlowTicksCheck.IsChecked == true;
+
             // ═══════════════════════════════════════════════════════════════
             // 5. Применяем настройки приборов к MainWindow
             // ═══════════════════════════════════════════════════════════════
@@ -208,7 +214,8 @@ namespace TERMINAL.Windows
                 timerEnabled,
                 timerSeconds,
                 autoExcelEnabled,
-                tickTimingEnabled);
+                tickTimingEnabled,
+                logSlowTicksEnabled);
 
             // ═══════════════════════════════════════════════════════════════
             // 7. Закрываем окно

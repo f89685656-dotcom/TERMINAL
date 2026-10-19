@@ -146,6 +146,7 @@ namespace TERMINAL
         private bool _batchTimerEnabled = true;
         private bool _autoExcelEnabled = true;
         private bool _tickTimingEnabled = true;
+        private bool _logSlowTicks = true;
         public bool BatchTimerEnabled { get; set; } = true;
 
         private string _currentPressureUnitsLabel = "";
@@ -460,7 +461,8 @@ namespace TERMINAL
                     _batchTimerEnabled,
                     _batchKosaTimerSeconds,
                     _autoExcelEnabled,
-                    _tickTimingEnabled);       // ← новая строка
+                    _tickTimingEnabled,
+                    _logSlowTicks);
 
                 win.Owner = this;
                 win.ShowDialog();
@@ -1205,7 +1207,7 @@ namespace TERMINAL
                     : $"({line2})";
             }
 
-            if (totalMs > 500)
+            if (totalMs > 500 && _logSlowTicks)
             {
                 string allParts = string.Join(", ",
                     ordered.Select(kv => $"{kv.Key} {kv.Value}"));
@@ -1217,13 +1219,15 @@ namespace TERMINAL
         public void ApplyGeneralSettings(
             bool q2viewEnabled, bool timerEnabled,
             int timerSeconds, bool autoExcelEnabled,
-            bool tickTimingEnabled)
+            bool tickTimingEnabled, bool logSlowTicksEnabled)
         {
             _batchKosaEnabled = q2viewEnabled;
             _batchTimerEnabled = timerEnabled;
             _batchKosaTimerSeconds = timerSeconds;
             _autoExcelEnabled = autoExcelEnabled;
             _tickTimingEnabled = tickTimingEnabled;
+            _logSlowTicks = logSlowTicksEnabled;
+
 
             ApplyTickTimingVisibility();
             UpdateKosaBadge();
@@ -1237,6 +1241,7 @@ namespace TERMINAL
                     ? Visibility.Visible
                     : Visibility.Collapsed;
         }
+
 
     }
 }

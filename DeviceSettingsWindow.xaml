@@ -37,6 +37,10 @@
                                 Content="Тактирование"
                                 Margin="0,10,0,0"
                                 ToolTip="Показывать плашку с временем такта в главном окне"/>
+                    <CheckBox x:Name="GeneralLogSlowTicksCheck"
+                                  Content="Логировать медленные такты"
+                                  Margin="0,6,0,0"
+                                  ToolTip="Писать в журнал предупреждения о медленных тактах (> 500 мс)"/>
                 </StackPanel>
             </TabItem>
 
