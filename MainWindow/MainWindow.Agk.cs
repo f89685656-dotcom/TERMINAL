@@ -401,20 +401,27 @@ namespace TERMINAL
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
 
-                // ★ Строгая проверка: ждём 5 подряд реальных ответов 'ok;'
                 if (snap.StateInPointOk)
                 {
                     okCount++;
-                    if (okCount >= 5) return true;
+                    if (okCount >= 5)
+                    {
+                        // ★ Пишем в журнал только когда полностью стабилизировались (5/5)
+                        AppendLog("Стабилизация давления завершена (5/5)", Brushes.Green);
+                        SetStatus("Стабилизация завершена (5/5)");
+                        return true;
+                    }
                 }
                 else
                 {
                     okCount = 0;
                 }
 
+                // ★ Обновляем только статус-бар внизу, БЕЗ записи в журнал (log: false)
                 int elapsedMin = (int)elapsed.TotalMinutes;
                 SetStatus($"Ожидание стабилизации: {okCount}/5 " +
-                          $"({elapsedMin} / {_agkPressureTimeoutMinutes} мин)");
+                          $"({elapsedMin} / {_agkPressureTimeoutMinutes} мин)", log: false);
+
                 await Task.Delay(1000);
             }
         }
