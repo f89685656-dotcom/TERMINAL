@@ -462,7 +462,7 @@ namespace TERMINAL
                     }
 
                     // ─── Раз в 3 секунды проверяем, что прибор всё ещё в vent ───
-                    if ((DateTime.Now - lastVentCheck).TotalMilliseconds >= 3000)
+                    if ((DateTime.Now - lastVentCheck).TotalMilliseconds >= 1000)
                     {
                         lastVentCheck = DateTime.Now;
 
@@ -494,7 +494,7 @@ namespace TERMINAL
                                   Brushes.Green);
 
                         // ★ Теперь, когда давление упало — обнуляем уставку
-                        await Task.Delay(300);
+                        await Task.Delay(2000);
                         await SendCommandAsync("set_point=0;");
                         AppendLog("WaitUntilPressureBelow: уставка обнулена (set_point=0)", Brushes.Gray);
 
