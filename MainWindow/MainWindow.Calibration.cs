@@ -299,6 +299,7 @@ namespace TERMINAL
                     SetStatus($"Шаг {human}: ТЕСТ — проверка атмосферного давления");
 
                     await RefreshPressureAndSetPointAsync();
+                    // ★ _lastKnownPressure обновляется в Timer_Tick
                     double? currentP = _lastKnownPressure;
                     if (!currentP.HasValue || Math.Abs(currentP.Value) >= atmoThreshold)
                     {
@@ -476,13 +477,11 @@ namespace TERMINAL
                 SetStatus("Программа завершена — финальный сброс до атмосферы");
                 bool ventOk = await GoToVentAsync();
                 if (!ventOk) return;
-                {
-                    SetStatus("Ожидание снижения давления");
-                    await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
 
-                    SetStatus("Уставка → 0");
-                    await SendWithRetryAsync("set_point=0;", "ok;");
-                }
+                SetStatus("Ожидание снижения давления");
+                await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+
+                // ★ set_point=0 уже сделан внутри WaitUntilPressureBelowAsync
             }
 
             SetStatus("Программа завершена");
@@ -718,6 +717,8 @@ namespace TERMINAL
 
                 while (remaining > 0)
                 {
+                    if (_stopRequested) return;
+
                     var cycleStart = DateTime.Now;
 
                     remaining--;
@@ -753,16 +754,15 @@ namespace TERMINAL
                 long unitsMs = 0;
                 long stateMs = 0;
 
-                // ─── RefreshPressure (из кэша) ───
+                // ─── RefreshPressure (из кэша, мгновенно) ───
                 var t1 = DateTime.Now;
-                await RefreshPressureAndSetPointAsync();
+                AgkSnapshot snap;
+                lock (_agkStateLock) snap = _agkState;
+                _lastKnownPressure = snap.Pressure;
                 refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
 
                 // ─── get_units (из кэша) ───
                 var t2 = DateTime.Now;
-                AgkSnapshot snap;
-                lock (_agkStateLock) snap = _agkState;
-
                 if (!string.IsNullOrEmpty(snap.Units))
                     UpdateUnits(snap.Units);
                 unitsMs = (long)(DateTime.Now - t2).TotalMilliseconds;

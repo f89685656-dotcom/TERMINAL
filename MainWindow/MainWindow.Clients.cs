@@ -610,7 +610,6 @@ namespace TERMINAL
 
             while (!firstOkReceived)
             {
-                await RefreshPressureAndSetPointAsync();
 
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
@@ -635,7 +634,6 @@ namespace TERMINAL
 
                 // ─── RefreshPressure (из кэша, мгновенно) ───
                 var t1 = DateTime.Now;
-                await RefreshPressureAndSetPointAsync();
                 refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
 
                 // ─── get_state_in_point — из кэша ───

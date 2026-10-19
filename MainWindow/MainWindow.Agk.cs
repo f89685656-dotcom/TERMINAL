@@ -365,14 +365,11 @@ namespace TERMINAL
             AgkSnapshot snap;
             lock (_agkStateLock) snap = _agkState;
 
-            // ★ Никаких AgkPressureText.Text = ... и AgkSetPointText.Text = ...
-            //   Всё это делает Timer_Tick раз в секунду.
-            //   Здесь — только возврат данных для логики.
+            // ★ UI и _lastKnownPressure обновляются в Timer_Tick.
+            //   Здесь — только возврат данных.
 
             if (!string.IsNullOrEmpty(snap.Mode))
                 _currentAgkMode = snap.Mode;
-
-            _lastKnownPressure = snap.Pressure;
 
             return Task.FromResult(snap.Pressure);
         }
