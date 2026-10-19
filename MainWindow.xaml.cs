@@ -101,6 +101,7 @@ namespace TERMINAL
         public string PlatinumComPort => _platinumComPort;
         public bool ReadPlatinum => _readPlatinum;
         public string PlatinumMtkCommand => _platinumMtkCommand;
+        private double _mit803LastGoodValue = double.NaN;
 
         // Режимы (не настраиваются)
         private const ushort FurnaceModeManual = 2;
@@ -536,6 +537,7 @@ namespace TERMINAL
                 _platinumComPort = platinumComPort;
                 _readPlatinum = readPlatinum;
                 _platinumMtkCommand = platinumMtkCommand;
+
 
                 // ─── Пункт 12: закрыть старый COM-порт, если источник/порт изменился
                 //     или чтение платины выключили ───
