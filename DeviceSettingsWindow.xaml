@@ -106,9 +106,35 @@
                         <ComboBoxItem Content="Filter_for_KOSA_GUI"/>
                     </ComboBox>
 
+                    <TextBlock Text="Источник платины:" FontWeight="Bold" Margin="0,12,0,0"/>
+                    <ComboBox x:Name="PlatinumSourceCombo"
+                  Height="24"
+                  SelectionChanged="PlatinumSourceCombo_SelectionChanged">
+                        <ComboBoxItem Content="МтК @ TERMEX"/>
+                        <ComboBoxItem Content="МИТ 8.03 rev.2 (RS-232)"/>
+                        <ComboBoxItem Content="TERCON"/>
+                    </ComboBox>
+
+                    <!-- Панель COM-порта: показывается только для МИТ 8.03 -->
+                    <StackPanel x:Name="PlatinumComPanel"
+                    Orientation="Horizontal"
+                    Margin="0,10,0,0"
+                    Visibility="Collapsed">
+                        <TextBlock Text="COM-порт:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,0"/>
+                        <ComboBox x:Name="PlatinumComPortCombo"
+                      Width="100" Height="24"/>
+                    </StackPanel>
+
+                    <CheckBox x:Name="ReadPlatinumCheck"
+                  Content="Читать платину сейчас"
+                  Margin="0,12,0,0"
+                  ToolTip="Если снято — программа не будет обращаться к Платине"/>
+
                     <CheckBox x:Name="ShowSktbCardCheck"
-                              Content="Показывать карточку"
-                              Margin="0,15,0,0"/>
+                  Content="Показывать карточку"
+                  Margin="0,12,0,0"/>
                 </StackPanel>
             </TabItem>
 

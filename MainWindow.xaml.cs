@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.IO.Ports;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -83,6 +84,18 @@ namespace TERMINAL
         // ── СКТБ ЭлПА ──
         private string _sktbFilterScript = "Filter_for_KOSA_GUI";
         private bool _showSktbCard = true;
+
+        // ── Платина (СКТБ ЭлПА) ──
+        private string _platinumSource = "mtk_termex";   // mtk_termex | mit_803 | tercon
+        private string _platinumComPort = "COM1";
+        private bool _readPlatinum = true;
+
+        private SerialPort? _platinumSerial;
+        private readonly object _platinumSerialLock = new object();
+
+        public string PlatinumSource => _platinumSource;
+        public string PlatinumComPort => _platinumComPort;
+        public bool ReadPlatinum => _readPlatinum;
 
         // Режимы (не настраиваются)
         private const ushort FurnaceModeManual = 2;
@@ -466,7 +479,10 @@ namespace TERMINAL
                     _autoExcelEnabled,
                     _tickTimingEnabled,
                     _logSlowTicks,
-                    _autoStopFurnace);
+                    _autoStopFurnace,
+                    _platinumSource,
+                    _platinumComPort,
+                    _readPlatinum);
 
 
                 win.Owner = this;
@@ -482,10 +498,11 @@ namespace TERMINAL
         public void ApplyDeviceSettings(
     string furnaceIp, int furnacePort,
     ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
-    bool autoStopFurnace, bool showFurnaceCard, 
+    bool autoStopFurnace, bool showFurnaceCard,
     string agkIp, int agkPort, bool showAgkCard,
     int agkPressureTimeoutMinutes,
-    string sktbFilterScript, bool showSktbCard)
+    string sktbFilterScript, bool showSktbCard,
+    string platinumSource, string platinumComPort, bool readPlatinum)
         {
             _furnaceIp = furnaceIp;
             _furnacePort = furnacePort;
@@ -503,6 +520,28 @@ namespace TERMINAL
 
             _sktbFilterScript = sktbFilterScript;
             _showSktbCard = showSktbCard;
+
+            _platinumSource = platinumSource;
+            _platinumComPort = platinumComPort;
+            _readPlatinum = readPlatinum;
+
+            // ─── Пункт 12: закрыть старый COM-порт, если источник/порт изменился
+            //     или чтение платины выключили ───
+            lock (_platinumSerialLock)
+            {
+                bool needClose =
+                    _platinumSerial != null &&
+                    (!_readPlatinum ||
+                     _platinumSource != "mit_803" ||
+                     _platinumComPort != (_platinumSerial.PortName ?? ""));
+
+                if (needClose)
+                {
+                    try { _platinumSerial.Close(); } catch { }
+                    try { _platinumSerial.Dispose(); } catch { }
+                    _platinumSerial = null;
+                }
+            }
 
             SaveSettings();
             RefreshDeviceCardsVisibility();
@@ -613,6 +652,14 @@ namespace TERMINAL
                 try { _broadcastServer?.Stop(); } catch { }
             }
             catch { }
+
+            // ─── Закрыть COM-порт платины (МИТ 8.03) ───
+            lock (_platinumSerialLock)
+            {
+                try { _platinumSerial?.Close(); } catch { }
+                try { _platinumSerial?.Dispose(); } catch { }
+                _platinumSerial = null;
+            }
 
             base.OnClosed(e);
             Environment.Exit(0);

@@ -134,6 +134,10 @@ namespace TERMINAL
             _sktbFilterScript = _loadedSettings.SktbFilterScript;
             _showSktbCard = _loadedSettings.ShowSktbCard;
 
+            _platinumSource = _loadedSettings.PlatinumSource;
+            _platinumComPort = _loadedSettings.PlatinumComPort;
+            _readPlatinum = _loadedSettings.ReadPlatinum;
+
             RefreshDeviceCardsVisibility();
 
             if (_loadedSettings.BatchTargetPressureIndex >= 0 &&
@@ -250,6 +254,10 @@ namespace TERMINAL
 
                     SktbFilterScript = _sktbFilterScript,
                     ShowSktbCard = _showSktbCard,
+                    PlatinumSource = _platinumSource,
+                    PlatinumComPort = _platinumComPort,
+                    ReadPlatinum = _readPlatinum,
+
 
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
@@ -418,6 +426,11 @@ namespace TERMINAL
 
             public string SktbFilterScript { get; set; } = "Filter_for_KOSA_GUI";
             public bool ShowSktbCard { get; set; } = true;
+
+            // ─── Платина (СКТБ ЭлПА) ───
+            public string PlatinumSource { get; set; } = "mtk_termex";   // mtk_termex | mit_8.03 | tercon
+            public string PlatinumComPort { get; set; } = "COM1";
+            public bool ReadPlatinum { get; set; } = true;               // читать ли платину сейчас
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");

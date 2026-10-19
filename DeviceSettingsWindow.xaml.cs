@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Globalization;
 using System.Net;
+using System.IO.Ports;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -15,7 +16,10 @@ namespace TERMINAL.Windows
                              bool autoExcelEnabled = true,
                              bool tickTimingEnabled = true,
                              bool logSlowTicksEnabled = true,
-                             bool autoStopFurnace = false)
+                            bool autoStopFurnace = false,
+                            string platinumSource = "mtk_termex",
+                            string platinumComPort = "COM1",
+                            bool readPlatinum = true)
         {
             InitializeComponent();
 
@@ -78,6 +82,19 @@ namespace TERMINAL.Windows
                 _ => 3
             };
             ShowSktbCardCheck.IsChecked = mw.ShowSktbCard;
+
+            PlatinumSourceCombo.SelectedIndex = mw.PlatinumSource switch
+            {
+                "mit_803" => 1,
+                "tercon" => 2,
+                _ => 0
+            };
+
+            FillComPorts(mw.PlatinumComPort);
+            ReadPlatinumCheck.IsChecked = mw.ReadPlatinum;
+
+            // После установки индекса — пересчитать видимость панели COM
+            PlatinumSourceCombo_SelectionChanged(null, null);
 
             // ─── Общие настройки ───
             // Конструктор уже заполнил General* значениями, переданными из MainWindow.
@@ -186,6 +203,17 @@ namespace TERMINAL.Windows
 
             bool showSktbCard = ShowSktbCardCheck.IsChecked == true;
 
+            string platinumSource = PlatinumSourceCombo.SelectedIndex switch
+            {
+                1 => "mit_803",
+                2 => "tercon",
+                _ => "mtk_termex"
+            };
+
+            string platinumComPort = PlatinumComPortCombo.SelectedItem as string ?? "COM1";
+
+            bool readPlatinum = ReadPlatinumCheck.IsChecked == true;
+
             // ═══════════════════════════════════════════════════════════════
             // 4. Читаем и валидируем общие настройки
             // ═══════════════════════════════════════════════════════════════
@@ -213,8 +241,9 @@ namespace TERMINAL.Windows
                 autoStopFurnace,
                 showFurnaceCard,
                 agkIp, agkPort, showAgkCard,
-                agkPressureTimeoutMinutes,
-                sktbFilterScript, showSktbCard);
+                agkPressureTimeoutMinutes,          // ← добавлено
+                sktbFilterScript, showSktbCard,
+                platinumSource, platinumComPort, readPlatinum);
 
 
             // ═══════════════════════════════════════════════════════════════
@@ -282,6 +311,30 @@ namespace TERMINAL.Windows
             }
 
             return true;
+        }
+
+        private void FillComPorts(string current)
+        {
+            PlatinumComPortCombo.Items.Clear();
+
+            // COM1..COM20 — самый простой вариант.
+            // Можно улучшить через System.IO.Ports.SerialPort.GetPortNames().
+            for (int i = 1; i <= 20; i++)
+                PlatinumComPortCombo.Items.Add($"COM{i}");
+
+            PlatinumComPortCombo.SelectedItem = current;
+            if (PlatinumComPortCombo.SelectedItem == null)
+                PlatinumComPortCombo.SelectedIndex = 0;
+        }
+
+        private void PlatinumSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (PlatinumComPanel == null || PlatinumSourceCombo == null) return;
+
+            // COM-панель показываем только для МИТ 8.03 (индекс 1)
+            PlatinumComPanel.Visibility = PlatinumSourceCombo.SelectedIndex == 1
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
     }
 }

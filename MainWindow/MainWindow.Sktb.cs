@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.IO.Ports;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -102,42 +103,6 @@ namespace TERMINAL
                     return (double?)null;
                 }
             });
-        }
-
-        private async Task RefreshPlatinaAsync()
-        {
-            double? val = await TryReadPlatinaAsync();
-
-            if (val.HasValue && !double.IsNaN(val.Value) && !double.IsInfinity(val.Value))
-            {
-                _platinaFailCount = 0;
-                _platinaLastValue = val.Value;
-                _platinaLastSuccess = DateTime.Now;
-
-                double rounded = Math.Round(val.Value, 3);
-                string sign = rounded >= 0 ? "+" : "";
-                PlatinaTempText.Text =
-                    $"{sign}{rounded.ToString("0.000", CultureInfo.InvariantCulture)} °C";
-                PlatinaTempText.Foreground = Brushes.White;
-
-                if (PlatinaRowEllipse != null)
-                    PlatinaRowEllipse.Fill = Brushes.Green;
-            }
-            else
-            {
-                _platinaFailCount++;
-
-                if (_platinaFailCount >= ConnectionLostThreshold)
-                {
-                    PlatinaTempText.Text = "— °C";
-                    PlatinaTempText.Foreground =
-                        new SolidColorBrush(Color.FromRgb(0xCC, 0xDD, 0xEE));
-
-                    if (PlatinaRowEllipse != null)
-                        PlatinaRowEllipse.Fill = Brushes.Red;
-                }
-            }
-            UpdateSktbPanelVisibility();
         }
 
         private void RefreshSensorUiFromClients()
