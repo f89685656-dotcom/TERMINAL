@@ -127,6 +127,16 @@
                       Width="100" Height="24"/>
                     </StackPanel>
 
+                    <!-- ★ НОВОЕ: команда МтК @ TERMEX -->
+                    <StackPanel x:Name="PlatinumMtkCommandPanel" Margin="0,10,0,0">
+                        <TextBlock Text="Команда МтК @ TERMEX:" FontWeight="Bold"/>
+                        <TextBox x:Name="PlatinumMtkCommandBox"
+                                 Width="260" Height="24" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                 ToolTip="Например: pass2 meas2? 2  (символы \n\0 добавляются автоматически)"/>
+                        <TextBlock Text="Символы \n\0 добавляются автоматически при отправке"
+                                FontSize="11" Foreground="Gray" Margin="0,2,0,0"/>
+                    </StackPanel>
+
                     <CheckBox x:Name="ReadPlatinumCheck"
                   Content="Читать платину сейчас"
                   Margin="0,12,0,0"

@@ -137,6 +137,7 @@ namespace TERMINAL
             _platinumSource = _loadedSettings.PlatinumSource;
             _platinumComPort = _loadedSettings.PlatinumComPort;
             _readPlatinum = _loadedSettings.ReadPlatinum;
+            _platinumMtkCommand = _loadedSettings.PlatinumMtkCommand;
 
             RefreshDeviceCardsVisibility();
 
@@ -257,6 +258,7 @@ namespace TERMINAL
                     PlatinumSource = _platinumSource,
                     PlatinumComPort = _platinumComPort,
                     ReadPlatinum = _readPlatinum,
+                    PlatinumMtkCommand = _platinumMtkCommand,
 
 
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
@@ -431,6 +433,8 @@ namespace TERMINAL
             public string PlatinumSource { get; set; } = "mtk_termex";   // mtk_termex | mit_8.03 | tercon
             public string PlatinumComPort { get; set; } = "COM1";
             public bool ReadPlatinum { get; set; } = true;               // читать ли платину сейчас
+
+            public string PlatinumMtkCommand { get; set; } = "pass2 meas2? 2";
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");

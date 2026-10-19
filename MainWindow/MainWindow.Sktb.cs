@@ -38,6 +38,14 @@ namespace TERMINAL
                     if (deviceCount == 0)
                         return (double?)null;
 
+                    // ★ Команда из настроек + обязательные \n\0
+                    string cmd = _platinumMtkCommand;
+                    if (string.IsNullOrEmpty(cmd)) cmd = "pass2 meas2? 2";
+                    if (!cmd.EndsWith("\n\0"))
+                        cmd += "\n\0";
+
+                    byte[] payload = Encoding.ASCII.GetBytes(cmd);
+
                     foreach (var device in devices)
                     {
                         try
@@ -45,8 +53,6 @@ namespace TERMINAL
                             stream = device.Open();
                             stream.ReadTimeout = 1000;
                             stream.WriteTimeout = 1000;
-
-                            byte[] payload = Encoding.ASCII.GetBytes(PlatinaRequest);
 
                             for (int off = 0; off < payload.Length; off += 64)
                             {
@@ -59,7 +65,8 @@ namespace TERMINAL
                             var data = new List<byte>();
                             var start = DateTime.Now;
 
-                            while ((DateTime.Now - start).TotalMilliseconds < 500)
+                            const int MaxReadMs = 2000;
+                            while ((DateTime.Now - start).TotalMilliseconds < MaxReadMs)
                             {
                                 byte[] buf = new byte[65];
                                 int n = stream.Read(buf, 0, buf.Length);

@@ -36,6 +36,7 @@ namespace TERMINAL
         private DispatcherTimer? _timer;
         private DispatcherTimer? _furnaceTempTimer;
         private DispatcherTimer? _platinaTimer;
+        private volatile bool _platinaBusy = false;
         private DispatcherTimer? _batchStatusTimer;
 
         private string? _selectedTargetPressure;
@@ -89,13 +90,17 @@ namespace TERMINAL
         private string _platinumSource = "mtk_termex";   // mtk_termex | mit_803 | tercon
         private string _platinumComPort = "COM1";
         private bool _readPlatinum = true;
+        private string _platinumMtkCommand = "pass2 meas2? 2";
 
         private SerialPort? _platinumSerial;
         private readonly object _platinumSerialLock = new object();
 
+
+
         public string PlatinumSource => _platinumSource;
         public string PlatinumComPort => _platinumComPort;
         public bool ReadPlatinum => _readPlatinum;
+        public string PlatinumMtkCommand => _platinumMtkCommand;
 
         // Режимы (не настраиваются)
         private const ushort FurnaceModeManual = 2;
@@ -103,7 +108,6 @@ namespace TERMINAL
 
         private const int PlatinaVid = 0xFFFF;
         private const int PlatinaPid = 0x0009;
-        private const string PlatinaRequest = "pass2 meas2? 2\n\0";
 
         private double _platinaLastValue = double.NaN;
         private DateTime _platinaLastSuccess = DateTime.MinValue;
@@ -389,10 +393,15 @@ namespace TERMINAL
                 };
                 _platinaTimer.Tick += async (s, e) =>
                 {
+                    // ★ Защита от наложения: если предыдущий тик не завершился — пропускаем
+                    if (_platinaBusy) return;
+                    _platinaBusy = true;
+
                     var start = DateTime.Now;
                     try { await RefreshPlatinaAsync(); }
                     finally
                     {
+                        _platinaBusy = false;
                         long ms = (long)(DateTime.Now - start).TotalMilliseconds;
                         AddTickTiming("platina", ms);
                     }
@@ -496,57 +505,61 @@ namespace TERMINAL
         }
 
         public void ApplyDeviceSettings(
-    string furnaceIp, int furnacePort,
-    ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
-    bool autoStopFurnace, bool showFurnaceCard,
-    string agkIp, int agkPort, bool showAgkCard,
-    int agkPressureTimeoutMinutes,
-    string sktbFilterScript, bool showSktbCard,
-    string platinumSource, string platinumComPort, bool readPlatinum)
+            string furnaceIp, int furnacePort,
+            ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
+            bool autoStopFurnace, bool showFurnaceCard,
+            string agkIp, int agkPort, bool showAgkCard,
+            int agkPressureTimeoutMinutes,
+            string sktbFilterScript, bool showSktbCard,
+            string platinumSource, string platinumComPort, bool readPlatinum,
+            string platinumMtkCommand)
         {
-            _furnaceIp = furnaceIp;
-            _furnacePort = furnacePort;
-            _furnaceSetPointRegister = furnaceSetPointReg;
-            _furnaceCurrentTempRegister = furnaceCurrentTempReg;
-            _furnaceModeRegister = furnaceModeReg;
-            _autoStopFurnace = autoStopFurnace;
-            _showFurnaceCard = showFurnaceCard;
-
-            _deviceIp = agkIp;
-            _devicePort = agkPort;
-            _showAgkCard = showAgkCard;
-            _agkPressureTimeoutMinutes = agkPressureTimeoutMinutes > 0
-                ? agkPressureTimeoutMinutes : 5;
-
-            _sktbFilterScript = sktbFilterScript;
-            _showSktbCard = showSktbCard;
-
-            _platinumSource = platinumSource;
-            _platinumComPort = platinumComPort;
-            _readPlatinum = readPlatinum;
-
-            // ─── Пункт 12: закрыть старый COM-порт, если источник/порт изменился
-            //     или чтение платины выключили ───
-            lock (_platinumSerialLock)
             {
-                bool needClose =
-                    _platinumSerial != null &&
-                    (!_readPlatinum ||
-                     _platinumSource != "mit_803" ||
-                     _platinumComPort != (_platinumSerial.PortName ?? ""));
+                _furnaceIp = furnaceIp;
+                _furnacePort = furnacePort;
+                _furnaceSetPointRegister = furnaceSetPointReg;
+                _furnaceCurrentTempRegister = furnaceCurrentTempReg;
+                _furnaceModeRegister = furnaceModeReg;
+                _autoStopFurnace = autoStopFurnace;
+                _showFurnaceCard = showFurnaceCard;
 
-                if (needClose)
+                _deviceIp = agkIp;
+                _devicePort = agkPort;
+                _showAgkCard = showAgkCard;
+                _agkPressureTimeoutMinutes = agkPressureTimeoutMinutes > 0
+                    ? agkPressureTimeoutMinutes : 5;
+
+                _sktbFilterScript = sktbFilterScript;
+                _showSktbCard = showSktbCard;
+
+                _platinumSource = platinumSource;
+                _platinumComPort = platinumComPort;
+                _readPlatinum = readPlatinum;
+                _platinumMtkCommand = platinumMtkCommand;
+
+                // ─── Пункт 12: закрыть старый COM-порт, если источник/порт изменился
+                //     или чтение платины выключили ───
+                lock (_platinumSerialLock)
                 {
-                    try { _platinumSerial.Close(); } catch { }
-                    try { _platinumSerial.Dispose(); } catch { }
-                    _platinumSerial = null;
+                    bool needClose =
+                        _platinumSerial != null &&
+                        (!_readPlatinum ||
+                         _platinumSource != "mit_803" ||
+                         _platinumComPort != (_platinumSerial.PortName ?? ""));
+
+                    if (needClose)
+                    {
+                        try { _platinumSerial.Close(); } catch { }
+                        try { _platinumSerial.Dispose(); } catch { }
+                        _platinumSerial = null;
+                    }
                 }
+
+                SaveSettings();
+                RefreshDeviceCardsVisibility();
+
+                _ = Task.Run(ReconnectDevicesAsync);
             }
-
-            SaveSettings();
-            RefreshDeviceCardsVisibility();
-
-            _ = Task.Run(ReconnectDevicesAsync);
         }
 
         public void RefreshDeviceCardsVisibility()

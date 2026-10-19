@@ -10,16 +10,17 @@ namespace TERMINAL.Windows
     public partial class DeviceSettingsWindow : Window
     {
         public DeviceSettingsWindow(int initialTab = 0,
-                             bool q2viewEnabled = false,
-                             bool timerEnabled = true,
-                             int timerSeconds = 25,
-                             bool autoExcelEnabled = true,
-                             bool tickTimingEnabled = true,
-                             bool logSlowTicksEnabled = true,
-                            bool autoStopFurnace = false,
-                            string platinumSource = "mtk_termex",
-                            string platinumComPort = "COM1",
-                            bool readPlatinum = true)
+                                     bool q2viewEnabled = false,
+                                     bool timerEnabled = true,
+                                     int timerSeconds = 25,
+                                     bool autoExcelEnabled = true,
+                                     bool tickTimingEnabled = true,
+                                     bool logSlowTicksEnabled = true,
+                                     bool autoStopFurnace = false,
+                                     string platinumSource = "mtk_termex",
+                                     string platinumComPort = "COM1",
+                                     bool readPlatinum = true,
+                                     string platinumMtkCommand = "pass2 meas2? 2")
         {
             InitializeComponent();
 
@@ -32,11 +33,9 @@ namespace TERMINAL.Windows
             GeneralLogSlowTicksCheck.IsChecked = logSlowTicksEnabled;
             AutoStopFurnaceCheck.IsChecked = autoStopFurnace;
 
-
             GeneralQ2ViewCheck.Checked += (s, e) => GeneralTimerBox.IsEnabled = true;
             GeneralQ2ViewCheck.Unchecked += (s, e) => GeneralTimerBox.IsEnabled = false;
 
-            // только цифры в поле секунд
             GeneralTimerBox.PreviewTextInput += (s, e) =>
             {
                 foreach (char c in e.Text)
@@ -47,6 +46,11 @@ namespace TERMINAL.Windows
             if (initialTab < 0 || initialTab >= DeviceTabs.Items.Count)
                 initialTab = 0;
             DeviceTabs.SelectedIndex = initialTab;
+
+            // ★ Применяем переданные значения платины ДО LoadCurrent,
+            //   чтобы LoadCurrent мог их перезаписать из MainWindow.Current (актуальнее).
+            //   Если MainWindow.Current == null — останутся переданные.
+            PlatinumMtkCommandBox.Text = platinumMtkCommand;
 
             LoadCurrent();
         }
@@ -92,6 +96,7 @@ namespace TERMINAL.Windows
 
             FillComPorts(mw.PlatinumComPort);
             ReadPlatinumCheck.IsChecked = mw.ReadPlatinum;
+            PlatinumMtkCommandBox.Text = mw.PlatinumMtkCommand;
 
             // После установки индекса — пересчитать видимость панели COM
             PlatinumSourceCombo_SelectionChanged(null, null);
@@ -214,6 +219,10 @@ namespace TERMINAL.Windows
 
             bool readPlatinum = ReadPlatinumCheck.IsChecked == true;
 
+            string platinumMtkCommand = (PlatinumMtkCommandBox.Text ?? "").Trim();
+            if (string.IsNullOrEmpty(platinumMtkCommand))
+                platinumMtkCommand = "pass2 meas2? 2";
+
             // ═══════════════════════════════════════════════════════════════
             // 4. Читаем и валидируем общие настройки
             // ═══════════════════════════════════════════════════════════════
@@ -241,9 +250,10 @@ namespace TERMINAL.Windows
                 autoStopFurnace,
                 showFurnaceCard,
                 agkIp, agkPort, showAgkCard,
-                agkPressureTimeoutMinutes,          // ← добавлено
+                agkPressureTimeoutMinutes,
                 sktbFilterScript, showSktbCard,
-                platinumSource, platinumComPort, readPlatinum);
+                platinumSource, platinumComPort, readPlatinum,
+                platinumMtkCommand);
 
 
             // ═══════════════════════════════════════════════════════════════
@@ -331,10 +341,17 @@ namespace TERMINAL.Windows
         {
             if (PlatinumComPanel == null || PlatinumSourceCombo == null) return;
 
-            // COM-панель показываем только для МИТ 8.03 (индекс 1)
-            PlatinumComPanel.Visibility = PlatinumSourceCombo.SelectedIndex == 1
+            bool isMit803 = PlatinumSourceCombo.SelectedIndex == 1;
+            bool isMtk = PlatinumSourceCombo.SelectedIndex == 0;
+
+            PlatinumComPanel.Visibility = isMit803
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+
+            if (PlatinumMtkCommandPanel != null)
+                PlatinumMtkCommandPanel.Visibility = isMtk
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
         }
     }
 }
