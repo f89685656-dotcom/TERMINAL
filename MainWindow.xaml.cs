@@ -73,6 +73,7 @@ namespace TERMINAL
         private ushort _furnaceCurrentTempRegister = 205;
         private ushort _furnaceModeRegister = 200;
         private bool _showFurnaceCard = true;
+        private bool _autoStopFurnace = true;
 
         // ── АГК карточка ──
         private bool _showAgkCard = true;
@@ -254,6 +255,8 @@ namespace TERMINAL
         public ushort FurnaceCurrentTempRegister => _furnaceCurrentTempRegister;
         public ushort FurnaceModeRegister => _furnaceModeRegister;
         public bool ShowFurnaceCard => _showFurnaceCard;
+
+        public bool AutoStopFurnace => _autoStopFurnace;
 
         public string DeviceIp => _deviceIp;
         public int DevicePort => _devicePort;
@@ -462,7 +465,9 @@ namespace TERMINAL
                     _batchKosaTimerSeconds,
                     _autoExcelEnabled,
                     _tickTimingEnabled,
-                    _logSlowTicks);
+                    _logSlowTicks,
+                    _autoStopFurnace);
+
 
                 win.Owner = this;
                 win.ShowDialog();
@@ -477,7 +482,7 @@ namespace TERMINAL
         public void ApplyDeviceSettings(
     string furnaceIp, int furnacePort,
     ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
-    bool showFurnaceCard,
+    bool autoStopFurnace, bool showFurnaceCard, 
     string agkIp, int agkPort, bool showAgkCard,
     int agkPressureTimeoutMinutes,
     string sktbFilterScript, bool showSktbCard)
@@ -487,6 +492,7 @@ namespace TERMINAL
             _furnaceSetPointRegister = furnaceSetPointReg;
             _furnaceCurrentTempRegister = furnaceCurrentTempReg;
             _furnaceModeRegister = furnaceModeReg;
+            _autoStopFurnace = autoStopFurnace;
             _showFurnaceCard = showFurnaceCard;
 
             _deviceIp = agkIp;

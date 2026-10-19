@@ -14,7 +14,8 @@ namespace TERMINAL.Windows
                              int timerSeconds = 25,
                              bool autoExcelEnabled = true,
                              bool tickTimingEnabled = true,
-                             bool logSlowTicksEnabled = true)
+                             bool logSlowTicksEnabled = true,
+                             bool autoStopFurnace = false)
         {
             InitializeComponent();
 
@@ -25,6 +26,7 @@ namespace TERMINAL.Windows
             GeneralAutoExcelCheck.IsChecked = autoExcelEnabled;
             GeneralTickTimingCheck.IsChecked = tickTimingEnabled;
             GeneralLogSlowTicksCheck.IsChecked = logSlowTicksEnabled;
+            AutoStopFurnaceCheck.IsChecked = autoStopFurnace;
 
 
             GeneralQ2ViewCheck.Checked += (s, e) => GeneralTimerBox.IsEnabled = true;
@@ -56,7 +58,9 @@ namespace TERMINAL.Windows
             FurnaceSetPointRegBox.Text = mw.FurnaceSetPointRegister.ToString();
             FurnaceCurrentTempRegBox.Text = mw.FurnaceCurrentTempRegister.ToString();
             FurnaceModeRegBox.Text = mw.FurnaceModeRegister.ToString();
+            AutoStopFurnaceCheck.IsChecked = mw.AutoStopFurnace;
             ShowFurnaceCardCheck.IsChecked = mw.ShowFurnaceCard;
+
 
             // АГК
             AgkIpBox.Text = mw.DeviceIp;
@@ -87,7 +91,9 @@ namespace TERMINAL.Windows
             FurnaceSetPointRegBox.Text = "201";
             FurnaceCurrentTempRegBox.Text = "205";
             FurnaceModeRegBox.Text = "200";
+            AutoStopFurnaceCheck.IsChecked = false;
             ShowFurnaceCardCheck.IsChecked = true;
+
 
             AgkIpBox.Text = "192.168.0.159";
             AgkPortBox.Text = "8888";
@@ -139,7 +145,11 @@ namespace TERMINAL.Windows
             if (!ushort.TryParse(FurnaceModeRegBox.Text, out furnaceModeReg))
                 furnaceModeReg = 200;
 
+            bool autoStopFurnace = AutoStopFurnaceCheck.IsChecked == true;
+
             bool showFurnaceCard = ShowFurnaceCardCheck.IsChecked == true;
+
+
 
             // ═══════════════════════════════════════════════════════════════
             // 2. Читаем и валидируем значения из полей АГК
@@ -200,10 +210,12 @@ namespace TERMINAL.Windows
             mw.ApplyDeviceSettings(
                 furnaceIp, furnacePort,
                 furnaceSetPointReg, furnaceCurrentTempReg, furnaceModeReg,
+                autoStopFurnace,
                 showFurnaceCard,
                 agkIp, agkPort, showAgkCard,
                 agkPressureTimeoutMinutes,
                 sktbFilterScript, showSktbCard);
+
 
             // ═══════════════════════════════════════════════════════════════
             // 6. Применяем общие настройки к MainWindow

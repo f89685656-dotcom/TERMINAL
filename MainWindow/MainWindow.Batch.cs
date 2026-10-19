@@ -371,6 +371,20 @@ namespace TERMINAL
                 }
 
                 SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
+
+                // ─── Автовыключение печки ───
+                if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
+                {
+                    try
+                    {
+                        AppendLog("Пакет: автовыключение камеры тепла/холода ST-351", Brushes.Blue);
+                        await StopFurnaceAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"Пакет: ошибка автовыключения камеры тепла/холода ST-351 — {ex.Message}", Brushes.OrangeRed);
+                    }
+                }
             }
             catch (Exception ex)
             {

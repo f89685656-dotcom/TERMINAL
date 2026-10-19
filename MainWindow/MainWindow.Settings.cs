@@ -123,6 +123,7 @@ namespace TERMINAL
             _furnaceCurrentTempRegister = (ushort)_loadedSettings.FurnaceCurrentTempRegister;
             _furnaceModeRegister = (ushort)_loadedSettings.FurnaceModeRegister;
             _showFurnaceCard = _loadedSettings.ShowFurnaceCard;
+            _autoStopFurnace = _loadedSettings.AutoStopFurnace;
 
             _deviceIp = _loadedSettings.DeviceIp;
             _devicePort = _loadedSettings.DevicePort;
@@ -222,6 +223,7 @@ namespace TERMINAL
                     TickTimingEnabled = _tickTimingEnabled,
                     LogSlowTicks = _logSlowTicks,
 
+
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
                         SetPoint = j.SetPointText,
@@ -239,6 +241,7 @@ namespace TERMINAL
                     FurnaceCurrentTempRegister = _furnaceCurrentTempRegister,
                     FurnaceModeRegister = _furnaceModeRegister,
                     ShowFurnaceCard = _showFurnaceCard,
+                    AutoStopFurnace = _autoStopFurnace,
 
                     DeviceIp = _deviceIp,
                     DevicePort = _devicePort,
@@ -404,6 +407,7 @@ namespace TERMINAL
             public int FurnaceCurrentTempRegister { get; set; } = 205;
             public int FurnaceModeRegister { get; set; } = 200;
             public bool ShowFurnaceCard { get; set; } = true;
+            public bool AutoStopFurnace { get; set; } = true;
 
             public string DeviceIp { get; set; } = "192.168.0.159";
             public int DevicePort { get; set; } = 8888;

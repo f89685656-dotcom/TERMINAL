@@ -378,12 +378,21 @@ namespace TERMINAL
             FurnaceStopButton.IsEnabled = false;
             try
             {
-                bool ok = await WriteFurnaceRegisterAsync(
-                    FurnaceModeIdle, FurnaceIp, FurnacePort, FurnaceModeRegister);
-                if (ok) SetStatusSuccess("Режим работы печи изменён на «ждущий»");
-                else SetStatusError("Ошибка записи режима «ждущий»");
+                await StopFurnaceAsync();
             }
-            finally { FurnaceStopButton.IsEnabled = true; }
+            finally
+            {
+                FurnaceStopButton.IsEnabled = true;
+            }
+        }
+
+        private async Task<bool> StopFurnaceAsync()
+        {
+            bool ok = await WriteFurnaceRegisterAsync(
+                FurnaceModeIdle, FurnaceIp, FurnacePort, FurnaceModeRegister);
+            if (ok) SetStatusSuccess("Режим работы камеры тепла/холода ST-351 изменён на «ждущий»");
+            else SetStatusError("Ошибка записи режима «ждущий»");
+            return ok;
         }
 
         private async Task<bool> WriteFurnaceRegisterAsync(
