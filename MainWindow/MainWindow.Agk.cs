@@ -376,13 +376,21 @@ namespace TERMINAL
 
         /// <summary>
         /// Ждёт стабилизацию (5 подряд ok;) после set_point.
-        /// Прерывается по таймауту (AgkPressureTimeoutMinutes).
+        /// Читает ТОЛЬКО из кэша _agkState.
         /// </summary>
         private async Task<bool> WaitForStateInPointAsync()
         {
             var start = DateTime.Now;
             int timeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
             int okCount = 0;
+
+            // ★ КРИТИЧЕСКИЙ СБРОС: принудительно сбрасываем кэш при входе,
+            // чтобы не прочитать старое "ok;" от предыдущего шага
+            lock (_agkStateLock)
+            {
+                _agkState.StateInPointOk = false;
+                _agkState.StateInPointWait = true;
+            }
 
             while (true)
             {
@@ -398,6 +406,7 @@ namespace TERMINAL
                     return false;
                 }
 
+                // ★ Читаем строго из кэша
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
 
@@ -406,7 +415,6 @@ namespace TERMINAL
                     okCount++;
                     if (okCount >= 5)
                     {
-                        // ★ Пишем в журнал только когда полностью стабилизировались (5/5)
                         AppendLog("Стабилизация давления завершена (5/5)", Brushes.Green);
                         SetStatus("Стабилизация завершена (5/5)");
                         return true;
@@ -417,7 +425,6 @@ namespace TERMINAL
                     okCount = 0;
                 }
 
-                // ★ Обновляем только статус-бар внизу, БЕЗ записи в журнал (log: false)
                 int elapsedMin = (int)elapsed.TotalMinutes;
                 SetStatus($"Ожидание стабилизации: {okCount}/5 " +
                           $"({elapsedMin} / {_agkPressureTimeoutMinutes} мин)", log: false);
@@ -577,13 +584,9 @@ namespace TERMINAL
 
             try
             {
-                // ★ Сохраняем предыдущее состояние
                 AgkSnapshot prev;
                 lock (_agkStateLock) prev = _agkState;
 
-                // ═══════════════════════════════════════════════════════
-                // ★ Во время vent — минимальный опрос
-                // ═══════════════════════════════════════════════════════
                 if (_agkInVentMode)
                 {
                     var ventPressureResp = await SendCommandAsync("get_press;");
@@ -609,10 +612,6 @@ namespace TERMINAL
                     AddTickTiming("agk-poll", msVent);
                     return;
                 }
-
-                // ═══════════════════════════════════════════════════════
-                // ★ Все команды — КАЖДЫЙ вызов. Без _agkSlowCounter.
-                // ═══════════════════════════════════════════════════════
 
                 var unitsResp = await SendCommandAsync("get_units;");
                 snap.Units = unitsResp ?? prev.Units;
