@@ -144,7 +144,9 @@
                                      Width="260" Height="24" HorizontalAlignment="Left" Margin="0,4,0,0"
                                      ToolTip="Например: pass2 meas2? 2  (символы \n\0 добавляются автоматически)"/>
                             <TextBlock Text="Символы \n\0 добавляются автоматически при отправке"
-                                       FontSize="11" Foreground="Gray" Margin="0,2,0,0"/>
+                                       FontSize="11" Foreground="Gray" Margin="0,2,0,0"
+                                       HorizontalAlignment="Center"
+                                       Width="260"/>
                         </StackPanel>
 
                         <CheckBox x:Name="ReadPlatinumCheck"

@@ -340,14 +340,38 @@ namespace TERMINAL.Windows
         {
             PlatinumComPortCombo.Items.Clear();
 
-            // COM1..COM20 — самый простой вариант.
-            // Можно улучшить через System.IO.Ports.SerialPort.GetPortNames().
-            for (int i = 1; i <= 20; i++)
-                PlatinumComPortCombo.Items.Add($"COM{i}");
+            // ★ Получаем реальные COM-порты, доступные в системе
+            string[] ports = System.IO.Ports.SerialPort.GetPortNames();
 
-            PlatinumComPortCombo.SelectedItem = current;
-            if (PlatinumComPortCombo.SelectedItem == null)
+            if (ports.Length == 0)
+            {
+                // Если портов нет вообще, можно добавить заглушку или оставить пустым
+                PlatinumComPortCombo.Items.Add("Нет доступных портов");
                 PlatinumComPortCombo.SelectedIndex = 0;
+                return;
+            }
+
+            // Сортируем порты по алфавиту (COM1, COM2, COM10 и т.д.)
+            Array.Sort(ports, (x, y) =>
+            {
+                int nx = int.TryParse(x.Replace("COM", ""), out int a) ? a : 0;
+                int ny = int.TryParse(y.Replace("COM", ""), out int b) ? b : 0;
+                return nx.CompareTo(ny);
+            });
+
+            foreach (var port in ports)
+                PlatinumComPortCombo.Items.Add(port);
+
+            // Пытаемся выбрать текущий порт. Если его нет в списке (например, отключен), выбираем первый доступный.
+            PlatinumComPortCombo.SelectedItem = current;
+
+            if (PlatinumComPortCombo.SelectedItem == null && PlatinumComPortCombo.Items.Count > 0)
+            {
+                // Если сохраненного порта нет, но есть другие — выбираем первый
+                // Проверяем, что первый элемент не "Нет доступных портов"
+                if (PlatinumComPortCombo.Items[0].ToString() != "Нет доступных портов")
+                    PlatinumComPortCombo.SelectedIndex = 0;
+            }
         }
 
         private void PlatinumSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
