@@ -281,7 +281,7 @@
                                 <TextBlock Text="Таймеры:" FontSize="11"
                                         VerticalAlignment="Center" Margin="0,0,4,0"/>
                                 <ComboBox x:Name="BatchTimerSetCombo"
-                                      Width="110" Height="22" FontSize="11"
+                                      Width="120" Height="22" FontSize="11"
                                       Padding="3,1" VerticalContentAlignment="Center"
                                       SelectionChanged="BatchTimerSetCombo_SelectionChanged"/>
                             </StackPanel>
