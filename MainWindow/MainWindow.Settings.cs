@@ -124,12 +124,14 @@ namespace TERMINAL
             _furnaceModeRegister = (ushort)_loadedSettings.FurnaceModeRegister;
             _showFurnaceCard = _loadedSettings.ShowFurnaceCard;
             _autoStopFurnace = _loadedSettings.AutoStopFurnace;
+            _furnaceStabilizationTolerance = _loadedSettings.FurnaceStabilizationTolerance;
 
             _deviceIp = _loadedSettings.DeviceIp;
             _devicePort = _loadedSettings.DevicePort;
             _showAgkCard = _loadedSettings.ShowAgkCard;
             _agkPressureTimeoutMinutes = _loadedSettings.AgkPressureTimeoutMinutes > 0
                 ? _loadedSettings.AgkPressureTimeoutMinutes : 5;
+
 
             _sktbFilterScript = _loadedSettings.SktbFilterScript;
             _showSktbCard = _loadedSettings.ShowSktbCard;
@@ -247,6 +249,7 @@ namespace TERMINAL
                     FurnaceModeRegister = _furnaceModeRegister,
                     ShowFurnaceCard = _showFurnaceCard,
                     AutoStopFurnace = _autoStopFurnace,
+                    FurnaceStabilizationTolerance = _furnaceStabilizationTolerance,
 
                     DeviceIp = _deviceIp,
                     DevicePort = _devicePort,
@@ -418,6 +421,7 @@ namespace TERMINAL
             public int FurnaceModeRegister { get; set; } = 200;
             public bool ShowFurnaceCard { get; set; } = true;
             public bool AutoStopFurnace { get; set; } = true;
+            public double FurnaceStabilizationTolerance { get; set; } = 0.1;
 
             public string DeviceIp { get; set; } = "192.168.0.159";
             public int DevicePort { get; set; } = 8888;

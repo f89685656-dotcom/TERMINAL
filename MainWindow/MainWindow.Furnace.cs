@@ -207,7 +207,7 @@ namespace TERMINAL
                 CultureInfo.InvariantCulture, out double currentTemp))
                 return;
 
-            bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
+            bool inRange = Math.Abs(currentTemp - setPoint) <= _furnaceStabilizationTolerance;
 
             if (inRange)
             {

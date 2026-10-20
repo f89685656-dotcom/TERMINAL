@@ -521,7 +521,7 @@ namespace TERMINAL
                     continue;
                 }
 
-                bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
+                bool inRange = Math.Abs(currentTemp - setPoint) <= _furnaceStabilizationTolerance;
 
                 if (inRange)
                 {
@@ -609,7 +609,7 @@ namespace TERMINAL
                     continue;
                 }
 
-                bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
+                bool inRange = Math.Abs(currentTemp - setPoint) <= _furnaceStabilizationTolerance;
 
                 if (inRange)
                 {
@@ -1021,7 +1021,7 @@ namespace TERMINAL
 
             // Цветовая индикация
             double abs = Math.Abs(delta);
-            if (abs <= FurnaceStabilizationTolerance)          // ±0.1 °C
+            if (abs <= _furnaceStabilizationTolerance)          // ±0.1 °C
                 BatchDeltaText.Foreground = new SolidColorBrush(Color.FromRgb(0x30, 0xA0, 0x30));  // зелёный
             else if (abs <= 1.0)                                // ±1 °C
                 BatchDeltaText.Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xA0, 0x30));  // оранжевый

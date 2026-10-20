@@ -66,6 +66,8 @@ namespace TERMINAL.Windows
             FurnaceSetPointRegBox.Text = mw.FurnaceSetPointRegister.ToString();
             FurnaceCurrentTempRegBox.Text = mw.FurnaceCurrentTempRegister.ToString();
             FurnaceModeRegBox.Text = mw.FurnaceModeRegister.ToString();
+            FurnaceStabilizationToleranceBox.Text =
+                mw.FurnaceStabilizationTolerance.ToString(CultureInfo.InvariantCulture);
             AutoStopFurnaceCheck.IsChecked = mw.AutoStopFurnace;
             ShowFurnaceCardCheck.IsChecked = mw.ShowFurnaceCard;
 
@@ -113,6 +115,7 @@ namespace TERMINAL.Windows
             FurnaceSetPointRegBox.Text = "201";
             FurnaceCurrentTempRegBox.Text = "205";
             FurnaceModeRegBox.Text = "200";
+            FurnaceStabilizationToleranceBox.Text = "0.1";
             AutoStopFurnaceCheck.IsChecked = false;
             ShowFurnaceCardCheck.IsChecked = true;
 
@@ -166,6 +169,15 @@ namespace TERMINAL.Windows
             ushort furnaceModeReg = 200;
             if (!ushort.TryParse(FurnaceModeRegBox.Text, out furnaceModeReg))
                 furnaceModeReg = 200;
+
+            // ★ НОВОЕ: парсинг допуска
+            double furnaceStabilizationTolerance = 0.1;
+            if (!double.TryParse(FurnaceStabilizationToleranceBox.Text.Replace(',', '.'),
+                NumberStyles.Float, CultureInfo.InvariantCulture, out furnaceStabilizationTolerance)
+                || furnaceStabilizationTolerance <= 0)
+            {
+                furnaceStabilizationTolerance = 0.1;
+            }
 
             bool autoStopFurnace = AutoStopFurnaceCheck.IsChecked == true;
 
@@ -253,7 +265,8 @@ namespace TERMINAL.Windows
                 agkPressureTimeoutMinutes,
                 sktbFilterScript, showSktbCard,
                 platinumSource, platinumComPort, readPlatinum,
-                platinumMtkCommand);
+                platinumMtkCommand,
+                furnaceStabilizationTolerance);
 
 
             // ═══════════════════════════════════════════════════════════════

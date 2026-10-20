@@ -131,7 +131,7 @@ namespace TERMINAL
 
         private DateTime _stabilizationTimerStart = DateTime.MinValue;
         private bool _stabilizationTimerActive = false;
-        private const double FurnaceStabilizationTolerance = 0.1;
+        private double _furnaceStabilizationTolerance = 0.1;
 
         private DateTime _stabilizationOutOfRangeSince = DateTime.MinValue;
         private const int StabilizationOutOfRangeGraceSeconds = 60;
@@ -277,6 +277,7 @@ namespace TERMINAL
         public bool ShowFurnaceCard => _showFurnaceCard;
 
         public bool AutoStopFurnace => _autoStopFurnace;
+        public double FurnaceStabilizationTolerance => _furnaceStabilizationTolerance;
 
         public string DeviceIp => _deviceIp;
         public int DevicePort => _devicePort;
@@ -519,7 +520,8 @@ namespace TERMINAL
             int agkPressureTimeoutMinutes,
             string sktbFilterScript, bool showSktbCard,
             string platinumSource, string platinumComPort, bool readPlatinum,
-            string platinumMtkCommand)
+            string platinumMtkCommand,
+            double furnaceStabilizationTolerance)
         {
             {
                 _furnaceIp = furnaceIp;
@@ -543,6 +545,10 @@ namespace TERMINAL
                 _platinumComPort = platinumComPort;
                 _readPlatinum = readPlatinum;
                 _platinumMtkCommand = platinumMtkCommand;
+                _furnaceStabilizationTolerance = furnaceStabilizationTolerance > 0
+                    ? furnaceStabilizationTolerance
+                    : 0.1;   // ★ НОВОЕ
+
 
 
                 // ─── Пункт 12: закрыть старый COM-порт, если источник/порт изменился

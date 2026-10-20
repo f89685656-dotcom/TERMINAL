@@ -16,136 +16,147 @@
 
             <!-- ═══ Общие ═══ -->
             <TabItem Header="Общие">
-                <StackPanel Margin="15">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <CheckBox x:Name="GeneralQ2ViewCheck"
-                                  Content="q2view"
-                                  VerticalAlignment="Center"/>
-                        <TextBox x:Name="GeneralTimerBox"
-                                 Width="50" Height="24" FontSize="12"
-                                 Text="5" Padding="3,1" Margin="10,0,0,0"
-                                 HorizontalContentAlignment="Center"
-                                 VerticalContentAlignment="Center"/>
-                        <TextBlock Text="сек" FontSize="12"
-                                VerticalAlignment="Center" Margin="5,0,0,0"/>
-                    </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <CheckBox x:Name="GeneralQ2ViewCheck"
+                                      Content="q2view"
+                                      VerticalAlignment="Center"/>
+                            <TextBox x:Name="GeneralTimerBox"
+                                     Width="50" Height="24" FontSize="12"
+                                     Text="5" Padding="3,1" Margin="10,0,0,0"
+                                     HorizontalContentAlignment="Center"
+                                     VerticalContentAlignment="Center"/>
+                            <TextBlock Text="сек" FontSize="12"
+                                       VerticalAlignment="Center" Margin="5,0,0,0"/>
+                        </StackPanel>
 
-                    <CheckBox x:Name="GeneralAutoExcelCheck"
-                                Content="Автозаполнение макросами Excel"/>
-                    <CheckBox x:Name="GeneralTickTimingCheck"
-                                Content="Тактирование"
-                                Margin="0,10,0,0"
-                                ToolTip="Показывать плашку с временем такта в главном окне"/>
-                    <CheckBox x:Name="GeneralLogSlowTicksCheck"
+                        <CheckBox x:Name="GeneralAutoExcelCheck"
+                                  Content="Автозаполнение макросами Excel"/>
+                        <CheckBox x:Name="GeneralTickTimingCheck"
+                                  Content="Тактирование"
+                                  Margin="0,10,0,0"
+                                  ToolTip="Показывать плашку с временем такта в главном окне"/>
+                        <CheckBox x:Name="GeneralLogSlowTicksCheck"
                                   Content="Логировать медленные такты"
                                   Margin="0,6,0,0"
                                   ToolTip="Писать в журнал предупреждения о медленных тактах (> 500 мс)"/>
-                </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- ═══ ST-351 ═══ -->
             <TabItem Header="ST-351">
-                <StackPanel Margin="15">
-                    <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
-                    <TextBox x:Name="FurnaceIpBox" Height="24" Padding="4,2"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+                        <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
+                        <TextBox x:Name="FurnaceIpBox" Height="24" Padding="4,2"/>
 
-                    <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
-                    <TextBox x:Name="FurnacePortBox" Height="24" Padding="4,2"/>
+                        <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
+                        <TextBox x:Name="FurnacePortBox" Height="24" Padding="4,2"/>
 
-                    <TextBlock Text="Регистр уставки:" FontWeight="Bold" Margin="0,10,0,0"/>
-                    <TextBox x:Name="FurnaceSetPointRegBox" Height="24" Padding="4,2"/>
+                        <TextBlock Text="Регистр уставки:" FontWeight="Bold" Margin="0,10,0,0"/>
+                        <TextBox x:Name="FurnaceSetPointRegBox" Height="24" Padding="4,2"/>
 
-                    <TextBlock Text="Регистр текущей температуры:" FontWeight="Bold" Margin="0,10,0,0"/>
-                    <TextBox x:Name="FurnaceCurrentTempRegBox" Height="24" Padding="4,2"/>
+                        <TextBlock Text="Регистр текущей температуры:" FontWeight="Bold" Margin="0,10,0,0"/>
+                        <TextBox x:Name="FurnaceCurrentTempRegBox" Height="24" Padding="4,2"/>
 
-                    <TextBlock Text="Регистр режима:" FontWeight="Bold" Margin="0,10,0,0"/>
-                    <TextBox x:Name="FurnaceModeRegBox" Height="24" Padding="4,2"/>
+                        <TextBlock Text="Регистр режима:" FontWeight="Bold" Margin="0,10,0,0"/>
+                        <TextBox x:Name="FurnaceModeRegBox" Height="24" Padding="4,2"/>
 
-                    <CheckBox x:Name="AutoStopFurnaceCheck"
-                              Content="Автовыключение печки после завершения всех заданий пакетного режима"
-                              Margin="0,15,0,0"
-                              ToolTip="Имитирует нажатие кнопки «Стоп» на карточке ST-351 после завершения пакета"/>
+                        <!-- ★ НОВОЕ ПОЛЕ: Допуск стабилизации -->
+                        <TextBlock Text="Допуск стабилизации, °C:" FontWeight="Bold" Margin="0,10,0,0"/>
+                        <TextBox x:Name="FurnaceStabilizationToleranceBox" Height="24" Padding="4,2"/>
 
+                        <!-- ★ ПЕРЕИМЕНОВАННЫЙ ЧЕКБОКС (текст сокращен, описание в ToolTip) -->
+                        <CheckBox x:Name="AutoStopFurnaceCheck"
+                                  Content="Автовыключение после пакета"
+                                  Margin="0,15,0,0"
+                                  ToolTip="Автовыключение печки (имитация кнопки «Стоп») после завершения всех заданий пакетного режима"/>
 
-
-                    <CheckBox x:Name="ShowFurnaceCardCheck"
-                              Content="Показывать карточку"
-                              Margin="0,15,0,0"/>
-                </StackPanel>
+                        <CheckBox x:Name="ShowFurnaceCardCheck"
+                                  Content="Показывать карточку"
+                                  Margin="0,15,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- ═══ АГК ═══ -->
             <TabItem Header="АГК">
-                <StackPanel Margin="15">
-                    <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
-                    <TextBox x:Name="AgkIpBox" Height="24" Padding="4,2"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+                        <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
+                        <TextBox x:Name="AgkIpBox" Height="24" Padding="4,2"/>
 
-                    <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
-                    <TextBox x:Name="AgkPortBox" Height="24" Padding="4,2"/>
+                        <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
+                        <TextBox x:Name="AgkPortBox" Height="24" Padding="4,2"/>
 
-                    <TextBlock Text="Таймаут ожидания давления, мин:"
-                   FontWeight="Bold" Margin="0,10,0,0"
-                   ToolTip="Если давление не набралось или не сбросилось за это время — задание прерывается"/>
-                    <TextBox x:Name="AgkPressureTimeoutBox" Height="24" Padding="4,2"/>
+                        <TextBlock Text="Таймаут ожидания давления, мин:"
+                                   FontWeight="Bold" Margin="0,10,0,0"
+                                   ToolTip="Если давление не набралось или не сбросилось за это время — задание прерывается"/>
+                        <TextBox x:Name="AgkPressureTimeoutBox" Height="24" Padding="4,2"/>
 
-                    <CheckBox x:Name="ShowAgkCardCheck"
-                  Content="Показывать карточку"
-                  Margin="0,15,0,0"/>
-                </StackPanel>
+                        <CheckBox x:Name="ShowAgkCardCheck"
+                                  Content="Показывать карточку"
+                                  Margin="0,15,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- ═══ СКТБ ЭлПА ═══ -->
             <TabItem Header="СКТБ ЭлПА">
-                <StackPanel Margin="15">
-                    <TextBlock Text="Скрипт фильтрации:" FontWeight="Bold"/>
-                    <ComboBox x:Name="SktbFilterScriptCombo" Height="24">
-                        <ComboBoxItem Content="Фильтр_данных_ПДС"/>
-                        <ComboBoxItem Content="Фильтр_данных_БИДТ"/>
-                        <ComboBoxItem Content="Фильтр_РЧ"/>
-                        <ComboBoxItem Content="Filter_for_KOSA_GUI"/>
-                    </ComboBox>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+                        <TextBlock Text="Скрипт фильтрации:" FontWeight="Bold"/>
+                        <ComboBox x:Name="SktbFilterScriptCombo" Height="24">
+                            <ComboBoxItem Content="Фильтр_данных_ПДС"/>
+                            <ComboBoxItem Content="Фильтр_данных_БИДТ"/>
+                            <ComboBoxItem Content="Фильтр_РЧ"/>
+                            <ComboBoxItem Content="Filter_for_KOSA_GUI"/>
+                        </ComboBox>
 
-                    <TextBlock Text="Источник платины:" FontWeight="Bold" Margin="0,12,0,0"/>
-                    <ComboBox x:Name="PlatinumSourceCombo"
-                  Height="24"
-                  SelectionChanged="PlatinumSourceCombo_SelectionChanged">
-                        <ComboBoxItem Content="МтК @ TERMEX"/>
-                        <ComboBoxItem Content="МИТ 8.03 rev.2 (RS-232)"/>
-                        <ComboBoxItem Content="TERCON"/>
-                    </ComboBox>
+                        <TextBlock Text="Источник платины:" FontWeight="Bold" Margin="0,12,0,0"/>
+                        <ComboBox x:Name="PlatinumSourceCombo"
+                                  Height="24"
+                                  SelectionChanged="PlatinumSourceCombo_SelectionChanged">
+                            <ComboBoxItem Content="МтК @ TERMEX"/>
+                            <ComboBoxItem Content="МИТ 8.03 rev.2 (RS-232)"/>
+                            <ComboBoxItem Content="TERCON"/>
+                        </ComboBox>
 
-                    <!-- Панель COM-порта: показывается только для МИТ 8.03 -->
-                    <StackPanel x:Name="PlatinumComPanel"
-                    Orientation="Horizontal"
-                    Margin="0,10,0,0"
-                    Visibility="Collapsed">
-                        <TextBlock Text="COM-порт:"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,0"/>
-                        <ComboBox x:Name="PlatinumComPortCombo"
-                      Width="100" Height="24"/>
+                        <!-- Панель COM-порта: показывается только для МИТ 8.03 -->
+                        <StackPanel x:Name="PlatinumComPanel"
+                                    Orientation="Horizontal"
+                                    Margin="0,10,0,0"
+                                    Visibility="Collapsed">
+                            <TextBlock Text="COM-порт:"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+                            <ComboBox x:Name="PlatinumComPortCombo"
+                                      Width="100" Height="24"/>
+                        </StackPanel>
+
+                        <!-- ★ НОВОЕ: команда МтК @ TERMEX -->
+                        <StackPanel x:Name="PlatinumMtkCommandPanel" Margin="0,10,0,0">
+                            <TextBlock Text="Команда МтК @ TERMEX:" FontWeight="Bold"/>
+                            <TextBox x:Name="PlatinumMtkCommandBox"
+                                     Width="260" Height="24" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                     ToolTip="Например: pass2 meas2? 2  (символы \n\0 добавляются автоматически)"/>
+                            <TextBlock Text="Символы \n\0 добавляются автоматически при отправке"
+                                       FontSize="11" Foreground="Gray" Margin="0,2,0,0"/>
+                        </StackPanel>
+
+                        <CheckBox x:Name="ReadPlatinumCheck"
+                                  Content="Читать платину сейчас"
+                                  Margin="0,12,0,0"
+                                  ToolTip="Если снято — программа не будет обращаться к Платине"/>
+
+                        <CheckBox x:Name="ShowSktbCardCheck"
+                                  Content="Показывать карточку"
+                                  Margin="0,12,0,0"/>
                     </StackPanel>
-
-                    <!-- ★ НОВОЕ: команда МтК @ TERMEX -->
-                    <StackPanel x:Name="PlatinumMtkCommandPanel" Margin="0,10,0,0">
-                        <TextBlock Text="Команда МтК @ TERMEX:" FontWeight="Bold"/>
-                        <TextBox x:Name="PlatinumMtkCommandBox"
-                                 Width="260" Height="24" HorizontalAlignment="Left" Margin="0,4,0,0"
-                                 ToolTip="Например: pass2 meas2? 2  (символы \n\0 добавляются автоматически)"/>
-                        <TextBlock Text="Символы \n\0 добавляются автоматически при отправке"
-                                FontSize="11" Foreground="Gray" Margin="0,2,0,0"/>
-                    </StackPanel>
-
-                    <CheckBox x:Name="ReadPlatinumCheck"
-                  Content="Читать платину сейчас"
-                  Margin="0,12,0,0"
-                  ToolTip="Если снято — программа не будет обращаться к Платине"/>
-
-                    <CheckBox x:Name="ShowSktbCardCheck"
-                  Content="Показывать карточку"
-                  Margin="0,12,0,0"/>
-                </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
         </TabControl>
