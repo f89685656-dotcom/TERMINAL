@@ -5,7 +5,7 @@ VisualStudioVersion = 17.14.37411.7
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "T.E.R.M.I.N.A.L", "T.E.R.M.I.N.A.L.csproj", "{620F752F-A707-47AF-A8BD-240BE3640549}"
 EndProject
-Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Setup", "bin\Debug\net8.0-windows10.0.26100.0\Setup.vdproj", "{1199216C-5911-A303-F86F-57E12D21AC79}"
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "TERMINAL_Installer", "Setup\TERMINAL_Installer.vdproj", "{76475462-9262-BFD9-12EC-181971323DA2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,13 +23,10 @@ Global
 		{620F752F-A707-47AF-A8BD-240BE3640549}.Release|Any CPU.Build.0 = Release|Any CPU
 		{620F752F-A707-47AF-A8BD-240BE3640549}.Release|x64.ActiveCfg = Release|x64
 		{620F752F-A707-47AF-A8BD-240BE3640549}.Release|x64.Build.0 = Release|x64
-		{1199216C-5911-A303-F86F-57E12D21AC79}.Debug|Any CPU.ActiveCfg = Debug
-		{1199216C-5911-A303-F86F-57E12D21AC79}.Debug|Any CPU.Build.0 = Debug
-		{1199216C-5911-A303-F86F-57E12D21AC79}.Debug|x64.ActiveCfg = Debug
-		{1199216C-5911-A303-F86F-57E12D21AC79}.Debug|x64.Build.0 = Debug
-		{1199216C-5911-A303-F86F-57E12D21AC79}.Release|Any CPU.ActiveCfg = Release
-		{1199216C-5911-A303-F86F-57E12D21AC79}.Release|x64.ActiveCfg = Release
-		{1199216C-5911-A303-F86F-57E12D21AC79}.Release|x64.Build.0 = Release
+		{76475462-9262-BFD9-12EC-181971323DA2}.Debug|Any CPU.ActiveCfg = Debug
+		{76475462-9262-BFD9-12EC-181971323DA2}.Debug|x64.ActiveCfg = Debug
+		{76475462-9262-BFD9-12EC-181971323DA2}.Release|Any CPU.ActiveCfg = Release
+		{76475462-9262-BFD9-12EC-181971323DA2}.Release|x64.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
