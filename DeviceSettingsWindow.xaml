@@ -137,16 +137,22 @@
                                       Width="100" Height="24"/>
                         </StackPanel>
 
-                        <!-- ★ НОВОЕ: команда МтК @ TERMEX -->
                         <StackPanel x:Name="PlatinumMtkCommandPanel" Margin="0,10,0,0">
                             <TextBlock Text="Команда МтК @ TERMEX:" FontWeight="Bold"/>
+
+                            <!-- Поле ввода: текст по левому краю, но по центру по вертикали -->
                             <TextBox x:Name="PlatinumMtkCommandBox"
-                                     Width="260" Height="24" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                     Height="24" Margin="0,4,0,0"
+                                     HorizontalContentAlignment="Left"
+                                     VerticalContentAlignment="Center"
+                                     Padding="4,0"
                                      ToolTip="Например: pass2 meas2? 2  (символы \n\0 добавляются автоматически)"/>
+
+                            <!-- Подсказка под полем -->
                             <TextBlock Text="Символы \n\0 добавляются автоматически при отправке"
-                                       FontSize="11" Foreground="Gray" Margin="0,2,0,0"
-                                       HorizontalAlignment="Center"
-                                       Width="260"/>
+                                       FontSize="11" Foreground="Gray" 
+                                       Margin="4,2,0,0"
+                                       HorizontalAlignment="Left"/>
                         </StackPanel>
 
                         <CheckBox x:Name="ReadPlatinumCheck"
