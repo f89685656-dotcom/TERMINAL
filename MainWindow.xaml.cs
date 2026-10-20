@@ -237,6 +237,8 @@ namespace TERMINAL
         // ★ Мьютекс: только одна команда АГК за раз (чтобы ответы не перепутывались)
         private readonly SemaphoreSlim _agkCommandLock = new SemaphoreSlim(1, 1);
 
+        private volatile bool _agkPollBusy = false;
+
         // ★ Флаг: сейчас идёт vent — щадящий опрос АГК
         private volatile bool _agkInVentMode = false;
 
@@ -359,8 +361,15 @@ namespace TERMINAL
                 };
                 _stateRefreshTimer.Tick += async (s, e) =>
                 {
-                    await RefreshAgkStateAsync();
-                    await RefreshFurnaceStateAsync();
+                    try
+                    {
+                        await RefreshAgkStateAsync();
+                        await RefreshFurnaceStateAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"КРИТИЧЕСКАЯ ОШИБКА ФОНОВОГО ОПРОСА: {ex.Message}", Brushes.Red);
+                    }
                 };
                 _stateRefreshTimer.Start();
 
@@ -369,8 +378,6 @@ namespace TERMINAL
                 await RefreshFurnaceSetPointAsync();
 
                 // ─── Таймер печи ───
-                // ─── Таймер стабилизации (обновляет UI из кэша) ───
-                // ─── Таймер стабилизации (обновляет UI из кэша) ───
                 _furnaceTempTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromSeconds(1)
@@ -394,7 +401,6 @@ namespace TERMINAL
                 };
                 _platinaTimer.Tick += async (s, e) =>
                 {
-                    // ★ Защита от наложения: если предыдущий тик не завершился — пропускаем
                     if (_platinaBusy) return;
                     _platinaBusy = true;
 

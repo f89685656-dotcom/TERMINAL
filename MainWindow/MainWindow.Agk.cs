@@ -195,17 +195,28 @@ namespace TERMINAL
                         : $"{parsedSp} {units}";
                 }
 
-                // ─── Статус АГК ───
-                if (!string.IsNullOrEmpty(snap.Status) && AgkStatusTextBox != null)
+                // ─── Статус АГК (get_state_in_point) ───
+                if (AgkStatusTextBox != null)
                 {
-                    string display = snap.Status.Trim();
-                    if (string.IsNullOrEmpty(display)) display = "(пусто)";
+                    string display = snap.StateInPointRaw?.Trim() ?? "";
+
+                    if (string.IsNullOrEmpty(display))
+                        display = snap.Status?.Trim() ?? "";
+
+                    if (string.IsNullOrEmpty(display))
+                        display = "(нет данных)";
+
+                    // ★ ДИАГНОСТИКА: пишем, что прочитали из кэша
+                    AppendLog($"[CACHE] Status: '{display}', Ok={snap.StateInPointOk}, Wait={snap.StateInPointWait}", Brushes.Teal);
 
                     AgkStatusTextBox.Text = display;
-                    AgkStatusTextBox.Foreground =
-                        (display == "0;" || display == "0")
-                            ? new SolidColorBrush(Color.FromRgb(0x80, 0xFF, 0x80))
-                            : new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x80));
+
+                    if (display.Contains("ok;"))
+                        AgkStatusTextBox.Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0xFF, 0x80)); // Зелёный
+                    else if (display.Contains("wait;"))
+                        AgkStatusTextBox.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x80)); // Оранжевый
+                    else
+                        AgkStatusTextBox.Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)); // Серый
                 }
 
                 _agkFailCount = 0;
@@ -263,8 +274,11 @@ namespace TERMINAL
 
         private async Task<string?> SendCommandAsync(string command)
         {
-            // ★ Только одна команда за раз
-            await _agkCommandLock.WaitAsync();
+            // ★ Ждем блокировку не более 1000 мс. Если не дождались — возвращаем null.
+            if (!await _agkCommandLock.WaitAsync(1000))
+            {
+                return null;
+            }
 
             try
             {
@@ -287,7 +301,7 @@ namespace TERMINAL
                     var sb = new StringBuilder();
                     byte[] one = new byte[1];
                     var start = DateTime.Now;
-                    while ((DateTime.Now - start).TotalMilliseconds < 500)
+                    while ((DateTime.Now - start).TotalMilliseconds < 800) // Таймаут ответа 800 мс
                     {
                         if (stream.DataAvailable)
                         {
@@ -378,19 +392,15 @@ namespace TERMINAL
         /// Ждёт стабилизацию (5 подряд ok;) после set_point.
         /// Читает ТОЛЬКО из кэша _agkState.
         /// </summary>
-        private async Task<bool> WaitForStateInPointAsync()
+        /// <summary>
+        /// Ждёт стабилизацию (5 подряд ok;) после set_point.
+        /// Читает из кэша. Проверяет физическое давление относительно уставки.
+        /// </summary>
+        private async Task<bool> WaitForStateInPointAsync(double targetPressure = 0)
         {
             var start = DateTime.Now;
             int timeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
             int okCount = 0;
-
-            // ★ КРИТИЧЕСКИЙ СБРОС: принудительно сбрасываем кэш при входе,
-            // чтобы не прочитать старое "ok;" от предыдущего шага
-            lock (_agkStateLock)
-            {
-                _agkState.StateInPointOk = false;
-                _agkState.StateInPointWait = true;
-            }
 
             while (true)
             {
@@ -398,18 +408,30 @@ namespace TERMINAL
                 if (!await WaitIfPausedAsync()) return false;
 
                 var elapsed = DateTime.Now - start;
+
+                // ★ Единственный таймаут — глобальный из настроек
                 if (elapsed.TotalMilliseconds >= timeoutMs)
                 {
                     AppendLog($"WaitForStateInPoint: таймаут {_agkPressureTimeoutMinutes} мин — " +
-                              $"прибор не вышел на стабильность (wait;)", Brushes.OrangeRed);
+                              $"прибор не вышел на стабильность.", Brushes.OrangeRed);
                     SetStatusError($"Таймаут ожидания стабилизации ({_agkPressureTimeoutMinutes} мин)");
                     return false;
                 }
 
-                // ★ Читаем строго из кэша
+                // ★ Читаем из кэша
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
 
+                // ★ Защита от того, что фон умер
+                if ((DateTime.Now - snap.UpdatedAt).TotalSeconds > 5)
+                {
+                    AppendLog("WaitForStateInPoint: КЭШ АГК НЕ ОБНОВЛЯЕТСЯ (>5 сек)!", Brushes.Red);
+                    return false;
+                }
+
+                // ★ Логика:
+                // - Если "ok;" -> набираем счетчик
+                // - Если "error;" (атмосфера) или "wait;" -> сбрасываем счетчик и ждем
                 if (snap.StateInPointOk)
                 {
                     okCount++;
@@ -425,8 +447,10 @@ namespace TERMINAL
                     okCount = 0;
                 }
 
+                // Обновляем статус внизу экрана
                 int elapsedMin = (int)elapsed.TotalMinutes;
-                SetStatus($"Ожидание стабилизации: {okCount}/5 " +
+                string stateText = snap.StateInPointOk ? "ok" : (snap.StateInPointWait ? "wait" : "error/нет данных");
+                SetStatus($"Ожидание стабилизации: {okCount}/5 (АГК: {stateText}) " +
                           $"({elapsedMin} / {_agkPressureTimeoutMinutes} мин)", log: false);
 
                 await Task.Delay(1000);
@@ -439,7 +463,7 @@ namespace TERMINAL
         /// </summary>
         private async Task<bool> WaitUntilPressureBelowAsync(double threshold, int timeoutMs)
         {
-            // ★ Таймаут задаётся из настроек (в минутах), но не больше переданного лимита
+            // Таймаут из настроек (в минутах), но не больше переданного лимита
             int settingsTimeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
             int effectiveTimeoutMs = Math.Min(timeoutMs, settingsTimeoutMs);
 
@@ -478,7 +502,7 @@ namespace TERMINAL
                         return false;
                     }
 
-                    // ─── Раз в 3 секунды проверяем, что прибор всё ещё в vent ───
+                    // ─── Раз в 1 секунду проверяем, что прибор всё ещё в vent ───
                     if ((DateTime.Now - lastVentCheck).TotalMilliseconds >= 1000)
                     {
                         lastVentCheck = DateTime.Now;
@@ -493,26 +517,30 @@ namespace TERMINAL
                                       $"(mode={snap.Mode}) — повторно отправляем set_mode=vent;",
                                       Brushes.OrangeRed);
 
-                            await SendCommandAsync("set_mode=vent;");
+                            // ★ Отправляем без ожидания ответа, чтобы не блокировать фон
+                            await SendCommandNoWaitAsync("set_mode=vent;");
                         }
 
-                        // ★ Отладка: раз в 5 секунд пишем режим и давление
+                        // Отладка: раз в 5 секунд пишем режим и давление
                         if ((DateTime.Now - lastDebugLog).TotalSeconds >= 5)
                         {
                             lastDebugLog = DateTime.Now;
                         }
                     }
 
-                    // ─── Проверка давления ───
-                    double? p = await RefreshPressureAndSetPointAsync();
+                    // ─── Проверка давления ИЗ КЭША (без прямых запросов) ───
+                    AgkSnapshot snap2;
+                    lock (_agkStateLock) snap2 = _agkState;
+
+                    double? p = snap2.Pressure;
                     if (p.HasValue && Math.Abs(p.Value) < threshold)
                     {
                         AppendLog($"WaitUntilPressureBelow: давление достигло {p.Value:F3}, vent завершён",
                                   Brushes.Green);
 
-                        // ★ Теперь, когда давление упало — обнуляем уставку
+                        // ★ Обнуляем уставку БЕЗ ожидания ответа
                         await Task.Delay(2000);
-                        await SendCommandAsync("set_point=0;");
+                        await SendCommandNoWaitAsync("set_point=0;");
                         AppendLog("WaitUntilPressureBelow: уставка обнулена (set_point=0)", Brushes.Gray);
 
                         return true;
@@ -523,7 +551,7 @@ namespace TERMINAL
             }
             finally
             {
-                // ★ Сбрасываем флаг в любом случае
+                // Сбрасываем флаг в любом случае
                 _agkInVentMode = false;
                 AppendLog("WaitUntilPressureBelow: _agkInVentMode = false", Brushes.Gray);
             }
@@ -537,7 +565,10 @@ namespace TERMINAL
                 if (!await WaitIfPausedAsync()) return false;
 
                 SetStatus($"{command} — попытка {attempt}/5");
+
+                // Вызываем SendCommandAsync, но он уже с таймаутом внутри
                 string? response = await SendCommandAsync(command);
+
                 if (response != null && response.Contains(expected, StringComparison.Ordinal))
                     return true;
 
@@ -565,8 +596,6 @@ namespace TERMINAL
         /// </summary>
         private async Task RefreshAgkStateAsync()
         {
-            var start = DateTime.Now;
-
             NetworkStream? stream;
             lock (_streamLock) stream = _stream;
 
@@ -576,9 +605,6 @@ namespace TERMINAL
             {
                 snap.Connected = false;
                 lock (_agkStateLock) _agkState = snap;
-
-                long msDisconnected = (long)(DateTime.Now - start).TotalMilliseconds;
-                AddTickTiming("agk-poll", msDisconnected);
                 return;
             }
 
@@ -587,65 +613,21 @@ namespace TERMINAL
                 AgkSnapshot prev;
                 lock (_agkStateLock) prev = _agkState;
 
-                if (_agkInVentMode)
-                {
-                    var ventPressureResp = await SendCommandAsync("get_press;");
-                    await Task.Delay(50);
+                // ★ Убрали проверку if (_agkInVentMode), теперь читаем ВСЕГДА
 
-                    snap.Pressure = ventPressureResp != null
-                        ? ParseDoubleOrNull(ventPressureResp)
-                        : prev.Pressure;
-
-                    snap.Units = prev.Units;
-                    snap.SetPoint = prev.SetPoint;
-                    snap.Mode = "vent";
-                    snap.Status = prev.Status;
-                    snap.StateInPointRaw = prev.StateInPointRaw;
-                    snap.StateInPointOk = prev.StateInPointOk;
-                    snap.StateInPointWait = prev.StateInPointWait;
-
-                    snap.Connected = true;
-
-                    lock (_agkStateLock) _agkState = snap;
-
-                    long msVent = (long)(DateTime.Now - start).TotalMilliseconds;
-                    AddTickTiming("agk-poll", msVent);
-                    return;
-                }
-
-                var unitsResp = await SendCommandAsync("get_units;");
-                snap.Units = unitsResp ?? prev.Units;
-                await Task.Delay(30);
-
+                // 1. Давление
                 var pressureResp = await SendCommandAsync("get_press;");
                 snap.Pressure = pressureResp != null
                     ? ParseDoubleOrNull(pressureResp)
                     : prev.Pressure;
-                await Task.Delay(30);
 
-                var pointResp = await SendCommandAsync("get_point;");
-                snap.SetPoint = pointResp != null
-                    ? ParseDoubleOrNull(pointResp)
-                    : prev.SetPoint;
-                await Task.Delay(30);
-
-                var modeResp = await SendCommandAsync("get_mode;");
-                snap.Mode = modeResp != null
-                    ? modeResp.Trim().TrimEnd(';').ToLower()
-                    : prev.Mode;
-                await Task.Delay(30);
-
-                var statusResp = await SendCommandAsync("get_status;");
-                snap.Status = statusResp ?? prev.Status;
-                await Task.Delay(30);
-
+                // 2. Статус в точке (критично для стабилизации)
                 var stateResp = await SendCommandAsync("get_state_in_point;");
-
                 if (stateResp != null)
                 {
                     snap.StateInPointRaw = stateResp;
-                    snap.StateInPointOk = stateResp.Contains("ok;", StringComparison.Ordinal);
-                    snap.StateInPointWait = stateResp.Contains("wait;", StringComparison.Ordinal);
+                    snap.StateInPointOk = stateResp.IndexOf("ok;", StringComparison.OrdinalIgnoreCase) >= 0;
+                    snap.StateInPointWait = stateResp.IndexOf("wait;", StringComparison.OrdinalIgnoreCase) >= 0;
                 }
                 else
                 {
@@ -654,22 +636,43 @@ namespace TERMINAL
                     snap.StateInPointWait = prev.StateInPointWait;
                 }
 
+                // 3. Уставка
+                var pointResp = await SendCommandAsync("get_point;");
+                if (pointResp != prev.SetPoint?.ToString())
+                {
+                    AppendLog($"[АГК] Уставка: {pointResp ?? "NULL"}", Brushes.Gray);
+                }
+                snap.SetPoint = pointResp != null ? ParseDoubleOrNull(pointResp) : prev.SetPoint;
+
+                // 4. Режим
+                var modeResp = await SendCommandAsync("get_mode;");
+                snap.Mode = modeResp != null
+                    ? modeResp.Trim().TrimEnd(';').ToLower()
+                    : prev.Mode;
+
+                // 5. Единицы
+                var unitsResp = await SendCommandAsync("get_units;");
+                snap.Units = unitsResp ?? prev.Units;
+
+                // 6. Общий статус (для справки)
+                var statusResp = await SendCommandAsync("get_status;");
+                snap.Status = statusResp ?? prev.Status;
+
                 snap.Connected = true;
             }
-            catch
+            catch (Exception ex)
             {
                 snap.Connected = false;
+                AppendLog($"ОШИБКА ОПРОСА АГК: {ex.Message}", Brushes.Red);
             }
 
             lock (_agkStateLock) _agkState = snap;
-
-            long ms = (long)(DateTime.Now - start).TotalMilliseconds;
-            AddTickTiming("agk-poll", ms);
         }
 
         /// <summary>
         /// Обновляет кэш состояния печи. Одно TCP-соединение — два Modbus-запроса.
-        /// </summary>
+        /// </summary>private async Task RefreshAgkStateAsync
+        /// 
         private async Task RefreshFurnaceStateAsync()
         {
             var start = DateTime.Now;

@@ -299,7 +299,6 @@ namespace TERMINAL
                     SetStatus($"Шаг {human}: ТЕСТ — проверка атмосферного давления");
 
                     await RefreshPressureAndSetPointAsync();
-                    // ★ _lastKnownPressure обновляется в Timer_Tick
                     double? currentP = _lastKnownPressure;
                     if (!currentP.HasValue || Math.Abs(currentP.Value) >= atmoThreshold)
                     {
@@ -358,11 +357,27 @@ namespace TERMINAL
                         if (!m2) return;
 
                         SetStatus($"Шаг 1: установка {v}");
-                        bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
-                        if (!setOk) return;
+
+                        _agkBatchBusy = true;
+                        try
+                        {
+                            bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
+                            if (!setOk) return;
+                            await Task.Delay(1000);
+                        }
+                        finally
+                        {
+                            _agkBatchBusy = false;
+                        }
+
+                        lock (_agkStateLock)
+                        {
+                            _agkState.StateInPointOk = false;
+                            _agkState.StateInPointWait = true;
+                        }
 
                         SetStatus("Шаг 1: ожидание стабилизации");
-                        bool stable = await WaitForStateInPointAsync();
+                        bool stable = await WaitForStateInPointAsync(v);
                         if (!stable) return;
 
                         SetStatus($"Шаг 1: измерение {duration} сек");
@@ -409,11 +424,27 @@ namespace TERMINAL
                         if (!m2) return;
 
                         SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
-                        bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
-                        if (!setOk) return;
+
+                        _agkBatchBusy = true;
+                        try
+                        {
+                            bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
+                            if (!setOk) return;
+                            await Task.Delay(1000);
+                        }
+                        finally
+                        {
+                            _agkBatchBusy = false;
+                        }
+
+                        lock (_agkStateLock)
+                        {
+                            _agkState.StateInPointOk = false;
+                            _agkState.StateInPointWait = true;
+                        }
 
                         SetStatus($"Шаг {human}: ожидание стабилизации");
-                        bool stable = await WaitForStateInPointAsync();
+                        bool stable = await WaitForStateInPointAsync(v);
                         if (!stable) return;
                     }
 
@@ -446,11 +477,27 @@ namespace TERMINAL
                 if (!mm2) return;
 
                 SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
-                bool setOk2 = await SendWithRetryAsync($"set_point={v};", "ok;");
-                if (!setOk2) return;
+
+                _agkBatchBusy = true;
+                try
+                {
+                    bool setOk2 = await SendWithRetryAsync($"set_point={v};", "ok;");
+                    if (!setOk2) return;
+                    await Task.Delay(1000);
+                }
+                finally
+                {
+                    _agkBatchBusy = false;
+                }
+
+                lock (_agkStateLock)
+                {
+                    _agkState.StateInPointOk = false;
+                    _agkState.StateInPointWait = true;
+                }
 
                 SetStatus($"Шаг {human}: ожидание стабилизации");
-                bool stable2 = await WaitForStateInPointAsync();
+                bool stable2 = await WaitForStateInPointAsync(v);
                 if (!stable2) return;
 
                 SetStatus($"Шаг {human}: измерение {duration} сек");
@@ -470,7 +517,6 @@ namespace TERMINAL
             }
 
             // ─── Финальный сброс ───
-            // Если последнее давление в программе ≠ 0 — сброс до атмосферы + уставка 0
             double lastPressure = steps[steps.Length - 1];
             if (lastPressure != 0)
             {
@@ -480,12 +526,12 @@ namespace TERMINAL
 
                 SetStatus("Ожидание снижения давления");
                 await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
-
-                // ★ set_point=0 уже сделан внутри WaitUntilPressureBelowAsync
             }
 
             SetStatus("Программа завершена");
         }
+
+
         private async Task<bool> RunPumpSequenceAsync(double maxPressure, int totalCycles, string unitsCode, string unitsLabel, double atmoThreshold)
         {
             MaxArrow.Text = "  ";
