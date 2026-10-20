@@ -71,6 +71,11 @@ namespace TERMINAL
                 _batchKosaEnabled = _loadedSettings.BatchKosaEnabled;
                 _batchKosaTimerSeconds = _loadedSettings.BatchKosaTimerSeconds > 0
                     ? _loadedSettings.BatchKosaTimerSeconds : 25;
+                _batchTimerEnabled = _loadedSettings.BatchTimerEnabled;
+                _autoExcelEnabled = _loadedSettings.AutoExcelEnabled;
+                _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
+                _logSlowTicks = _loadedSettings.LogSlowTicks;
+
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
                 {
@@ -118,13 +123,23 @@ namespace TERMINAL
             _furnaceCurrentTempRegister = (ushort)_loadedSettings.FurnaceCurrentTempRegister;
             _furnaceModeRegister = (ushort)_loadedSettings.FurnaceModeRegister;
             _showFurnaceCard = _loadedSettings.ShowFurnaceCard;
+            _autoStopFurnace = _loadedSettings.AutoStopFurnace;
+            _furnaceStabilizationTolerance = _loadedSettings.FurnaceStabilizationTolerance;
 
             _deviceIp = _loadedSettings.DeviceIp;
             _devicePort = _loadedSettings.DevicePort;
             _showAgkCard = _loadedSettings.ShowAgkCard;
+            _agkPressureTimeoutMinutes = _loadedSettings.AgkPressureTimeoutMinutes > 0
+                ? _loadedSettings.AgkPressureTimeoutMinutes : 5;
+
 
             _sktbFilterScript = _loadedSettings.SktbFilterScript;
             _showSktbCard = _loadedSettings.ShowSktbCard;
+
+            _platinumSource = _loadedSettings.PlatinumSource;
+            _platinumComPort = _loadedSettings.PlatinumComPort;
+            _readPlatinum = _loadedSettings.ReadPlatinum;
+            _platinumMtkCommand = _loadedSettings.PlatinumMtkCommand;
 
             RefreshDeviceCardsVisibility();
 
@@ -142,15 +157,6 @@ namespace TERMINAL
 
             if (!string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
                 SavePathBox.Text = _loadedSettings.SavePath;
-
-            if (BatchKosaCheckBox != null)
-                BatchKosaCheckBox.IsChecked = _loadedSettings?.BatchKosaEnabled ?? false;
-
-            if (AutoExcelCheckBox != null)
-                AutoExcelCheckBox.IsChecked = _loadedSettings?.AutoExcelEnabled ?? true;
-
-            if (BatchKosaTimerBox != null)
-                BatchKosaTimerBox.Text = _batchKosaTimerSeconds.ToString(CultureInfo.InvariantCulture);
 
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
@@ -179,6 +185,7 @@ namespace TERMINAL
                 BatchPresetCombo.SelectedIndex = _loadedSettings.LastUsedPresetIndex;
             }
 
+            ApplyTickTimingVisibility();
             UpdateStartButtonMode();
         }
 
@@ -217,8 +224,12 @@ namespace TERMINAL
                     BatchTimerSetIndex = BatchTimerSetCombo.SelectedIndex,
                     SavePath = SavePathBox.Text,
                     BatchKosaEnabled = _batchKosaEnabled,
+                    BatchTimerEnabled = _batchTimerEnabled,
                     BatchKosaTimerSeconds = _batchKosaTimerSeconds,
-                    AutoExcelEnabled = AutoExcelCheckBox?.IsChecked == true,
+                    AutoExcelEnabled = _autoExcelEnabled,
+                    TickTimingEnabled = _tickTimingEnabled,
+                    LogSlowTicks = _logSlowTicks,
+
 
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
@@ -237,13 +248,21 @@ namespace TERMINAL
                     FurnaceCurrentTempRegister = _furnaceCurrentTempRegister,
                     FurnaceModeRegister = _furnaceModeRegister,
                     ShowFurnaceCard = _showFurnaceCard,
+                    AutoStopFurnace = _autoStopFurnace,
+                    FurnaceStabilizationTolerance = _furnaceStabilizationTolerance,
 
                     DeviceIp = _deviceIp,
                     DevicePort = _devicePort,
                     ShowAgkCard = _showAgkCard,
+                    AgkPressureTimeoutMinutes = _agkPressureTimeoutMinutes,
 
                     SktbFilterScript = _sktbFilterScript,
                     ShowSktbCard = _showSktbCard,
+                    PlatinumSource = _platinumSource,
+                    PlatinumComPort = _platinumComPort,
+                    ReadPlatinum = _readPlatinum,
+                    PlatinumMtkCommand = _platinumMtkCommand,
+
 
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
@@ -378,6 +397,7 @@ namespace TERMINAL
         {
             public string SavePath { get; set; } = "";
             public bool BatchKosaEnabled { get; set; } = false;
+            public bool BatchTimerEnabled { get; set; } = true;
             public int BatchKosaTimerSeconds { get; set; } = 25;
             public int BatchTargetPressureIndex { get; set; } = 0;
             public int BatchTimerSetIndex { get; set; } = 0;
@@ -390,19 +410,35 @@ namespace TERMINAL
             public int LastUsedPresetIndex { get; set; } = -1;
             public bool AutoExcelEnabled { get; set; } = true;
 
+            public bool TickTimingEnabled { get; set; } = true;
+
+            public bool LogSlowTicks { get; set; } = true;
+
             public string FurnaceIp { get; set; } = "192.168.0.167";
             public int FurnacePort { get; set; } = 502;
             public int FurnaceSetPointRegister { get; set; } = 201;
             public int FurnaceCurrentTempRegister { get; set; } = 205;
             public int FurnaceModeRegister { get; set; } = 200;
             public bool ShowFurnaceCard { get; set; } = true;
+            public bool AutoStopFurnace { get; set; } = true;
+            public double FurnaceStabilizationTolerance { get; set; } = 0.1;
 
             public string DeviceIp { get; set; } = "192.168.0.159";
             public int DevicePort { get; set; } = 8888;
             public bool ShowAgkCard { get; set; } = true;
 
+            // ★ Таймаут ожидания (набор/сброс давления), в минутах
+            public int AgkPressureTimeoutMinutes { get; set; } = 5;
+
             public string SktbFilterScript { get; set; } = "Filter_for_KOSA_GUI";
             public bool ShowSktbCard { get; set; } = true;
+
+            // ─── Платина (СКТБ ЭлПА) ───
+            public string PlatinumSource { get; set; } = "mtk_termex";   // mtk_termex | mit_8.03 | tercon
+            public string PlatinumComPort { get; set; } = "COM1";
+            public bool ReadPlatinum { get; set; } = true;               // читать ли платину сейчас
+
+            public string PlatinumMtkCommand { get; set; } = "pass2 meas2? 2";
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");

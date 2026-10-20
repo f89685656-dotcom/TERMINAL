@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.IO.Ports;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -35,6 +36,7 @@ namespace TERMINAL
         private DispatcherTimer? _timer;
         private DispatcherTimer? _furnaceTempTimer;
         private DispatcherTimer? _platinaTimer;
+        private volatile bool _platinaBusy = false;
         private DispatcherTimer? _batchStatusTimer;
 
         private string? _selectedTargetPressure;
@@ -73,13 +75,33 @@ namespace TERMINAL
         private ushort _furnaceCurrentTempRegister = 205;
         private ushort _furnaceModeRegister = 200;
         private bool _showFurnaceCard = true;
+        private bool _autoStopFurnace = true;
 
         // ── АГК карточка ──
         private bool _showAgkCard = true;
 
+        private int _agkPressureTimeoutMinutes = 5;
+
         // ── СКТБ ЭлПА ──
         private string _sktbFilterScript = "Filter_for_KOSA_GUI";
         private bool _showSktbCard = true;
+
+        // ── Платина (СКТБ ЭлПА) ──
+        private string _platinumSource = "mtk_termex";   // mtk_termex | mit_803 | tercon
+        private string _platinumComPort = "COM1";
+        private bool _readPlatinum = true;
+        private string _platinumMtkCommand = "pass2 meas2? 2";
+
+        private SerialPort? _platinumSerial;
+        private readonly object _platinumSerialLock = new object();
+
+
+
+        public string PlatinumSource => _platinumSource;
+        public string PlatinumComPort => _platinumComPort;
+        public bool ReadPlatinum => _readPlatinum;
+        public string PlatinumMtkCommand => _platinumMtkCommand;
+        private double _mit803LastGoodValue = double.NaN;
 
         // Режимы (не настраиваются)
         private const ushort FurnaceModeManual = 2;
@@ -87,7 +109,6 @@ namespace TERMINAL
 
         private const int PlatinaVid = 0xFFFF;
         private const int PlatinaPid = 0x0009;
-        private const string PlatinaRequest = "pass2 meas2? 2\n\0";
 
         private double _platinaLastValue = double.NaN;
         private DateTime _platinaLastSuccess = DateTime.MinValue;
@@ -110,7 +131,7 @@ namespace TERMINAL
 
         private DateTime _stabilizationTimerStart = DateTime.MinValue;
         private bool _stabilizationTimerActive = false;
-        private const double FurnaceStabilizationTolerance = 0.1;
+        private double _furnaceStabilizationTolerance = 0.1;
 
         private DateTime _stabilizationOutOfRangeSince = DateTime.MinValue;
         private const int StabilizationOutOfRangeGraceSeconds = 60;
@@ -141,6 +162,12 @@ namespace TERMINAL
         private bool _batchKosaEnabled = false;
         private int _batchKosaTimerSeconds = 25;
 
+        private bool _batchTimerEnabled = true;
+        private bool _autoExcelEnabled = true;
+        private bool _tickTimingEnabled = true;
+        private bool _logSlowTicks = true;
+        public bool BatchTimerEnabled { get; set; } = true;
+
         private string _currentPressureUnitsLabel = "";
         private double? _lastKnownPressure = null;
 
@@ -165,23 +192,70 @@ namespace TERMINAL
         /// </summary>
         private static readonly string[] TickTimingOrder =
         {
-            "main",
-            "agk-poll",
-            "furnace",
-            "platina",
-            "sensorUI",
-            "clientsUI",
-            "kosa",
-            "kosa-idle",
-            "timer-step",
-            "timer-idle",
-            "timer-max",
-            "timer-atmo",
-            "batch-stab",
-            "batch-tolerance",
-            "wait-state",
-            "wait-pressure"
+                        "main",
+                        "agk-poll",
+                        "furnace",
+                        "platina",
+                        "sensorUI",
+                        "clientsUI",
+                        "kosa",
+                        "kosa-idle",
+                        "timer-step",
+                        "timer-idle",
+                        "timer-max",
+                        "timer-atmo",
+                        "batch-stab",
+                        "batch-tolerance",
+                        "wait-state",
+                        "wait-pressure"
 };
+
+        // ─── Кэш состояния АГК ───
+        // ─── Кэш состояния АГК ───
+        private class AgkSnapshot
+        {
+            public string Units = "";
+            public double? Pressure;
+            public double? SetPoint;
+            public string Mode = "";
+            public string Status = "";
+
+            public bool StateInPointOk;          // ответ "ok;"
+            public bool StateInPointWait;        // ответ "wait;"
+            public string StateInPointRaw = "";  // сырой ответ (для отладки)
+
+            public bool Connected;
+            public DateTime UpdatedAt = DateTime.MinValue;
+        }
+
+        private AgkSnapshot _agkState = new();
+        private readonly object _agkStateLock = new();
+
+        // ★ Счётчик для медленных команд АГК (get_units, get_point, get_state_in_point)
+        private int _agkSlowCounter = 0;
+
+        // ★ Мьютекс: только одна команда АГК за раз (чтобы ответы не перепутывались)
+        private readonly SemaphoreSlim _agkCommandLock = new SemaphoreSlim(1, 1);
+
+        private volatile bool _agkPollBusy = false;
+
+        // ★ Флаг: сейчас идёт vent — щадящий опрос АГК
+        private volatile bool _agkInVentMode = false;
+
+        // ─── Кэш состояния печи ───
+        private class FurnaceSnapshot
+        {
+            public float? CurrentTemp;
+            public float? SetPoint;
+            public bool Connected;
+            public DateTime UpdatedAt = DateTime.MinValue;
+        }
+
+        private FurnaceSnapshot _furnaceState = new();
+        private readonly object _furnaceStateLock = new();
+
+        // ─── Таймер обновления кэша ───
+        private DispatcherTimer? _stateRefreshTimer;
 
         private readonly DateTime _lastAgkStatusRequest = DateTime.MinValue;
         private const int AgkStatusRequestIntervalMs = 1000;
@@ -202,9 +276,14 @@ namespace TERMINAL
         public ushort FurnaceModeRegister => _furnaceModeRegister;
         public bool ShowFurnaceCard => _showFurnaceCard;
 
+        public bool AutoStopFurnace => _autoStopFurnace;
+        public double FurnaceStabilizationTolerance => _furnaceStabilizationTolerance;
+
         public string DeviceIp => _deviceIp;
         public int DevicePort => _devicePort;
         public bool ShowAgkCard => _showAgkCard;
+
+        public int AgkPressureTimeoutMinutes => _agkPressureTimeoutMinutes;
 
         public string SktbFilterScript => _sktbFilterScript;
         public bool ShowSktbCard => _showSktbCard;
@@ -263,10 +342,10 @@ namespace TERMINAL
 
                 // ─── Основной таймер ───
                 _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _timer.Tick += async (s, e) =>
+                _timer.Tick += (s, e) =>
                 {
                     var start = DateTime.Now;
-                    try { await Timer_TickAsync(s, e); }       // ← await!
+                    try { Timer_Tick(s, e); }
                     finally
                     {
                         long ms = (long)(DateTime.Now - start).TotalMilliseconds;
@@ -276,7 +355,27 @@ namespace TERMINAL
                 };
                 _timer.Start();
 
+                // ─── Таймер обновления кэша состояния ───
+                _stateRefreshTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(1)
+                };
+                _stateRefreshTimer.Tick += async (s, e) =>
+                {
+                    try
+                    {
+                        await RefreshAgkStateAsync();
+                        await RefreshFurnaceStateAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"КРИТИЧЕСКАЯ ОШИБКА ФОНОВОГО ОПРОСА: {ex.Message}", Brushes.Red);
+                    }
+                };
+                _stateRefreshTimer.Start();
+
                 await Task.Delay(500);
+                await RefreshFurnaceCurrentTempAsync();
                 await RefreshFurnaceSetPointAsync();
 
                 // ─── Таймер печи ───
@@ -284,20 +383,11 @@ namespace TERMINAL
                 {
                     Interval = TimeSpan.FromSeconds(1)
                 };
-                _furnaceTempTimer.Tick += async (s, e) =>
+                _furnaceTempTimer.Tick += (s, e) =>
                 {
-                    var start = DateTime.Now;
-                    try
-                    {
-                        await RefreshFurnaceCurrentTempAsync();
-                        await RefreshFurnaceSetPointAsync();
-                        UpdateStabilizationTimer();
-                    }
-                    finally
-                    {
-                        long ms = (long)(DateTime.Now - start).TotalMilliseconds;
-                        AddTickTiming("furnace", ms);
-                    }
+                    RefreshFurnaceCurrentTempAsync();
+                    RefreshFurnaceSetPointAsync();
+                    UpdateStabilizationTimer();
                 };
                 _furnaceTempTimer.Start();
 
@@ -312,10 +402,14 @@ namespace TERMINAL
                 };
                 _platinaTimer.Tick += async (s, e) =>
                 {
+                    if (_platinaBusy) return;
+                    _platinaBusy = true;
+
                     var start = DateTime.Now;
                     try { await RefreshPlatinaAsync(); }
                     finally
                     {
+                        _platinaBusy = false;
                         long ms = (long)(DateTime.Now - start).TotalMilliseconds;
                         AddTickTiming("platina", ms);
                     }
@@ -357,44 +451,57 @@ namespace TERMINAL
 
         private void DeviceSettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            OpenDeviceSettings(0);
+            OpenDeviceSettings(1);
         }
 
         private void FurnaceTitle_Click(object sender, MouseButtonEventArgs e)
         {
-            OpenDeviceSettings(0);
+            OpenDeviceSettings(1);
         }
 
         private void FurnaceSettings_Click(object sender, RoutedEventArgs e)
         {
-            OpenDeviceSettings(0);
+            OpenDeviceSettings(1);
         }
 
         private void AgkTitle_Click(object sender, MouseButtonEventArgs e)
         {
-            OpenDeviceSettings(1);
+            OpenDeviceSettings(2);
         }
 
         private void AgkSettings_Click(object sender, RoutedEventArgs e)
         {
-            OpenDeviceSettings(1);
+            OpenDeviceSettings(2);
         }
 
         private void SktbTitle_Click(object sender, MouseButtonEventArgs e)
         {
-            OpenDeviceSettings(2);
+            OpenDeviceSettings(3);
         }
 
         private void SktbSettings_Click(object sender, RoutedEventArgs e)
         {
-            OpenDeviceSettings(2);
+            OpenDeviceSettings(3);
         }
 
         private void OpenDeviceSettings(int initialTab)
         {
             try
             {
-                var win = new TERMINAL.Windows.DeviceSettingsWindow(initialTab);
+                var win = new TERMINAL.Windows.DeviceSettingsWindow(
+                    initialTab,
+                    _batchKosaEnabled,
+                    _batchTimerEnabled,
+                    _batchKosaTimerSeconds,
+                    _autoExcelEnabled,
+                    _tickTimingEnabled,
+                    _logSlowTicks,
+                    _autoStopFurnace,
+                    _platinumSource,
+                    _platinumComPort,
+                    _readPlatinum);
+
+
                 win.Owner = this;
                 win.ShowDialog();
             }
@@ -408,28 +515,65 @@ namespace TERMINAL
         public void ApplyDeviceSettings(
             string furnaceIp, int furnacePort,
             ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
-            bool showFurnaceCard,
+            bool autoStopFurnace, bool showFurnaceCard,
             string agkIp, int agkPort, bool showAgkCard,
-            string sktbFilterScript, bool showSktbCard)
+            int agkPressureTimeoutMinutes,
+            string sktbFilterScript, bool showSktbCard,
+            string platinumSource, string platinumComPort, bool readPlatinum,
+            string platinumMtkCommand,
+            double furnaceStabilizationTolerance)
         {
-            _furnaceIp = furnaceIp;
-            _furnacePort = furnacePort;
-            _furnaceSetPointRegister = furnaceSetPointReg;
-            _furnaceCurrentTempRegister = furnaceCurrentTempReg;
-            _furnaceModeRegister = furnaceModeReg;
-            _showFurnaceCard = showFurnaceCard;
+            {
+                _furnaceIp = furnaceIp;
+                _furnacePort = furnacePort;
+                _furnaceSetPointRegister = furnaceSetPointReg;
+                _furnaceCurrentTempRegister = furnaceCurrentTempReg;
+                _furnaceModeRegister = furnaceModeReg;
+                _autoStopFurnace = autoStopFurnace;
+                _showFurnaceCard = showFurnaceCard;
 
-            _deviceIp = agkIp;
-            _devicePort = agkPort;
-            _showAgkCard = showAgkCard;
+                _deviceIp = agkIp;
+                _devicePort = agkPort;
+                _showAgkCard = showAgkCard;
+                _agkPressureTimeoutMinutes = agkPressureTimeoutMinutes > 0
+                    ? agkPressureTimeoutMinutes : 5;
 
-            _sktbFilterScript = sktbFilterScript;
-            _showSktbCard = showSktbCard;
+                _sktbFilterScript = sktbFilterScript;
+                _showSktbCard = showSktbCard;
 
-            SaveSettings();
-            RefreshDeviceCardsVisibility();
+                _platinumSource = platinumSource;
+                _platinumComPort = platinumComPort;
+                _readPlatinum = readPlatinum;
+                _platinumMtkCommand = platinumMtkCommand;
+                _furnaceStabilizationTolerance = furnaceStabilizationTolerance > 0
+                    ? furnaceStabilizationTolerance
+                    : 0.1;   // ★ НОВОЕ
 
-            _ = Task.Run(ReconnectDevicesAsync);
+
+
+                // ─── Пункт 12: закрыть старый COM-порт, если источник/порт изменился
+                //     или чтение платины выключили ───
+                lock (_platinumSerialLock)
+                {
+                    bool needClose =
+                        _platinumSerial != null &&
+                        (!_readPlatinum ||
+                         _platinumSource != "mit_803" ||
+                         _platinumComPort != (_platinumSerial.PortName ?? ""));
+
+                    if (needClose)
+                    {
+                        try { _platinumSerial.Close(); } catch { }
+                        try { _platinumSerial.Dispose(); } catch { }
+                        _platinumSerial = null;
+                    }
+                }
+
+                SaveSettings();
+                RefreshDeviceCardsVisibility();
+
+                _ = Task.Run(ReconnectDevicesAsync);
+            }
         }
 
         public void RefreshDeviceCardsVisibility()
@@ -536,6 +680,14 @@ namespace TERMINAL
             }
             catch { }
 
+            // ─── Закрыть COM-порт платины (МИТ 8.03) ───
+            lock (_platinumSerialLock)
+            {
+                try { _platinumSerial?.Close(); } catch { }
+                try { _platinumSerial?.Dispose(); } catch { }
+                _platinumSerial = null;
+            }
+
             base.OnClosed(e);
             Environment.Exit(0);
         }
@@ -544,9 +696,109 @@ namespace TERMINAL
         // Работа с Excel
         // ═══════════════════════════════════════════════════════════════════
 
-        private void RunExcelMacroButton_Click(object sender, RoutedEventArgs e)
+        private async void RunExcelMacroButton_Click(object sender, RoutedEventArgs e)
         {
-            RunExcelMacroInternal(silent: false);
+            await RunExcelMacroInternalAsync(silent: false);
+        }
+
+        /// <summary>
+        /// Асинхронная версия RunExcelMacroInternal — не блокирует UI.
+        /// Подготовка (пути, sensorCount, caseForCopy) — синхронно,
+        /// работа с Excel — в фоне через Task.Run.
+        /// </summary>
+        private async Task RunExcelMacroInternalAsync(bool silent)
+        {
+            // ═══════════════════════════════════════════════════════════════
+            // 1. Подготовка — синхронно, в UI-потоке
+            // ═══════════════════════════════════════════════════════════════
+
+            string dataFolder = SavePathBox.Text ?? "";
+            if (string.IsNullOrWhiteSpace(dataFolder) || !Directory.Exists(dataFolder))
+            {
+                string msg = "Папка сохранения не существует:\n" + dataFolder;
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ─── Уставка для имени CSV ───
+            string setpoint = "";
+            if (_batchRunning && _currentBatchSetPointForSave > 0)
+            {
+                setpoint = ((int)_currentBatchSetPointForSave).ToString();
+            }
+            else
+            {
+                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
+                    .TrimStart('+').Replace(',', '.');
+                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
+            }
+
+            if (string.IsNullOrEmpty(setpoint))
+            {
+                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
+                    .TrimStart('+').Replace(',', '.');
+                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
+            }
+
+            // ─── CSV-файл ───
+            string? csvPath = FindCsvFile(dataFolder, setpoint);
+            if (csvPath == null)
+            {
+                string msg = "CSV-файл не найден в " + dataFolder;
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ─── Количество датчиков (Case) ───
+            int sensorCount = GetSelectedClientCase();
+            if (sensorCount < 1)
+            {
+                string msg = "Количество датчиков должно быть не меньше 1.\n\n" +
+                             "Убедитесь, что клиент подключён и передал CASE.";
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ─── CASE для второго макроса ───
+            int caseForCopy = GetCurrentBatchCase();
+            if (caseForCopy == 0)
+            {
+                string msg = "Не удалось определить номер текущего задания пакета.\n" +
+                             "Убедитесь, что пакетный режим запущен.";
+                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ─── Родительская папка ───
+            string parentFolder = dataFolder.EndsWith("Данные", StringComparison.OrdinalIgnoreCase)
+                ? dataFolder.Substring(0, dataFolder.Length - "Данные".Length).TrimEnd('\\')
+                : (Directory.GetParent(dataFolder)?.FullName ?? dataFolder);
+
+            // ─── Путь к надстройке IvanoFF.xlam ───
+            string? addinPath = FindAddinPath();
+            if (addinPath == null)
+            {
+                string msg = "Не найден файл надстройки IvanoFF.xlam.";
+                AppendLog($"Excel: {msg}", Brushes.Red);
+                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            AppendLog($"Excel: запуск макросов для {Path.GetFileName(csvPath)} " +
+                      $"(Case={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
+
+            // ═══════════════════════════════════════════════════════════════
+            // 2. Работа с Excel — в фоне, UI не блокируется
+            // ═══════════════════════════════════════════════════════════════
+
+            await Task.Run(() =>
+            {
+                RunExcelPipeline(csvPath, sensorCount, caseForCopy, parentFolder, addinPath, silent);
+            });
         }
 
         private string GetCurrentBatchSetPoint()
@@ -577,131 +829,18 @@ namespace TERMINAL
             return "";
         }
 
-        private void RunExcelMacroInternal(bool silent)
+        /// <summary>
+        /// Синхронная часть работы с Excel. Вызывается из Task.Run — фон.
+        /// Внутри — только COM-вызовы и AppendLog/SetStatus (уже потокобезопасные).
+        /// </summary>
+        private void RunExcelPipeline(
+            string csvPath,
+            int sensorCount,
+            int caseForCopy,
+            string parentFolder,
+            string addinPath,
+            bool silent)
         {
-            // ─── 1. Данные из UI ────────────────────────────────────────────
-            string dataFolder = SavePathBox.Text ?? "";
-            if (string.IsNullOrWhiteSpace(dataFolder) || !Directory.Exists(dataFolder))
-            {
-                string msg = "Папка сохранения не существует:\n" + dataFolder;
-                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // ─── 2. Уставка для имени CSV ──────────────────────────────────
-            string setpoint = "";
-            if (_batchRunning && _currentBatchSetPointForSave > 0)
-            {
-                setpoint = ((int)_currentBatchSetPointForSave).ToString();
-            }
-            else
-            {
-                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
-                    .TrimStart('+').Replace(',', '.');
-                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
-            }
-
-            if (string.IsNullOrEmpty(setpoint))
-            {
-                setpoint = (FurnaceSetPointBox.Text ?? "").Trim()
-                    .TrimStart('+').Replace(',', '.');
-                if (setpoint.Contains('.')) setpoint = setpoint.Split('.')[0];
-            }
-
-            // ─── 3. Поиск CSV-файла ────────────────────────────────────────
-            string[] candidates;
-
-            if (setpoint.StartsWith("-"))
-            {
-                candidates = new[]
-                {
-                    Path.Combine(dataFolder, setpoint + ".csv"),
-                };
-            }
-            else
-            {
-                candidates = new[]
-                {
-                    Path.Combine(dataFolder, "+" + setpoint + ".csv"),
-                    Path.Combine(dataFolder, setpoint + ".csv"),
-                };
-            }
-
-            string? csvPath = candidates.FirstOrDefault(File.Exists);
-
-            if (csvPath == null)
-            {
-                csvPath = Directory.GetFiles(dataFolder, "*.csv")
-                    .OrderByDescending(File.GetLastWriteTime)
-                    .FirstOrDefault();
-
-                if (csvPath == null)
-                {
-                    string msg = "CSV-файл не найден. Пробовал:\n" + string.Join("\n", candidates);
-                    AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                AppendLog($"Excel: использован свежий файл {Path.GetFileName(csvPath)}", Brushes.Gray);
-                StatusText.Text = $"Excel: использован свежий файл {Path.GetFileName(csvPath)}";
-            }
-
-            // ─── 4. Количество датчиков (Case) для первого макроса ────────
-            int sensorCount = GetSelectedClientCase();
-            if (sensorCount < 1)
-            {
-                string msg = "Количество датчиков должно быть не меньше 1.\n\n" +
-                             "Убедитесь, что клиент подключён и передал CASE.";
-                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // ─── 5. CASE для второго макроса — из активного задания ────────
-            int caseForCopy = GetCurrentBatchCase();
-            if (caseForCopy == 0)
-            {
-                string msg = "Не удалось определить номер текущего задания пакета.\n" +
-                             "Убедитесь, что пакетный режим запущен.";
-                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // ─── 6. Папка для второго макроса = родительская от "Данные" ───
-            string parentFolder = dataFolder.EndsWith("Данные", StringComparison.OrdinalIgnoreCase)
-                ? dataFolder.Substring(0, dataFolder.Length - "Данные".Length).TrimEnd('\\')
-                : (Directory.GetParent(dataFolder)?.FullName ?? dataFolder);
-
-            // ─── 7. Путь к надстройке IvanoFF.xlam ─────────────────────────
-            string addinPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                @"Microsoft\AddIns\IvanoFF.xlam");
-
-            if (!File.Exists(addinPath))
-            {
-                string altPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    @"Microsoft\Excel\XLSTART\IvanoFF.xlam");
-
-                if (File.Exists(altPath))
-                    addinPath = altPath;
-                else
-                {
-                    string msg = "Не найден файл надстройки IvanoFF.xlam.\n\n" +
-                                 "Проверьте путь:\n" + addinPath + "\n" + altPath;
-                    AppendLog($"Excel: {msg}", Brushes.Red);
-                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-            }
-
-            AppendLog($"Excel: запуск макросов для {Path.GetFileName(csvPath)} " +
-                      $"(Case={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
-
-            // ─── 8. Запускаем Excel ────────────────────────────────────────
             object? xlApp = null;
             object? csvBook = null;
 
@@ -710,9 +849,10 @@ namespace TERMINAL
                 Type? excelType = Type.GetTypeFromProgID("Excel.Application");
                 if (excelType == null)
                 {
-                    string msg = "Excel не установлен на этой машине.";
-                    AppendLog($"Excel: {msg}", Brushes.Red);
-                    if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+                    AppendLog("Excel: Excel не установлен на этой машине.", Brushes.Red);
+                    if (!silent)
+                        UI(() => MessageBox.Show("Excel не установлен на этой машине.",
+                            "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
                     return;
                 }
 
@@ -720,10 +860,15 @@ namespace TERMINAL
                 xlApp = xl;
                 xl.Visible = false;
                 xl.DisplayAlerts = false;
+                xl.ScreenUpdating = false;
+                xl.EnableEvents = false;
 
+                // ─── Временная книга, чтобы Calculation можно было менять ───
                 dynamic tempBook = xl.Workbooks.Add();
+                xl.Calculation = -4135;   // xlCalculationManual
                 tempBook.Close(false);
 
+                // ─── Загрузка надстройки IvanoFF ───
                 bool addinLoaded = false;
                 dynamic addins = xl.AddIns;
 
@@ -754,6 +899,7 @@ namespace TERMINAL
 
                 AppendLog("Excel: надстройка IvanoFF загружена", Brushes.Gray);
 
+                // ─── Открываем CSV ───
                 csvBook = xl.Workbooks.Open(csvPath);
                 dynamic wb = csvBook;
                 wb.Activate();
@@ -763,10 +909,50 @@ namespace TERMINAL
                 sheet.Range("Z2").Value = caseForCopy;
                 sheet.Range("Z3").Value = parentFolder;
 
-                AppendLog("Excel: запуск макроса «Фильтр КОСА»", Brushes.Blue);
-                xl.Run("Filter_KOSA_GUI_Auto");
-                AppendLog("Excel: макрос «Фильтр КОСА» выполнен", Brushes.Green);
+                // ═══════════════════════════════════════════════════════
+                // ★ МАКРОС 1: выбор фильтра по _sktbFilterScript
+                // ═══════════════════════════════════════════════════════
+                string filterMacro = _sktbFilterScript switch
+                {
+                    "Фильтр_данных_ПДС" => "Фильтр_данных_ПДС",
+                    "Фильтр_данных_БИДТ" => "Фильтр_данных_БИДТ",
+                    "Фильтр_РЧ" => "Фильтр_РЧ",
+                    "Filter_for_KOSA_GUI" => "Filter_KOSA_GUI_Auto",
+                    _ => "Filter_KOSA_GUI_Auto"
+                };
 
+                AppendLog($"Excel: выбран фильтр «{_sktbFilterScript}» → макрос «{filterMacro}»", Brushes.Gray);
+
+                try
+                {
+                    AppendLog($"Excel: запуск макроса «{filterMacro}»", Brushes.Blue);
+                    xl.Run(filterMacro);
+                    AppendLog($"Excel: макрос «{filterMacro}» выполнен", Brushes.Green);
+                }
+                catch (System.Runtime.InteropServices.COMException comEx)
+                {
+                    string msg = comEx.Message;
+
+                    if (msg.Contains("Cannot run the macro"))
+                    {
+                        string friendly = $"Макрос «{filterMacro}» не найден в надстройке IvanoFF.xlam.\n\n" +
+                                          "Проверьте, что в настройках СКТБ ЭлПа выбран существующий скрипт.";
+                        AppendLog($"Excel: {friendly}", Brushes.Red);
+                        if (!silent)
+                            UI(() => MessageBox.Show(friendly, "Excel",
+                                MessageBoxButton.OK, MessageBoxImage.Error));
+                        throw;
+                    }
+
+                    AppendLog($"Excel: ошибка в {filterMacro} — {msg}", Brushes.OrangeRed);
+                    throw;
+                }
+
+                // Ждём завершения пересчёта
+                WaitForExcelIdle(xl, timeoutMs: 30000);
+                System.Threading.Thread.Sleep(800);
+
+                // ─── Перезаписываем Z1/Z2/Z3 в новой книге ───
                 try
                 {
                     dynamic activeBook = xl.ActiveWorkbook;
@@ -781,45 +967,30 @@ namespace TERMINAL
                     AppendLog($"Excel: не удалось перезаписать Z1/Z2/Z3 — {ex.Message}", Brushes.OrangeRed);
                 }
 
-                AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
-                xl.Run("Universal_Insert_FULL_Auto");
-
+                // ═══════════════════════════════════════════════════════
+                // ★ МАКРОС 2: Universal_Insert_FULL_Auto
+                // ═══════════════════════════════════════════════════════
                 try
                 {
-                    var sensors = new List<TERMINAL.Models.SensorSummary>();
-                    foreach (dynamic ws in xl.ActiveWorkbook.Sheets)
-                    {
-                        string wsName = ws.Name;
-                        if (wsName == "TERMINAL" || wsName == "БЧХ" ||
-                            wsName == "ТЧХ" || wsName == "Проверка" ||
-                            wsName == "ChangeLog" || wsName == "Данные")
-                            continue;
-
-                        SensorSummary s = TERMINAL.Services.SummaryService.ReadSensorFromOpenWorkbook(
-                            (object)xl.ActiveWorkbook);
-                        sensors.Add(s);
-
-                        AppendLog($"Прочитан датчик №{s.Number}: " +
-                                  $"опис.град={s.GradDescription}, " +
-                                  $"проверок={s.CheckDescriptions.Count(x => x.HasValue)}, " +
-                                  $"гист.град={s.GradHysteresis.Values.GetLength(0)}x{s.GradHysteresis.Values.GetLength(1)}, " +
-                                  $"погр={s.Errors.Values.GetLength(0)}x{s.Errors.Values.GetLength(1)}",
-                                  Brushes.Green);
-                        break;
-                    }
+                    AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
+                    xl.Run("Universal_Insert_FULL_Auto");
+                    AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
                 }
                 catch (Exception ex)
                 {
-                    AppendLog($"Ошибка чтения: {ex.Message}", Brushes.Red);
+                    AppendLog($"Excel: ошибка в Universal_Insert — {ex.Message}", Brushes.OrangeRed);
+                    throw;
                 }
 
-                AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
+                WaitForExcelIdle(xl, timeoutMs: 60000);
+                System.Threading.Thread.Sleep(500);
 
+                // ─── Закрываем CSV-книгу ───
                 try { wb.Close(false); } catch { }
                 csvBook = null;
 
                 AppendLog($"Excel: обработка завершена — {Path.GetFileName(csvPath)}", Brushes.Green);
-                StatusText.Text = $"Excel: обработка завершена — {Path.GetFileName(csvPath)}";
+                SetStatus($"Excel: обработка завершена — {Path.GetFileName(csvPath)}");
             }
             catch (System.Runtime.InteropServices.COMException comEx)
             {
@@ -837,23 +1008,17 @@ namespace TERMINAL
 
                 AppendLog($"Excel: {friendly}", Brushes.OrangeRed);
                 if (!silent)
-                    MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Excel: ошибка — см. журнал";
-            }
-            catch (FileNotFoundException fnf)
-            {
-                string friendly = $"Файл не найден: {fnf.FileName}";
-                AppendLog($"Excel: {friendly}", Brushes.OrangeRed);
-                if (!silent)
-                    MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Excel: файл не найден";
+                    UI(() => MessageBox.Show(friendly, "Excel",
+                        MessageBoxButton.OK, MessageBoxImage.Error));
+                SetStatusError("Excel: ошибка — см. журнал");
             }
             catch (Exception ex)
             {
                 AppendLog($"Excel: {ex.GetType().Name} — {ex.Message}", Brushes.OrangeRed);
                 if (!silent)
-                    MessageBox.Show($"Ошибка: {ex.Message}", "Excel", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Excel: ошибка — см. журнал";
+                    UI(() => MessageBox.Show($"Ошибка: {ex.Message}", "Excel",
+                        MessageBoxButton.OK, MessageBoxImage.Error));
+                SetStatusError("Excel: ошибка — см. журнал");
             }
             finally
             {
@@ -866,11 +1031,100 @@ namespace TERMINAL
                 {
                     try { ((dynamic)xlApp).Quit(); } catch { }
                     try { Marshal.ReleaseComObject(xlApp); } catch { }
-                    xlApp = null;
                 }
 
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
+            }
+        }
+
+        private void UI(Action action)
+        {
+            if (Dispatcher.CheckAccess()) action();
+            else Dispatcher.Invoke(action);
+        }
+
+        /// <summary>
+        /// Ищет CSV-файл по уставке. Если не найден — берёт самый свежий.
+        /// </summary>
+        private static string? FindCsvFile(string dataFolder, string setpoint)
+        {
+            string[] candidates;
+
+            if (setpoint.StartsWith("-"))
+            {
+                candidates = new[]
+                {
+            Path.Combine(dataFolder, setpoint + ".csv"),
+        };
+            }
+            else
+            {
+                candidates = new[]
+                {
+            Path.Combine(dataFolder, "+" + setpoint + ".csv"),
+            Path.Combine(dataFolder, setpoint + ".csv"),
+        };
+            }
+
+            string? csvPath = candidates.FirstOrDefault(File.Exists);
+
+            if (csvPath == null)
+            {
+                csvPath = Directory.GetFiles(dataFolder, "*.csv")
+                    .OrderByDescending(File.GetLastWriteTime)
+                    .FirstOrDefault();
+            }
+
+            return csvPath;
+        }
+
+        /// <summary>
+        /// Ищет путь к надстройке IvanoFF.xlam.
+        /// </summary>
+        private static string? FindAddinPath()
+        {
+            string addinPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"Microsoft\AddIns\IvanoFF.xlam");
+
+            if (File.Exists(addinPath)) return addinPath;
+
+            string altPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"Microsoft\Excel\XLSTART\IvanoFF.xlam");
+
+            if (File.Exists(altPath)) return altPath;
+
+            return null;
+        }
+
+
+        /// <summary>
+        /// Ждёт, пока Excel завершит все вычисления (CalculationState == xlDone).
+        /// </summary>
+        private void WaitForExcelIdle(dynamic xl, int timeoutMs = 30000)
+        {
+            const int xlDone = 0;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                while (sw.ElapsedMilliseconds < timeoutMs)
+                {
+                    int state = (int)xl.CalculationState;
+                    if (state == xlDone)
+                    {
+                        AppendLog($"Excel: готов (за {sw.ElapsedMilliseconds} мс)", Brushes.Gray);
+                        return;
+                    }
+                    System.Threading.Thread.Sleep(100);
+                }
+                AppendLog($"Excel: WaitForExcelIdle таймаут {timeoutMs} мс", Brushes.OrangeRed);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Excel: WaitForExcelIdle ошибка — {ex.Message}", Brushes.Orange);
             }
         }
 
@@ -923,18 +1177,13 @@ namespace TERMINAL
             }
         }
 
-        private void AutoExcelCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            AppendLog($"AutoExcelCheckBox: {(AutoExcelCheckBox.IsChecked == true ? "включено" : "выключено")}", Brushes.Gray);
-            SaveSettings();
-        }
-
         /// <summary>
         /// Добавляет замер в аккумулятор. Вызывается из каждого таймера.
         /// </summary>
         private void AddTickTiming(string label, long ms)
         {
+            if (!_tickTimingEnabled) return;
+
             if (!Dispatcher.CheckAccess())
             {
                 Dispatcher.Invoke(() => AddTickTiming(label, ms));
@@ -957,6 +1206,8 @@ namespace TERMINAL
         /// </summary>
         private void FlushTickTiming()
         {
+            if (!_tickTimingEnabled) return;
+
             if (!Dispatcher.CheckAccess())
             {
                 Dispatcher.Invoke(FlushTickTiming);
@@ -1036,7 +1287,7 @@ namespace TERMINAL
                     : $"({line2})";
             }
 
-            if (totalMs > 500)
+            if (totalMs > 500 && _logSlowTicks)
             {
                 string allParts = string.Join(", ",
                     ordered.Select(kv => $"{kv.Key} {kv.Value}"));
@@ -1044,5 +1295,33 @@ namespace TERMINAL
                           Brushes.OrangeRed);
             }
         }
+
+        public void ApplyGeneralSettings(
+            bool q2viewEnabled, bool timerEnabled,
+            int timerSeconds, bool autoExcelEnabled,
+            bool tickTimingEnabled, bool logSlowTicksEnabled)
+        {
+            _batchKosaEnabled = q2viewEnabled;
+            _batchTimerEnabled = timerEnabled;
+            _batchKosaTimerSeconds = timerSeconds;
+            _autoExcelEnabled = autoExcelEnabled;
+            _tickTimingEnabled = tickTimingEnabled;
+            _logSlowTicks = logSlowTicksEnabled;
+
+
+            ApplyTickTimingVisibility();
+            UpdateKosaBadge();
+            SaveSettings();
+        }
+
+        private void ApplyTickTimingVisibility()
+        {
+            if (TickTimingPanel != null)
+                TickTimingPanel.Visibility = _tickTimingEnabled
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+        }
+
+
     }
 }

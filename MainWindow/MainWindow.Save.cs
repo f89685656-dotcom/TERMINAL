@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 using TERMINAL.Models;
 
 namespace TERMINAL
@@ -124,7 +125,7 @@ namespace TERMINAL
         {
             if (_isRunning || _batchRunning)
             {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                MessageBox.Show("Идёт градуировка/Бароциклирование. Дождитесь завершения.");
                 return;
             }
             await SaveDataCoreAsync(silent: false);
@@ -182,7 +183,22 @@ namespace TERMINAL
 
                 if (okCount == selected.Count)
                 {
-                    SetStatusSuccess($"Данные очищены во всех клиентах ({okCount})");
+                    // ★ Принудительно обновляем статус, минуя возможные перезаписи
+                    if (Dispatcher.CheckAccess())
+                    {
+                        StatusText.Text = $"Данные успешно очищены (клиентов: {okCount})";
+                        StatusText.Foreground = Brushes.Green;
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            StatusText.Text = $"Данные успешно очищены (клиентов: {okCount})";
+                            StatusText.Foreground = Brushes.Green;
+                        });
+                    }
+
+                    AppendLog($"Данные успешно очищены во всех клиентах ({okCount})", Brushes.Green);
                     return true;
                 }
                 else
@@ -201,10 +217,36 @@ namespace TERMINAL
         {
             if (_isRunning || _batchRunning)
             {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                MessageBox.Show("Идёт градуировка/Бароциклирование. Дождитесь завершения.");
                 return;
             }
             await ClearDataCoreAsync(silent: false);
+        }
+
+        /// <summary>
+        /// Сброс до атмосферы:
+        ///   1) сначала set_point=0 (иначе прибор может уйти в stop, а не в vent)
+        ///   2) потом set_mode=vent
+        /// Возвращает true, если vent применён.
+        /// </summary>
+        private async Task<bool> GoToVentAsync()
+        {
+            // ★ Ставим флаг, что мы в vent
+            _agkInVentMode = true;
+
+            // ★ УБРАЛИ set_point=0 перед vent
+            // Прибор сам стравливает до атмосферы. set_point=0 отправим ПОСЛЕ.
+
+            bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+            if (!ventOk)
+            {
+                AppendLog("GoToVentAsync: set_mode=vent не сработал", Brushes.OrangeRed);
+                _agkInVentMode = false;
+                return false;
+            }
+
+            AppendLog("GoToVentAsync: vent запущен, _agkInVentMode = true", Brushes.Gray);
+            return true;
         }
 
     }

@@ -206,8 +206,6 @@ namespace TERMINAL
             BatchList.IsEnabled = false;
             BatchTargetPressureCombo.IsEnabled = false;
             BatchTimerSetCombo.IsEnabled = false;
-            BatchKosaCheckBox.IsEnabled = false;
-            BatchKosaTimerBox.IsEnabled = false;
 
             foreach (var job in _batchJobs)
                 job.IsEditable = false;
@@ -317,7 +315,7 @@ namespace TERMINAL
                     job.StatusText = job.IsCalibrationMode ? "Идёт съём данных" : "Идёт бароциклирование";
                     job.StatusColor = Brushes.Blue;
 
-                    string modeName = job.IsCalibrationMode ? "Градуировка" : "Жамкать";
+                    string modeName = job.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» " +
                               $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
 
@@ -348,12 +346,21 @@ namespace TERMINAL
                         _ = Dispatcher.InvokeAsync(() => RunPumpForBatchAsync(cycles));
                     }
 
-                    await _batchRunDoneSignal.Task;
+                    // ★ Читаем результат — true = все циклы/шаги отработаны, false = прервано
+                    bool taskCompleted = await _batchRunDoneSignal.Task;
                     _batchRunDoneSignal = null;
 
                     if (_batchStopRequested || _stopRequested)
                     {
                         SetStatusWarning("Пакетный режим остановлен оператором");
+                        return;
+                    }
+
+                    if (!taskCompleted)
+                    {
+                        job.StatusText = "прервано (см. журнал)";
+                        job.StatusColor = Brushes.Red;
+                        SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано — пакет остановлен");
                         return;
                     }
 
@@ -364,6 +371,35 @@ namespace TERMINAL
                 }
 
                 SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
+
+                // ─── Автовыключение печки ───
+                if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
+                {
+                    try
+                    {
+                        AppendLog("Пакет: автовыключение камеры тепла/холода ST-351", Brushes.Blue);
+                        await StopFurnaceAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"Пакет: ошибка автовыключения камеры тепла/холода ST-351 — {ex.Message}", Brushes.OrangeRed);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // ★ Ловим ВСЁ, что прорвалось сквозь внутренние проверки
+                AppendLog($"ПАКЕТ: необработанное исключение — " +
+                          $"{ex.GetType().Name}: {ex.Message}", Brushes.Red);
+
+                if (ex.StackTrace != null)
+                    AppendLog($"ПАКЕТ: stack trace — {ex.StackTrace}", Brushes.Red);
+
+                if (ex.InnerException != null)
+                    AppendLog($"ПАКЕТ: inner — {ex.InnerException.GetType().Name}: " +
+                              $"{ex.InnerException.Message}", Brushes.Red);
+
+                SetStatusError($"Пакет: необработанная ошибка — {ex.Message}");
             }
             finally
             {
@@ -380,8 +416,6 @@ namespace TERMINAL
                 ClearBatchButton.IsEnabled = true;
                 BatchTargetPressureCombo.IsEnabled = true;
                 BatchTimerSetCombo.IsEnabled = true;
-                BatchKosaCheckBox.IsEnabled = true;
-                BatchKosaTimerBox.IsEnabled = true;
                 SetExternalButtonsEnabled(true);
                 BatchList.IsEnabled = true;
 
@@ -399,7 +433,8 @@ namespace TERMINAL
         {
             if (BatchTargetPressureCombo.SelectedItem == null)
             {
-                MessageBox.Show("Не выбран диапазон давлений для «Жамкать»");
+                MessageBox.Show("Не выбран диапазон давлений для «Бароциклирования»");
+                _batchRunDoneSignal?.TrySetResult(false);
                 return;
             }
 
@@ -408,6 +443,7 @@ namespace TERMINAL
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure!, out var steps))
             {
                 MessageBox.Show($"Шаги не заданы для «{_selectedTargetPressure}»");
+                _batchRunDoneSignal?.TrySetResult(false);
                 return;
             }
 
@@ -416,6 +452,7 @@ namespace TERMINAL
             if (noConnection)
             {
                 MessageBox.Show("Нет соединения с прибором.");
+                _batchRunDoneSignal?.TrySetResult(false);
                 return;
             }
 
@@ -430,21 +467,25 @@ namespace TERMINAL
 
             _totalTimerStart = DateTime.Now;
 
+            bool completedAllCycles = false;
+
             try
             {
-                await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold);
+                completedAllCycles = await RunPumpSequenceAsync(maxPressure, cycles, unitsCode, unitsLabel, atmoThreshold);
             }
             catch (Exception ex)
             {
                 StatusText.Text = $"Ошибка: {ex.Message}";
                 StatusText.Foreground = Brushes.Red;
+                completedAllCycles = false;
             }
             finally
             {
                 _isRunning = false;
                 _pauseRequested = false;
 
-                _batchRunDoneSignal?.TrySetResult(true);
+                // ★ Сигналим только реальный успех
+                _batchRunDoneSignal?.TrySetResult(completedAllCycles);
             }
         }
 
@@ -480,7 +521,7 @@ namespace TERMINAL
                     continue;
                 }
 
-                bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
+                bool inRange = Math.Abs(currentTemp - setPoint) <= _furnaceStabilizationTolerance;
 
                 if (inRange)
                 {
@@ -568,7 +609,7 @@ namespace TERMINAL
                     continue;
                 }
 
-                bool inRange = Math.Abs(currentTemp - setPoint) <= FurnaceStabilizationTolerance;
+                bool inRange = Math.Abs(currentTemp - setPoint) <= _furnaceStabilizationTolerance;
 
                 if (inRange)
                 {
@@ -592,39 +633,6 @@ namespace TERMINAL
             }
         }
 
-        private void BatchKosaCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            _batchKosaEnabled = BatchKosaCheckBox.IsChecked == true;
-
-            foreach (var item in _stepItems)
-            {
-                if (item.KosaCounterText == "0/3" || item.KosaCounterText == "0/1")
-                    item.KosaCounterText = _batchKosaEnabled ? "0/3" : "0/1";
-            }
-
-            UpdateKosaBadge();
-            SaveSettings();
-        }
-
-        private void BatchKosaTimerBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
-        {
-            e.Handled = !e.Text.All(char.IsDigit);
-        }
-
-        private void BatchKosaTimerBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-        {
-            if (!_uiLoaded) return;
-            if (BatchKosaTimerBox == null) return;
-
-            string val = BatchKosaTimerBox.Text?.Trim() ?? "";
-            if (int.TryParse(val, out int v) && v > 0)
-            {
-                _batchKosaTimerSeconds = v;
-                UpdateKosaBadge();
-                SaveSettings();
-            }
-        }
 
         private void BatchTargetPressureCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
@@ -1013,7 +1021,7 @@ namespace TERMINAL
 
             // Цветовая индикация
             double abs = Math.Abs(delta);
-            if (abs <= FurnaceStabilizationTolerance)          // ±0.1 °C
+            if (abs <= _furnaceStabilizationTolerance)          // ±0.1 °C
                 BatchDeltaText.Foreground = new SolidColorBrush(Color.FromRgb(0x30, 0xA0, 0x30));  // зелёный
             else if (abs <= 1.0)                                // ±1 °C
                 BatchDeltaText.Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xA0, 0x30));  // оранжевый

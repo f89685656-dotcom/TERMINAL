@@ -116,7 +116,7 @@ namespace TERMINAL.Models
             }
         }
 
-        public string ModeLabel => _isCalibrationMode ? "Градуировка" : "Жамкать";
+        public string ModeLabel => _isCalibrationMode ? "Градуировка" : "Бароциклирование";
 
         public float SetPoint { get; set; }
         public int StabilizationMinutes { get; set; } = 120;

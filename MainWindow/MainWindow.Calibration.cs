@@ -90,6 +90,8 @@ namespace TERMINAL
 
                 ResetStepTimers();
             }
+            await SendCommandAsync("set_point=0;");       // сначала
+            await Task.Delay(100);                        // небольшая пауза
             string? resp = await SendCommandAsync("set_mode=vent;");
             SetStatus($"Сброс отправлен: {resp}");
         }
@@ -97,7 +99,7 @@ namespace TERMINAL
         {
             if (_isRunning || _batchRunning)
             {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                MessageBox.Show("Идёт градуировка/Бароциклирование. Дождитесь завершения.");
                 return;
             }
 
@@ -221,14 +223,14 @@ namespace TERMINAL
                             await ClearDataCoreAsync(silent: true);
 
                             // ─── Автозапуск Excel ───
-                            bool autoExcelEnabled = AutoExcelCheckBox?.IsChecked == true;
+                            bool autoExcelEnabled = _autoExcelEnabled;
 
                             if (autoExcelEnabled && !_stopRequested && !_batchStopRequested)
                             {
                                 try
                                 {
                                     AppendLog("Excel: автозапуск после градуировки", Brushes.Blue);
-                                    RunExcelMacroInternal(silent: true);
+                                    await RunExcelMacroInternalAsync(silent: true);
                                 }
                                 catch (Exception ex)
                                 {
@@ -301,7 +303,7 @@ namespace TERMINAL
                     if (!currentP.HasValue || Math.Abs(currentP.Value) >= atmoThreshold)
                     {
                         SetStatus($"Шаг {human}: ТЕСТ — сброс до атмосферы (vent)");
-                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        bool ventOk = await GoToVentAsync();
                         if (!ventOk) return;
 
                         SetStatus($"Шаг {human}: ТЕСТ — ожидание снижения давления");
@@ -332,7 +334,7 @@ namespace TERMINAL
                     if (v == 0)
                     {
                         SetStatus("Шаг 1: сброс до атмосферы (vent)");
-                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        bool ventOk = await GoToVentAsync();
                         if (!ventOk) return;
 
                         SetStatus($"Шаг 1: измерение {duration} сек");
@@ -355,11 +357,27 @@ namespace TERMINAL
                         if (!m2) return;
 
                         SetStatus($"Шаг 1: установка {v}");
-                        bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
-                        if (!setOk) return;
+
+                        _agkBatchBusy = true;
+                        try
+                        {
+                            bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
+                            if (!setOk) return;
+                            await Task.Delay(1000);
+                        }
+                        finally
+                        {
+                            _agkBatchBusy = false;
+                        }
+
+                        lock (_agkStateLock)
+                        {
+                            _agkState.StateInPointOk = false;
+                            _agkState.StateInPointWait = true;
+                        }
 
                         SetStatus("Шаг 1: ожидание стабилизации");
-                        bool stable = await WaitForStateInPointAsync();
+                        bool stable = await WaitForStateInPointAsync(v);
                         if (!stable) return;
 
                         SetStatus($"Шаг 1: измерение {duration} сек");
@@ -386,7 +404,7 @@ namespace TERMINAL
                     if (v == 0)
                     {
                         SetStatus($"Шаг {human}: сброс до атмосферы (vent)");
-                        bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
+                        bool ventOk = await GoToVentAsync();
                         if (!ventOk) return;
 
                         SetStatus($"Шаг {human}: ожидание снижения давления");
@@ -406,11 +424,27 @@ namespace TERMINAL
                         if (!m2) return;
 
                         SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
-                        bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
-                        if (!setOk) return;
+
+                        _agkBatchBusy = true;
+                        try
+                        {
+                            bool setOk = await SendWithRetryAsync($"set_point={v};", "ok;");
+                            if (!setOk) return;
+                            await Task.Delay(1000);
+                        }
+                        finally
+                        {
+                            _agkBatchBusy = false;
+                        }
+
+                        lock (_agkStateLock)
+                        {
+                            _agkState.StateInPointOk = false;
+                            _agkState.StateInPointWait = true;
+                        }
 
                         SetStatus($"Шаг {human}: ожидание стабилизации");
-                        bool stable = await WaitForStateInPointAsync();
+                        bool stable = await WaitForStateInPointAsync(v);
                         if (!stable) return;
                     }
 
@@ -443,11 +477,27 @@ namespace TERMINAL
                 if (!mm2) return;
 
                 SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
-                bool setOk2 = await SendWithRetryAsync($"set_point={v};", "ok;");
-                if (!setOk2) return;
+
+                _agkBatchBusy = true;
+                try
+                {
+                    bool setOk2 = await SendWithRetryAsync($"set_point={v};", "ok;");
+                    if (!setOk2) return;
+                    await Task.Delay(1000);
+                }
+                finally
+                {
+                    _agkBatchBusy = false;
+                }
+
+                lock (_agkStateLock)
+                {
+                    _agkState.StateInPointOk = false;
+                    _agkState.StateInPointWait = true;
+                }
 
                 SetStatus($"Шаг {human}: ожидание стабилизации");
-                bool stable2 = await WaitForStateInPointAsync();
+                bool stable2 = await WaitForStateInPointAsync(v);
                 if (!stable2) return;
 
                 SetStatus($"Шаг {human}: измерение {duration} сек");
@@ -467,39 +517,40 @@ namespace TERMINAL
             }
 
             // ─── Финальный сброс ───
-            // Если последнее давление в программе ≠ 0 — сброс до атмосферы + уставка 0
             double lastPressure = steps[steps.Length - 1];
             if (lastPressure != 0)
             {
                 SetStatus("Программа завершена — финальный сброс до атмосферы");
-                bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
-                if (ventOk)
-                {
-                    SetStatus("Ожидание снижения давления");
-                    await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
+                bool ventOk = await GoToVentAsync();
+                if (!ventOk) return;
 
-                    SetStatus("Уставка → 0");
-                    await SendWithRetryAsync("set_point=0;", "ok;");
-                }
+                SetStatus("Ожидание снижения давления");
+                await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
             }
 
             SetStatus("Программа завершена");
         }
-        private async Task RunPumpSequenceAsync(double maxPressure, int totalCycles, string unitsCode, string unitsLabel, double atmoThreshold)
+
+
+        private async Task<bool> RunPumpSequenceAsync(double maxPressure, int totalCycles, string unitsCode, string unitsLabel, double atmoThreshold)
         {
             MaxArrow.Text = "  ";
             MinArrow.Text = "  ";
 
             SetStatus($"Установка единиц: {unitsCode}");
             bool unitsOk = await SendWithRetryAsync($"set_units={unitsCode};", "ok;");
-            if (!unitsOk) return;
+            if (!unitsOk)
+            {
+                AppendLog("[Жамки] set_units не подтвердился — прерывание", Brushes.OrangeRed);
+                return false;
+            }
 
             _currentPressureUnitsLabel = unitsLabel;
 
             for (int cycle = 1; cycle <= totalCycles; cycle++)
             {
-                if (_stopRequested) return;
-                if (!await WaitIfPausedAsync()) return;
+                if (_stopRequested) return false;
+                if (!await WaitIfPausedAsync()) return false;
 
                 MaxArrow.Text = "  ";
                 MinArrow.Text = "  ";
@@ -511,38 +562,76 @@ namespace TERMINAL
 
                 SetStatus($"[Цикл {cycle}] set_mode=control (1)");
                 bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m1) return;
+                if (!m1)
+                {
+                    AppendLog($"[Цикл {cycle}] set_mode=control (1) не подтвердился — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 await SafeDelayAsync(1000);
 
                 SetStatus($"[Цикл {cycle}] set_mode=control (2)");
                 bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
-                if (!m2) return;
+                if (!m2)
+                {
+                    AppendLog($"[Цикл {cycle}] set_mode=control (2) не подтвердился — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 SetStatus($"[Цикл {cycle}] установка {maxPressure}");
                 bool setOk = await SendWithRetryAsync(
                     $"set_point={maxPressure.ToString(CultureInfo.InvariantCulture)};", "ok;");
-                if (!setOk) return;
+                if (!setOk)
+                {
+                    AppendLog($"[Цикл {cycle}] set_point не подтвердился — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
+
+                // ★ СБРОС КЭША перед ожиданием (как в RunSequenceAsync)
+                lock (_agkStateLock)
+                {
+                    _agkState.StateInPointOk = false;
+                    _agkState.StateInPointWait = true;
+                }
 
                 MaxArrow.Text = "→";
 
                 SetStatus($"[Цикл {cycle}] ожидание стабилизации");
-                bool stable = await WaitForStateInPointAsync();
-                if (!stable) return;
+                // ★ Передаем maxPressure!
+                bool stable = await WaitForStateInPointAsync(maxPressure);
+                if (!stable)
+                {
+                    AppendLog($"[Цикл {cycle}] стабилизация не достигнута — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем максимальное давление");
                 await RunTimerWithRightBlockAsync(300, true);
 
                 SetStatus($"[Цикл {cycle}] сброс (vent)");
-                bool ventOk = await SendWithRetryAsync("set_mode=vent;", "ok;");
-                if (!ventOk) return;
+                bool ventOk = await GoToVentAsync();
+                if (!ventOk)
+                {
+                    AppendLog($"[Цикл {cycle}] vent не подтвердился — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 MaxArrow.Text = "  ";
                 MinArrow.Text = "→";
 
                 SetStatus($"[Цикл {cycle}] ожидание снижения");
                 bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
-                if (!lowOk) return;
+                if (!lowOk)
+                {
+                    AppendLog($"[Цикл {cycle}] давление не снизилось ниже порога — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем атмосферное давление");
                 await RunTimerWithRightBlockAsync(300, false);
@@ -553,71 +642,124 @@ namespace TERMINAL
             MaxTimerText.Text = "";
             MinTimerText.Text = "";
 
-            SetStatus($"«Жамкать» завершено ({totalCycles} циклов)");
+            SetStatus($"Режим «Бароциклирование» завершён, сделано ({totalCycles} циклов)");
+            return true;
         }
+
+
+
+        /// <summary>
+        /// Таймер выдержки. Идёт по часам (DateTime), не зависит от get_state_in_point.
+        /// 
+        /// Максимум (isMax = true):
+        ///   • раз в секунду проверяет get_state_in_point;
+        ///   • при срыве (ok → не ok) прибавляет +30 сек к оставшемуся времени;
+        ///   • если ok; не приходит — штраф больше не начисляется, просто ждём;
+        ///   • если ok; снова пришёл и снова пропал — новый +30.
+        /// 
+        /// Атмосфера (isMax = false):
+        ///   • get_state_in_point; НЕ проверяется вообще;
+        ///   • чистый отсчёт времени.
+        /// 
+        /// Пауза останавливает таймер (сдвигает startTime).
+        /// UI обновляется только при смене значения.
+        /// </summary>
         private async Task RunTimerWithRightBlockAsync(int seconds, bool isMax)
         {
-            int remaining = seconds;
+            var startTime = DateTime.Now;
+            int lastDisplayed = seconds;
 
-            if (!isMax)
-            {
-                SetStatus($"Атмосфера: таймер запущен на {remaining} сек");
+            if (isMax) MaxTimerText.Text = seconds.ToString();
+            else MinTimerText.Text = seconds.ToString();
 
-                while (remaining > 0)
-                {
-                    if (_stopRequested) return;
+            SetStatus($"{(isMax ? "Максимум" : "Атмосфера")}: таймер запущен на {seconds} сек");
 
-                    var cycleStart = DateTime.Now;
+            var lastStateCheck = DateTime.MinValue;
+            bool lastStateOk = true;   // считаем, что в начале всё ок
 
-                    await RefreshPressureAndSetPointAsync();
-                    string? stateResponse = await SendCommandAsync("get_state_in_point;");
-
-                    if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
-                    {
-                        remaining--;
-                        MinTimerText.Text = remaining.ToString();
-                    }
-
-                    SetStatus($"Атмосфера: {remaining} сек", log: false);
-
-                    long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
-                    AddTickTiming("timer-atmo", pureMs);
-
-                    int sleep = 1000 - (int)pureMs;
-                    if (sleep > 0) await SafeDelayAsync(sleep);
-                }
-
-                MinTimerText.Text = "0";
-                return;
-            }
-
-            SetStatus($"Максимум: таймер запущен на {remaining} сек");
-
-            while (remaining > 0)
+            while (true)
             {
                 if (_stopRequested) return;
+                if (!await WaitIfPausedAsync()) return;
 
-                var cycleStart = DateTime.Now;
-
-                await RefreshPressureAndSetPointAsync();
-                string? stateResponse = await SendCommandAsync("get_state_in_point;");
-
-                if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
+                // ─── Пауза: сдвигаем старт, чтобы «потерянное» время не считалось ───
+                if (_pauseRequested)
                 {
-                    remaining--;
-                    MaxTimerText.Text = remaining.ToString();
+                    var pauseStart = DateTime.Now;
+                    while (_pauseRequested && !_stopRequested)
+                        await Task.Delay(100);
+
+                    if (_stopRequested) return;
+
+                    startTime += (DateTime.Now - pauseStart);
                 }
 
-                SetStatus($"Максимум: {remaining} сек", log: false);
+                // ─── Проверка state_in_point — ТОЛЬКО для максимума ───
+                if (isMax && (DateTime.Now - lastStateCheck).TotalMilliseconds >= 3000)
+                {
+                    lastStateCheck = DateTime.Now;
 
-                long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
-                AddTickTiming("timer-max", pureMs);
+                    string? stateResponse = await SendCommandAsync("get_state_in_point;");
+                    bool stateOk = stateResponse != null &&
+                                   stateResponse.Contains("ok;", StringComparison.Ordinal);
 
-                int sleep = 1000 - (int)pureMs;
-                if (sleep > 0) await SafeDelayAsync(sleep);
+                    // ★ Временно: логируем сырой ответ
+                    //    (только первые 30 секунд после запуска таймера, чтобы не залить журнал)
+                    //if ((DateTime.Now - startTime).TotalSeconds < 30)
+                    //{
+                    //    AppendLog($"Максимум: state='{stateResponse}'", Brushes.Gray);
+                    //}
+
+                    if (!stateOk)
+                    {
+                        if (lastStateOk)
+                        {
+                            // ★ Срыв только что случился — штраф один раз
+                            AppendLog($"Максимум: срыв с регулировки → +30 сек", Brushes.OrangeRed);
+
+                            startTime += TimeSpan.FromSeconds(30);
+
+                            int newRemaining = seconds - (int)((DateTime.Now - startTime).TotalSeconds);
+                            if (newRemaining > 0)
+                            {
+                                MaxTimerText.Text = newRemaining.ToString();
+                                lastDisplayed = newRemaining;
+                            }
+                        }
+
+                        lastStateOk = false;
+                        // не выходим, продолжаем таймер
+                    }
+                    else
+                    {
+                        lastStateOk = true;
+                    }
+                }
+
+                // ─── Основной расчёт времени ───
+                var elapsed = DateTime.Now - startTime;
+                int remaining = seconds - (int)elapsed.TotalSeconds;
+
+                if (remaining <= 0)
+                {
+                    if (isMax) MaxTimerText.Text = "0";
+                    else MinTimerText.Text = "0";
+                    return;
+                }
+
+                // ─── Обновляем UI только когда значение изменилось ───
+                if (remaining != lastDisplayed)
+                {
+                    lastDisplayed = remaining;
+
+                    if (isMax) MaxTimerText.Text = remaining.ToString();
+                    else MinTimerText.Text = remaining.ToString();
+
+                    SetStatus($"{(isMax ? "Максимум" : "Атмосфера")}: {remaining} сек", log: false);
+                }
+
+                await Task.Delay(200);   // 5 раз в секунду
             }
-
-            MaxTimerText.Text = "0";
         }
         private async Task RunTimerWithStepAsync(int seconds, int stepIndex, bool waitForState)
         {
@@ -629,6 +771,8 @@ namespace TERMINAL
 
                 while (remaining > 0)
                 {
+                    if (_stopRequested) return;
+
                     var cycleStart = DateTime.Now;
 
                     remaining--;
@@ -664,30 +808,33 @@ namespace TERMINAL
                 long unitsMs = 0;
                 long stateMs = 0;
 
-                // ─── RefreshPressure ───
+                // ─── RefreshPressure (из кэша, мгновенно) ───
                 var t1 = DateTime.Now;
-                await RefreshPressureAndSetPointAsync();
+                AgkSnapshot snap;
+                lock (_agkStateLock) snap = _agkState;
+                _lastKnownPressure = snap.Pressure;
                 refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
 
-                // ─── get_units ───
+                // ─── get_units (из кэша) ───
                 var t2 = DateTime.Now;
-                string? unitsResponse = await SendCommandAsync("get_units;");
-                if (unitsResponse != null) UpdateUnits(unitsResponse);
+                if (!string.IsNullOrEmpty(snap.Units))
+                    UpdateUnits(snap.Units);
                 unitsMs = (long)(DateTime.Now - t2).TotalMilliseconds;
 
-                // ─── get_state_in_point ───
+                // ─── get_state_in_point (из кэша) ───
                 var t3 = DateTime.Now;
-                string? stateResponse = await SendCommandAsync("get_state_in_point;");
+                bool stateOk = snap.StateInPointOk;
+                bool stateWait = snap.StateInPointWait;
                 stateMs = (long)(DateTime.Now - t3).TotalMilliseconds;
 
-                if (stateResponse != null && stateResponse.Contains("ok;", StringComparison.Ordinal))
+                if (stateOk)
                 {
                     firstOkReceived = true;
                     remaining--;
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
-                else if (stateResponse != null && stateResponse.Contains("wait;", StringComparison.Ordinal))
+                else if (stateWait)
                 {
                     if (firstOkReceived)
                     {
@@ -708,8 +855,8 @@ namespace TERMINAL
                         SetStatus($"До начала съёма данных: {remaining} сек", log: false);
                         await SafeDelayAsync(1000);
 
-                        string? s = await SendCommandAsync("get_state_in_point;");
-                        if (s != null && s.Contains("ok;", StringComparison.Ordinal))
+                        lock (_agkStateLock) snap = _agkState;
+                        if (snap.StateInPointOk)
                         {
                             firstOkReceived = true;
                             break;
@@ -735,6 +882,8 @@ namespace TERMINAL
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
         }
+
+
         private string GetUnitsCode(string? tp)
         {
             if (string.IsNullOrEmpty(tp)) return "kgs";

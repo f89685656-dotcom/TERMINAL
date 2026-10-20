@@ -279,34 +279,11 @@
                                         Orientation="Horizontal"
                                         VerticalAlignment="Center" Margin="0,0,0,5">
                                 <TextBlock Text="Таймеры:" FontSize="11"
-                                           VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        VerticalAlignment="Center" Margin="0,0,4,0"/>
                                 <ComboBox x:Name="BatchTimerSetCombo"
-                                          Width="110" Height="22" FontSize="11"
-                                          Padding="3,1" VerticalContentAlignment="Center"
-                                          SelectionChanged="BatchTimerSetCombo_SelectionChanged"/>
-                                <CheckBox x:Name="BatchKosaCheckBox"
-                                          Content="q2view:" FontSize="11"
-                                          VerticalAlignment="Center" Margin="10,0,4,0"
-                                          Checked="BatchKosaCheckBox_Changed"
-                                          Unchecked="BatchKosaCheckBox_Changed"/>
-                                <CheckBox x:Name="AutoExcelCheckBox"
-                                          Content="Автозаполнение Excel"
-                                          FontSize="11"
-                                          VerticalAlignment="Center"
-                                          Margin="15,0,4,0"
-                                          IsChecked="True"
-                                          Checked="AutoExcelCheckBox_Changed"
-                                          Unchecked="AutoExcelCheckBox_Changed"
-                                          ToolTip="Автоматически запускать макросы Excel после градуировки"/>
-                                <TextBox x:Name="BatchKosaTimerBox"
-                                         Width="38" Height="22" FontSize="11"
-                                         Text="25" Padding="3,1"
-                                         HorizontalContentAlignment="Center"
-                                         VerticalContentAlignment="Center"
-                                         PreviewTextInput="BatchKosaTimerBox_PreviewTextInput"
-                                         TextChanged="BatchKosaTimerBox_TextChanged"/>
-                                <TextBlock Text="сек" FontSize="11"
-                                           VerticalAlignment="Center" Margin="3,0,0,0"/>
+                                      Width="120" Height="22" FontSize="11"
+                                      Padding="3,1" VerticalContentAlignment="Center"
+                                      SelectionChanged="BatchTimerSetCombo_SelectionChanged"/>
                             </StackPanel>
 
                             <!-- Строка 2 -->
@@ -383,7 +360,7 @@
                                                         <!-- 4 Stabilization -->
                                                         <ColumnDefinition Width="30"/>
                                                         <!-- 5 мин -->
-                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="130"/>
                                                         <!-- 6 ComboBox режим -->
                                                         <ColumnDefinition Width="45"/>
                                                         <!-- 7 шаг/цикл -->
@@ -439,7 +416,7 @@
                                                               IsEnabled="{Binding IsEditable}"
                                                               ToolTip="Режим">
                                                         <ComboBoxItem Content="Градуировка"/>
-                                                        <ComboBoxItem Content="Жамкать"/>
+                                                        <ComboBoxItem Content="Бароциклирование"/>
                                                     </ComboBox>
 
                                                     <TextBox Grid.Column="7"
@@ -474,7 +451,8 @@
                                                     <StackPanel Grid.Column="9"
                                                                 Orientation="Horizontal"
                                                                 VerticalAlignment="Center"
-                                                                Margin="0,0,5,0">
+                                                                Margin="0,0,5,0"
+                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}">
                                                         <TextBlock Text="Точка:" FontSize="10"
                                                                    Foreground="#FF505050"
                                                                    VerticalAlignment="Center"
@@ -1212,7 +1190,7 @@
                         Height="28" Width="110" FontSize="12" Padding="4,3" Margin="6,0,0,0"
                         Background="#FFD08080"
                         Click="RemoveOffline_Click"/>
-                <Button x:Name="RunExcelMacroButton" Content="Открыть в Excel"
+                <Button x:Name="RunExcelMacroButton" Content="Тесты в Excel"
                         Style="{StaticResource ActionButtonStyle}"
                         Height="28" Width="130" FontSize="12" Padding="4,3" Margin="6,0,0,0"
                         Background="#FF6A4FA0"
@@ -1318,10 +1296,11 @@
         <!-- ROW 3: Такт (вся ширина) -->
         <!-- ROW 3: Такт (2 строки) -->
         <Border Grid.Row="3"
-        BorderBrush="#FFE0E0E0"
-        BorderThickness="0,1,0,0"
-        Padding="0,3,0,3"
-        Margin="0,4,0,0">
+                    x:Name="TickTimingPanel"
+                    BorderBrush="#FFE0E0E0"
+                    BorderThickness="0,1,0,0"
+                    Padding="0,3,0,3"
+                    Margin="0,4,0,0">
             <StackPanel Orientation="Vertical">
                 <TextBlock x:Name="TickTimingText"
                    Text="такт: —"

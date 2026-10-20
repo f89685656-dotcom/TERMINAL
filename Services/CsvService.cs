@@ -27,7 +27,7 @@ namespace TERMINAL.Services
             sb.AppendLine("# ═══ СВОДКА ═══");
             sb.AppendLine("Датчик;Опис_Град;Пров_1;Пров_2;Пров_3;Пров_4;Пров_5");
 
-            foreach (var s in batch.Sensors.OrderBy(x => x.Number))
+            foreach (var s in batch.Sensors)
             {
                 sb.Append(s.Number).Append(';');
                 sb.Append(FormatNullable(s.GradDescription)).Append(';');
@@ -43,7 +43,7 @@ namespace TERMINAL.Services
 
             sb.AppendLine();
 
-            foreach (var s in batch.Sensors.OrderBy(x => x.Number))
+            foreach (var s in batch.Sensors)
             {
                 sb.AppendLine($"# ═══ ДАТЧИК: {s.Number} ═══");
                 sb.AppendLine();
@@ -174,6 +174,7 @@ namespace TERMINAL.Services
 
             SensorSummary? current = null;
             string currentSection = "";
+            int sensorIndex = 0;
 
             for (; i < lines.Length; i++)
             {
@@ -183,14 +184,16 @@ namespace TERMINAL.Services
 
                 if (line.StartsWith("# ═══ ДАТЧИК:"))
                 {
-                    string numStr = line
-                        .Replace("# ═══ ДАТЧИК:", "")
-                        .Replace("═══", "")
-                        .Trim();
-
-                    if (int.TryParse(numStr, out int num))
-                        current = batch.Sensors.FirstOrDefault(s => s.Number == num);
-
+                    // ← здесь заменить на код выше
+                    if (sensorIndex < batch.Sensors.Count)
+                    {
+                        current = batch.Sensors[sensorIndex];
+                        sensorIndex++;
+                    }
+                    else
+                    {
+                        current = null;
+                    }
                     currentSection = "";
                     continue;
                 }
@@ -340,7 +343,6 @@ namespace TERMINAL.Services
                     var headers = line.Split(';')
                         .Skip(1)
                         .Select(x => ParseDouble(x))
-                        .Where(x => x != 0)
                         .ToList();
 
                     var table = new TableData { ColumnHeaders = headers };

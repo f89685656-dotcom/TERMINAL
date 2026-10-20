@@ -462,7 +462,7 @@ namespace TERMINAL
         {
             if (_isRunning || _batchRunning)
             {
-                MessageBox.Show("Идёт градуировка/жамкать. Дождитесь завершения.");
+                MessageBox.Show("Идёт градуировка/Бароциклирование. Дождитесь завершения.");
                 return;
             }
 
@@ -610,10 +610,11 @@ namespace TERMINAL
 
             while (!firstOkReceived)
             {
-                await RefreshPressureAndSetPointAsync();
-                string? s = await SendCommandAsync("get_state_in_point;");
 
-                if (s != null && s.Contains("ok;", StringComparison.Ordinal))
+                AgkSnapshot snap;
+                lock (_agkStateLock) snap = _agkState;
+
+                if (snap.StateInPointOk)
                     firstOkReceived = true;
                 else
                 {
@@ -631,27 +632,29 @@ namespace TERMINAL
                 long stateMs = 0;
                 long uiMs = 0;
 
-                // ─── Каждый тик — RefreshPressure ───
+                // ─── RefreshPressure (из кэша, мгновенно) ───
                 var t1 = DateTime.Now;
-                await RefreshPressureAndSetPointAsync();
                 refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
 
-                // ─── Каждый тик — get_state_in_point ───
+                // ─── get_state_in_point — из кэша ───
                 var t2 = DateTime.Now;
-                string? s = await SendCommandAsync("get_state_in_point;");
+                AgkSnapshot snap;
+                lock (_agkStateLock) snap = _agkState;
+                bool stateOk = snap.StateInPointOk;
+                bool stateWait = snap.StateInPointWait;
                 stateMs = (long)(DateTime.Now - t2).TotalMilliseconds;
 
                 // ─── UI и логика ───
                 var t3 = DateTime.Now;
 
-                if (s != null && s.Contains("ok;", StringComparison.Ordinal))
+                if (stateOk)
                 {
                     remaining--;
                     SetStatus($"КОСА: пауза {remaining} сек", running: true, log: false);
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
-                else if (s != null && s.Contains("wait;", StringComparison.Ordinal))
+                else if (stateWait)
                 {
                     remaining += 30;
                     SetStatus($"КОСА: срыв! Таймер +30 сек. Осталось: {remaining}",
@@ -660,14 +663,16 @@ namespace TERMINAL
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
+                    // Ждём, пока StateInPointOk снова не станет true
                     while (true)
                     {
                         await SafeDelayAsync(1000);
-                        string? s2 = await SendCommandAsync("get_state_in_point;");
-                        if (s2 != null && s2.Contains("ok;", StringComparison.Ordinal))
-                            break;
+
+                        lock (_agkStateLock) snap = _agkState;
+                        if (snap.StateInPointOk) break;
                     }
                 }
+                // Если ни ok, ни wait — ничего не делаем, ждём следующий тик.
 
                 uiMs = (long)(DateTime.Now - t3).TotalMilliseconds;
 
