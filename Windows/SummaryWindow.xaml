@@ -103,12 +103,12 @@
                   FontSize="12">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="№" Binding="{Binding Number}" Width="50"/>
-                <DataGridTextColumn Header="Опис.град." Binding="{Binding GradDescription, StringFormat=0.0000}" Width="90"/>
-                <DataGridTextColumn Header="Пров.1" Binding="{Binding Check1, StringFormat=0.0000}" Width="80"/>
-                <DataGridTextColumn Header="Пров.2" Binding="{Binding Check2, StringFormat=0.0000}" Width="80"/>
-                <DataGridTextColumn Header="Пров.3" Binding="{Binding Check3, StringFormat=0.0000}" Width="80"/>
-                <DataGridTextColumn Header="Пров.4" Binding="{Binding Check4, StringFormat=0.0000}" Width="80"/>
-                <DataGridTextColumn Header="Пров.5" Binding="{Binding Check5, StringFormat=0.0000}" Width="80"/>
+                <DataGridTextColumn Header="Опис.град." Binding="{Binding GradDescriptionText}" Width="90"/>
+                <DataGridTextColumn Header="Пров.1" Binding="{Binding Check1Text}" Width="80"/>
+                <DataGridTextColumn Header="Пров.2" Binding="{Binding Check2Text}" Width="80"/>
+                <DataGridTextColumn Header="Пров.3" Binding="{Binding Check3Text}" Width="80"/>
+                <DataGridTextColumn Header="Пров.4" Binding="{Binding Check4Text}" Width="80"/>
+                <DataGridTextColumn Header="Пров.5" Binding="{Binding Check5Text}" Width="80"/>
             </DataGrid.Columns>
         </DataGrid>
 

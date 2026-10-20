@@ -1650,5 +1650,30 @@ namespace TERMINAL.Windows
         public double? Check4 { get; set; }
         public double? Check5 { get; set; }
         public SensorSummary Source { get; set; } = null!;
+
+        // ★ ДОБАВЛЕНО: безопасные строковые свойства для привязки в XAML
+        public string GradDescriptionText => GradDescription.HasValue && GradDescription.Value != 0
+            ? GradDescription.Value.ToString("0.0000")
+            : "—";
+
+        public string Check1Text => Check1.HasValue && Check1.Value != 0
+            ? Check1.Value.ToString("0.0000")
+            : "—";
+
+        public string Check2Text => Check2.HasValue && Check2.Value != 0
+            ? Check2.Value.ToString("0.0000")
+            : "—";
+
+        public string Check3Text => Check3.HasValue && Check3.Value != 0
+            ? Check3.Value.ToString("0.0000")
+            : "—";
+
+        public string Check4Text => Check4.HasValue && Check4.Value != 0
+            ? Check4.Value.ToString("0.0000")
+            : "—";
+
+        public string Check5Text => Check5.HasValue && Check5.Value != 0
+            ? Check5.Value.ToString("0.0000")
+            : "—";
     }
 }
