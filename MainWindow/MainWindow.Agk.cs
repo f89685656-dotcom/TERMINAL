@@ -539,9 +539,9 @@ namespace TERMINAL
                                   Brushes.Green);
 
                         // ★ Обнуляем уставку БЕЗ ожидания ответа
-                        await Task.Delay(2000);
-                        await SendCommandNoWaitAsync("set_point=0;");
-                        AppendLog("WaitUntilPressureBelow: уставка обнулена (set_point=0)", Brushes.Gray);
+                        //await Task.Delay(2000);
+                        //await SendCommandNoWaitAsync("set_point=0;");
+                        //AppendLog("WaitUntilPressureBelow: уставка обнулена (set_point=0)", Brushes.Gray);
 
                         return true;
                     }
