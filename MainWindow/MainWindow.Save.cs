@@ -183,7 +183,22 @@ namespace TERMINAL
 
                 if (okCount == selected.Count)
                 {
-                    SetStatusSuccess($"Данные очищены во всех клиентах ({okCount})");
+                    // ★ Принудительно обновляем статус, минуя возможные перезаписи
+                    if (Dispatcher.CheckAccess())
+                    {
+                        StatusText.Text = $"Данные успешно очищены (клиентов: {okCount})";
+                        StatusText.Foreground = Brushes.Green;
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            StatusText.Text = $"Данные успешно очищены (клиентов: {okCount})";
+                            StatusText.Foreground = Brushes.Green;
+                        });
+                    }
+
+                    AppendLog($"Данные успешно очищены во всех клиентах ({okCount})", Brushes.Green);
                     return true;
                 }
                 else

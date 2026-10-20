@@ -590,10 +590,18 @@ namespace TERMINAL
                     return false;
                 }
 
+                // ★ СБРОС КЭША перед ожиданием (как в RunSequenceAsync)
+                lock (_agkStateLock)
+                {
+                    _agkState.StateInPointOk = false;
+                    _agkState.StateInPointWait = true;
+                }
+
                 MaxArrow.Text = "→";
 
                 SetStatus($"[Цикл {cycle}] ожидание стабилизации");
-                bool stable = await WaitForStateInPointAsync();
+                // ★ Передаем maxPressure!
+                bool stable = await WaitForStateInPointAsync(maxPressure);
                 if (!stable)
                 {
                     AppendLog($"[Цикл {cycle}] стабилизация не достигнута — прерывание",
