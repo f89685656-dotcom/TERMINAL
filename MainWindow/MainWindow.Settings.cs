@@ -77,6 +77,11 @@ namespace TERMINAL
                 _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
                 _logSlowTicks = _loadedSettings.LogSlowTicks;
 
+                // ─── Уведомления ───
+                _notificationsEnabled = _loadedSettings.NotificationsEnabled;
+                _telegramToken = _loadedSettings.TelegramToken ?? "";
+                _telegramChatId = _loadedSettings.TelegramChatId ?? "";
+
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
                 {
@@ -107,6 +112,9 @@ namespace TERMINAL
                 _loadedSettings = new Settings();
                 _batchKosaEnabled = false;
                 _batchKosaTimerSeconds = 25;
+                _notificationsEnabled = false;
+                _telegramToken = "";
+                _telegramChatId = "";
 
                 string docs = Environment.GetFolderPath(
                     Environment.SpecialFolder.MyDocuments);
@@ -141,6 +149,11 @@ namespace TERMINAL
             _platinumComPort = _loadedSettings.PlatinumComPort;
             _readPlatinum = _loadedSettings.ReadPlatinum;
             _platinumMtkCommand = _loadedSettings.PlatinumMtkCommand;
+
+            // ─── Уведомления ───
+            _notificationsEnabled = _loadedSettings.NotificationsEnabled;
+            _telegramToken = _loadedSettings.TelegramToken ?? "";
+            _telegramChatId = _loadedSettings.TelegramChatId ?? "";
 
             RefreshDeviceCardsVisibility();
 
@@ -267,6 +280,10 @@ namespace TERMINAL
                     ReadPlatinum = _readPlatinum,
                     PlatinumMtkCommand = _platinumMtkCommand,
 
+                    NotificationsEnabled = _notificationsEnabled,
+                    NotificationMethod = "Telegram",
+                    TelegramToken = _telegramToken,
+                    TelegramChatId = _telegramChatId,
 
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,

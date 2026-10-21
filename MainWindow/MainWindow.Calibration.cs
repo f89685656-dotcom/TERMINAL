@@ -191,6 +191,9 @@ namespace TERMINAL
 
             try
             {
+                // ★★★ ОТПРАВЛЯЕМ СТАРТ ГРАДУИРОВКИ (ПРОГРЕСС-БАР) ★★★
+                await _batchProgress.UpdateProgressAsync($"🔄 Градуировка: подготовка к шагу {startStep}/{steps.Length}...");
+
                 await RunSequenceAsync(steps, longTimers, startStep - 1);
                 programCompleted = true;
             }
@@ -265,6 +268,8 @@ namespace TERMINAL
                 _batchRunDoneSignal?.TrySetResult(true);
             }
         }
+
+
         private async Task RunSequenceAsync(double[] steps, bool longTimers, int startIndex)
         {
             string unitsCode = GetUnitsCode(_selectedTargetPressure!);
@@ -552,6 +557,9 @@ namespace TERMINAL
             {
                 if (_stopRequested) return false;
                 if (!await WaitIfPausedAsync()) return false;
+
+                // ★★★ ОБНОВЛЯЕМ ПРОГРЕСС-БАР (РЕДАКТИРУЕМ СООБЩЕНИЕ) ★★★
+                await _batchProgress.UpdateProgressAsync($"💨 Бароциклирование: цикл {cycle}/{totalCycles}");
 
                 MaxArrow.Text = "  ";
                 MinArrow.Text = "  ";

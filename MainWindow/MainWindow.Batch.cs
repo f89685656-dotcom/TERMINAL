@@ -128,7 +128,7 @@ namespace TERMINAL
                 job.StatusColor = Brushes.Gray;
             }
 
-            // Валидация активных заданий
+            // Валидация активных заданий (оставлена без изменений)
             for (int i = 0; i < _batchJobs.Count; i++)
             {
                 var job = _batchJobs[i];
@@ -213,6 +213,9 @@ namespace TERMINAL
 
             try
             {
+                // ★★★ 1. СТАРТ ПАКЕТА (НОВОЕ СООБЩЕНИЕ) ★★★
+                await _batchProgress.SendStatusAsync($"🚀 Пакетный режим запущен. Заданий: {enabledCount}");
+
                 int completedCount = 0;
 
                 for (int i = 0; i < _batchJobs.Count; i++)
@@ -220,6 +223,7 @@ namespace TERMINAL
                     if (_batchStopRequested || _stopRequested)
                     {
                         SetStatusWarning("Пакетный режим остановлен оператором");
+                        await _batchProgress.SendStatusAsync($"⏹ Пакетный режим остановлен оператором. Выполнено: {completedCount}/{enabledCount}");
                         return;
                     }
 
@@ -236,6 +240,11 @@ namespace TERMINAL
 
                     _currentBatchSetPointForSave = job.SetPoint;
 
+                    string stepSetPointText = job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture);
+
+                    // ★★★ 2. НАЧАЛО ЗАДАНИЯ (НОВОЕ СООБЩЕНИЕ) ★★★
+                    await _batchProgress.SendStatusAsync($"▶️ Задание {completedCount}/{enabledCount} (уставка {stepSetPointText} °C) — начато");
+
                     // ═══════════════════════════════════════════════════════════
                     // 1) Запись уставки
                     // ═══════════════════════════════════════════════════════════
@@ -243,7 +252,7 @@ namespace TERMINAL
                     job.StatusColor = Brushes.Orange;
 
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запись уставки " +
-                              $"{job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C в ST-351...");
+                              $"{stepSetPointText} °C в ST-351...");
 
                     bool writeOk = await WriteFurnaceSetPointAsync(
                         job.SetPoint, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
@@ -253,6 +262,8 @@ namespace TERMINAL
                         job.StatusText = "ошибка записи";
                         job.StatusColor = Brushes.Red;
                         SetStatusError($"[Пакет {completedCount}] не удалось записать уставку");
+
+                        await _batchProgress.SendStatusAsync($"❌ Ошибка записи уставки на задании {completedCount}. Пакет прерван.");
                         return;
                     }
 
@@ -261,7 +272,7 @@ namespace TERMINAL
                     await RefreshFurnaceSetPointAsync();
 
                     SetStatusSuccess($"[Пакет {completedCount}/{enabledCount}] уставка " +
-                                     $"{job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C успешно записана");
+                                     $"{stepSetPointText} °C успешно записана");
 
                     ResetStabilizationTimer();
 
@@ -276,6 +287,9 @@ namespace TERMINAL
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации " +
                                   $"{job.StabilizationMinutes} мин...", false);
 
+                        // Обновляем прогресс-бар, показывая ожидание
+                        await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
+
                         bool stable = await WaitForBatchStabilizationAsync(
                             job.StabilizationMinutes, completedCount, enabledCount);
 
@@ -284,6 +298,8 @@ namespace TERMINAL
                             job.StatusText = "стабилизация прервана";
                             job.StatusColor = Brushes.Red;
                             SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
+
+                            await _batchProgress.SendStatusAsync($"❌ Стабилизация прервана на задании {completedCount}. Пакет остановлен.");
                             return;
                         }
                     }
@@ -295,6 +311,8 @@ namespace TERMINAL
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] стабилизация 0 мин — " +
                                   $"проверка попадания в допуск...");
 
+                        await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
+
                         bool inTolerance = await WaitForBatchTemperatureInToleranceAsync(
                             completedCount, enabledCount);
 
@@ -303,6 +321,8 @@ namespace TERMINAL
                             job.StatusText = "проверка прервана";
                             job.StatusColor = Brushes.Red;
                             SetStatusWarning($"[Пакет {completedCount}] проверка допуска прервана");
+
+                            await _batchProgress.SendStatusAsync($"❌ Проверка допуска прервана на задании {completedCount}. Пакет остановлен.");
                             return;
                         }
 
@@ -318,7 +338,7 @@ namespace TERMINAL
 
                     string modeName = job.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» " +
-                              $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
+                              $"на {stepSetPointText} °C");
 
                     // ─── Переключение панелей по режиму задания ───
                     if (job.IsCalibrationMode)
@@ -354,6 +374,7 @@ namespace TERMINAL
                     if (_batchStopRequested || _stopRequested)
                     {
                         SetStatusWarning("Пакетный режим остановлен оператором");
+                        await _batchProgress.SendStatusAsync($"⏹ Пакетный режим остановлен оператором на задании {completedCount}.");
                         return;
                     }
 
@@ -362,6 +383,7 @@ namespace TERMINAL
                         job.StatusText = "прервано (см. журнал)";
                         job.StatusColor = Brushes.Red;
                         SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано — пакет остановлен");
+                        await _batchProgress.SendStatusAsync($"❌ Задание {completedCount} прервано. Пакет остановлен.");
                         return;
                     }
 
@@ -369,9 +391,16 @@ namespace TERMINAL
                     job.StatusColor = Brushes.Green;
 
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] завершён");
+
+                    // ★★★ 5. КОНЕЦ ЗАДАНИЯ (НОВОЕ СООБЩЕНИЕ) ★★★
+                    await _batchProgress.SendStatusAsync($"✅ Задание {completedCount}/{enabledCount} (уставка {stepSetPointText} °C) — успешно завершено.");
                 }
 
                 SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
+
+                // ★★★ 6. КОНЕЦ ПАКЕТА (НОВОЕ СООБЩЕНИЕ И СБРОС) ★★★
+                await _batchProgress.SendStatusAsync($"🏁 Пакетный режим завершён успешно. Обработано: {completedCount}/{enabledCount}");
+                await _batchProgress.ResetAsync();
 
                 // ─── Автовыключение печки ───
                 if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
@@ -401,6 +430,10 @@ namespace TERMINAL
                               $"{ex.InnerException.Message}", Brushes.Red);
 
                 SetStatusError($"Пакет: необработанная ошибка — {ex.Message}");
+
+                // ★★★ 7. КОНЕЦ ПАКЕТА (ОШИБКА) ★★★
+                await _batchProgress.SendStatusAsync($"❌ Пакетный режим завершён с ошибкой: {ex.Message}");
+                await _batchProgress.ResetAsync();
             }
             finally
             {
@@ -424,8 +457,6 @@ namespace TERMINAL
                     job.IsEditable = true;
 
                 BatchProgressText.Text = "";
-                UpdateStartButtonMode();
-
                 UpdateStartButtonMode();
             }
         }

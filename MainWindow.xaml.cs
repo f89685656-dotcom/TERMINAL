@@ -266,6 +266,7 @@ namespace TERMINAL
         private System.Windows.Controls.TextBox? _logFilterBox = null;
         private const int LogMaxEntries = 5000;
         private System.Windows.Controls.TextBlock? _logCounterText = null;
+        private readonly BatchProgressNotifier _batchProgress = new();
 
         // Публичные свойства для окна настроек
         public string FurnaceIp => _furnaceIp;

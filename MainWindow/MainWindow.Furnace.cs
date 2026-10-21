@@ -107,12 +107,15 @@ namespace TERMINAL
 
             if (snap.CurrentTemp.HasValue)
             {
-                // ★ Восстановление связи — шлём ОДИН раз при переходе из «плохо» в «хорошо».
-                //   Проверяем ДО сброса счётчика, иначе условие никогда не сработает.
+                // ★ Восстановление связи
                 if (_furnaceTempFailCount >= ConnectionLostThreshold)
                 {
-                    _ = NotificationManager.NotifyAsync(
-                        $"🟢 ST-351: связь восстановлена ({_furnaceIp}:{_furnacePort})");
+                    // Шлём только если идёт пакет
+                    if (_batchRunning)
+                    {
+                        _ = NotificationManager.NotifyAsync(
+                            $"🟢 ST-351: связь восстановлена ({_furnaceIp}:{_furnacePort})");
+                    }
                 }
 
                 _furnaceTempFailCount = 0;
@@ -128,12 +131,15 @@ namespace TERMINAL
             {
                 _furnaceTempFailCount++;
 
-                // ★ Потеря связи — шлём ОДИН раз в момент пересечения порога.
-                //   Именно ==, а не >=, иначе будет спам каждую секунду после порога.
+                // ★ Потеря связи
                 if (_furnaceTempFailCount == ConnectionLostThreshold)
                 {
-                    _ = NotificationManager.NotifyAsync(
-                        $"🔴 ST-351: потеря связи ({_furnaceIp}:{_furnacePort})");
+                    // Шлём только если идёт пакет
+                    if (_batchRunning)
+                    {
+                        _ = NotificationManager.NotifyAsync(
+                            $"🔴 ST-351: потеря связи ({_furnaceIp}:{_furnacePort})");
+                    }
                 }
 
                 if (_furnaceTempFailCount >= ConnectionLostThreshold)

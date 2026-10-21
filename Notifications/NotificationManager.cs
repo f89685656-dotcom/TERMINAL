@@ -11,9 +11,11 @@ namespace TERMINAL.Notifications
             _service = service ?? new NullNotificationService();
         }
 
-        public static Task NotifyAsync(string text)
-        {
-            return _service.SendAsync(text);
-        }
+        public static Task NotifyAsync(string text) => _service.SendAsync(text);
+
+        public static Task<int?> SendMessageAsync(string text) => _service.SendMessageAsync(text);
+
+        public static Task<bool> EditMessageAsync(int messageId, string newText)
+            => _service.EditMessageAsync(messageId, newText);
     }
 }
