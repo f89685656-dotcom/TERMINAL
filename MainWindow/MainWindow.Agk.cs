@@ -207,7 +207,7 @@ namespace TERMINAL
                         display = "(нет данных)";
 
                     // ★ ДИАГНОСТИКА: пишем, что прочитали из кэша
-                    AppendLog($"[CACHE] Status: '{display}', Ok={snap.StateInPointOk}, Wait={snap.StateInPointWait}", Brushes.Teal);
+                    //AppendLog($"[CACHE] Status: '{display}', Ok={snap.StateInPointOk}, Wait={snap.StateInPointWait}", Brushes.Teal);
 
                     AgkStatusTextBox.Text = display;
 
@@ -413,8 +413,8 @@ namespace TERMINAL
                 if (elapsed.TotalMilliseconds >= timeoutMs)
                 {
                     AppendLog($"WaitForStateInPoint: таймаут {_agkPressureTimeoutMinutes} мин — " +
-                              $"прибор не вышел на стабильность.", Brushes.OrangeRed);
-                    SetStatusError($"Таймаут ожидания стабилизации ({_agkPressureTimeoutMinutes} мин)");
+                              $"прибор не вышел на стабильное давление.", Brushes.OrangeRed);
+                    SetStatusError($"Таймаут ожидания стабилизации давления ({_agkPressureTimeoutMinutes} мин)");
                     return false;
                 }
 
@@ -640,7 +640,7 @@ namespace TERMINAL
                 var pointResp = await SendCommandAsync("get_point;");
                 if (pointResp != prev.SetPoint?.ToString())
                 {
-                    AppendLog($"[АГК] Уставка: {pointResp ?? "NULL"}", Brushes.Gray);
+                    //AppendLog($"[АГК] Уставка: {pointResp ?? "NULL"}", Brushes.Gray);
                 }
                 snap.SetPoint = pointResp != null ? ParseDoubleOrNull(pointResp) : prev.SetPoint;
 
