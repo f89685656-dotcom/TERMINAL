@@ -93,6 +93,8 @@ namespace TERMINAL
         private bool _readPlatinum = true;
         private string _platinumMtkCommand = "pass2 meas2? 2";
 
+
+
         private SerialPort? _platinumSerial;
         private readonly object _platinumSerialLock = new object();
 
@@ -294,17 +296,43 @@ namespace TERMINAL
         // УВЕДОМЛЕНИЯ
         // ═══════════════════════════════════════════════════════════════════
         private bool _notificationsEnabled = false;
+        private int _notificationMethodIndex = 0;
+
+        // Telegram
         private string _telegramToken = "";
         private string _telegramChatId = "";
 
+        // Email
+        private string _emailHost = "";
+        private int _emailPort = 587;
+        private string _emailUser = "";
+        private string _emailPass = "";
+        private string _emailTo = "";
 
+        // VK
+        private string _vkToken = "";
+        private long _vkPeerId = 0;
 
-        // ═══════════════════════════════════════════════════════════════════
-        // УВЕДОМЛЕНИЯ
-        // ═══════════════════════════════════════════════════════════════════
+        // SMS
+        private string _smsLogin = "";
+        private string _smsPass = "";
+        private string _smsPhone = "";
+
+        // Публичные свойства для окна настроек (DeviceSettingsWindow)
         public bool NotificationsEnabled => _notificationsEnabled;
+        public int NotificationMethodIndex => _notificationMethodIndex;
         public string TelegramToken => _telegramToken;
         public string TelegramChatId => _telegramChatId;
+        public string EmailHost => _emailHost;
+        public int EmailPort => _emailPort;
+        public string EmailUser => _emailUser;
+        public string EmailPass => _emailPass;
+        public string EmailTo => _emailTo;
+        public string VkToken => _vkToken;
+        public long VkPeerId => _vkPeerId;
+        public string SmsLogin => _smsLogin;
+        public string SmsPass => _smsPass;
+        public string SmsPhone => _smsPhone;
 
         public MainWindow()
         {
@@ -1358,30 +1386,62 @@ namespace TERMINAL
         // ═══════════════════════════════════════════════════════════════════
         // УВЕДОМЛЕНИЯ — применение настроек
         // ═══════════════════════════════════════════════════════════════════
-        public void ApplyNotificationSettings(bool enabled, string token, string chatId)
+        public void ApplyNotificationSettings(
+            bool enabled,
+            int methodIndex,
+            string tgToken, string tgChatId,
+            string emailHost, int emailPort, string emailUser, string emailPass, string emailTo,
+            string vkToken, long vkPeerId,
+            string smsLogin, string smsPass, string smsPhone)
         {
             _notificationsEnabled = enabled;
-            _telegramToken = token ?? "";
-            _telegramChatId = chatId ?? "";
+            _notificationMethodIndex = methodIndex;
 
-            if (enabled && !string.IsNullOrEmpty(_telegramToken))
+            _telegramToken = tgToken ?? "";
+            _telegramChatId = tgChatId ?? "";
+
+            _emailHost = emailHost ?? "";
+            _emailPort = emailPort;
+            _emailUser = emailUser ?? "";
+            _emailPass = emailPass ?? "";
+            _emailTo = emailTo ?? "";
+
+            _vkToken = vkToken ?? "";
+            _vkPeerId = vkPeerId;
+
+            _smsLogin = smsLogin ?? "";
+            _smsPass = smsPass ?? "";
+            _smsPhone = smsPhone ?? "";
+
+            NotificationManager.ClearServices(); // Очищаем старые
+
+            if (enabled)
             {
-                if (!long.TryParse(_telegramChatId, out long chatIdLong))
+                switch (methodIndex)
                 {
-                    NotificationManager.SetService(new NullNotificationService());
-                    AppendLog("Уведомления: некорректный Chat ID, сервис отключён", Brushes.Orange);
+                    case 0:
+                        if (!string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long chatIdLong))
+                        {
+                            NotificationManager.AddService(new TelegramNotificationService(_telegramToken, chatIdLong));
+                        }
+                        break;
+                    case 1:
+                        if (!string.IsNullOrEmpty(_emailHost) && !string.IsNullOrEmpty(_emailUser))
+                        {
+                            NotificationManager.AddService(new EmailNotificationService(_emailHost, _emailPort, _emailUser, _emailPass, _emailTo));
+                        }
+                        break;
+                    case 2:
+                        if (!string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
+                        {
+                            NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
+                        }
+                        break;
+                    case 3:
+                        // SMS обычно не добавляем в общий список, но если хотите - раскомментируйте
+                        // NotificationManager.AddService(new SmsNotificationService(_smsLogin, _smsPass, _smsPhone));
+                        break;
                 }
-                else
-                {
-                    NotificationManager.SetService(
-                        new TelegramNotificationService(_telegramToken, chatIdLong));
-                    AppendLog("Уведомления: Telegram-сервис активирован", Brushes.Green);
-                }
-            }
-            else
-            {
-                NotificationManager.SetService(new NullNotificationService());
-                AppendLog("Уведомления: отключены", Brushes.Gray);
             }
 
             SaveSettings();

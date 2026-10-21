@@ -107,14 +107,31 @@ namespace TERMINAL.Windows
             PlatinumSourceCombo_SelectionChanged(null, null);
 
             // ─── Уведомления ───
-            NotificationsEnabledCheck.IsChecked = mw.NotificationsEnabled;
+            NotificationMethodCombo.SelectedIndex = mw.NotificationMethodIndex;
+            NotificationMethodCombo_SelectionChanged(null, null); // Чтобы панели показались
+
             TelegramTokenBox.Text = mw.TelegramToken;
             TelegramChatIdBox.Text = mw.TelegramChatId;
-            NotificationMethodCombo.SelectedIndex = 0;   // пока только Telegram
+
+            EmailHostBox.Text = mw.EmailHost;
+            EmailPortBox.Text = mw.EmailPort.ToString();
+            EmailUserBox.Text = mw.EmailUser;
+            EmailPassBox.Password = mw.EmailPass;
+            EmailToBox.Text = mw.EmailTo;
+
+            VkTokenBox.Text = mw.VkToken;
+            VkPeerIdBox.Text = mw.VkPeerId.ToString();
+
+            SmsLoginBox.Text = mw.SmsLogin;
+            SmsPassBox.Password = mw.SmsPass;
+            SmsPhoneBox.Text = mw.SmsPhone;
+
+
 
             // ─── Общие настройки ───
             // Конструктор уже заполнил General* значениями, переданными из MainWindow.
             // Здесь ничего делать не нужно.
+
         }
 
         private void Default_Click(object sender, RoutedEventArgs e)
@@ -299,11 +316,22 @@ namespace TERMINAL.Windows
             // ═══════════════════════════════════════════════════════════════
             // 6.5. Применяем настройки уведомлений
             // ═══════════════════════════════════════════════════════════════
-
             mw.ApplyNotificationSettings(
-                NotificationsEnabledCheck.IsChecked == true,
-                TelegramTokenBox.Text.Trim(),
-                TelegramChatIdBox.Text.Trim());
+                enabled: NotificationsEnabledCheck.IsChecked == true,
+                methodIndex: NotificationMethodCombo.SelectedIndex,
+                tgToken: TelegramTokenBox.Text.Trim(),
+                tgChatId: TelegramChatIdBox.Text.Trim(),
+                emailHost: EmailHostBox.Text.Trim(),
+                emailPort: int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587,
+                emailUser: EmailUserBox.Text.Trim(),
+                emailPass: EmailPassBox.Password,
+                emailTo: EmailToBox.Text.Trim(),
+                vkToken: VkTokenBox.Text.Trim(),
+                vkPeerId: long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0,
+                smsLogin: SmsLoginBox.Text.Trim(),
+                smsPass: SmsPassBox.Password,
+                smsPhone: SmsPhoneBox.Text.Trim()
+            );
 
 
 
@@ -322,38 +350,82 @@ namespace TERMINAL.Windows
 
         private async void TestNotificationButton_Click(object sender, RoutedEventArgs e)
         {
-            string token = TelegramTokenBox.Text.Trim();
-            string chatId = TelegramChatIdBox.Text.Trim();
-
-            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(chatId))
+            if (!NotificationsEnabledCheck.IsChecked == true)
             {
-                MessageBox.Show(this,
-                    "Заполните Token и Chat ID.",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "Сначала поставьте галочку «Включить уведомления».", "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            if (!long.TryParse(chatId, out long chatIdLong))
-            {
-                MessageBox.Show(this,
-                    "Chat ID должен быть числом (например, -1001234567890).",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+            int method = NotificationMethodCombo.SelectedIndex;
 
             try
             {
-                var service = new TelegramNotificationService(token, chatIdLong);
-                await service.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L. Всё работает!");
-                MessageBox.Show(this,
-                    "Сообщение отправлено! Проверьте Telegram.",
-                    "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                switch (method)
+                {
+                    case 0: // Telegram
+                        string tgToken = TelegramTokenBox.Text.Trim();
+                        string tgChatId = TelegramChatIdBox.Text.Trim();
+                        if (string.IsNullOrEmpty(tgToken) || string.IsNullOrEmpty(tgChatId))
+                        {
+                            MessageBox.Show(this, "Заполните Token и Chat ID для Telegram.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                        if (!long.TryParse(tgChatId, out long chatIdLong))
+                        {
+                            MessageBox.Show(this, "Chat ID должен быть числом.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                        var tgService = new TelegramNotificationService(tgToken, chatIdLong);
+                        await tgService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (Telegram)");
+                        break;
+
+                    case 1: // Email
+                        string emailHost = EmailHostBox.Text.Trim();
+                        string emailUser = EmailUserBox.Text.Trim();
+                        string emailPass = EmailPassBox.Password;
+                        string emailTo = EmailToBox.Text.Trim();
+                        int emailPort = int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587;
+
+                        if (string.IsNullOrEmpty(emailHost) || string.IsNullOrEmpty(emailUser) || string.IsNullOrEmpty(emailPass))
+                        {
+                            MessageBox.Show(this, "Заполните SMTP сервер, логин и пароль.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                        var emailService = new EmailNotificationService(emailHost, emailPort, emailUser, emailPass, emailTo);
+                        await emailService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (Email)");
+                        break;
+
+                    case 2: // VK
+                        string vkToken = VkTokenBox.Text.Trim();
+                        string vkPeerIdStr = VkPeerIdBox.Text.Trim();
+                        if (string.IsNullOrEmpty(vkToken) || !long.TryParse(vkPeerIdStr, out long vkPeerId))
+                        {
+                            MessageBox.Show(this, "Заполните Access Token и числовой ID для VK.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                        var vkService = new VkNotificationService(vkToken, vkPeerId);
+                        await vkService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (VK)");
+                        break;
+
+                    case 3: // SMS
+                        string smsLogin = SmsLoginBox.Text.Trim();
+                        string smsPass = SmsPassBox.Password;
+                        string smsPhone = SmsPhoneBox.Text.Trim();
+                        if (string.IsNullOrEmpty(smsLogin) || string.IsNullOrEmpty(smsPass) || string.IsNullOrEmpty(smsPhone))
+                        {
+                            MessageBox.Show(this, "Заполните логин, пароль и номер телефона для SMS.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                        var smsService = new SmsNotificationService(smsLogin, smsPass, smsPhone);
+                        await smsService.SendAsync("Тест SMS из TERMINAL");
+                        break;
+                }
+
+                MessageBox.Show(this, "Сообщение отправлено! Проверьте выбранный канал.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this,
-                    $"Ошибка: {ex.Message}",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(this, $"Ошибка отправки: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -452,6 +524,131 @@ namespace TERMINAL.Windows
                 PlatinumMtkCommandPanel.Visibility = isMtk
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+        }
+
+        private void NotificationMethodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Проверка на null нужна, так как событие может сработать до полной инициализации окна
+            if (TelegramPanel == null || EmailPanel == null || VkPanel == null || SmsPanel == null)
+                return;
+
+            // Скрываем все панели по умолчанию
+            TelegramPanel.Visibility = Visibility.Collapsed;
+            EmailPanel.Visibility = Visibility.Collapsed;
+            VkPanel.Visibility = Visibility.Collapsed;
+            SmsPanel.Visibility = Visibility.Collapsed;
+
+            // Показываем ту, которая выбрана в ComboBox
+            switch (NotificationMethodCombo.SelectedIndex)
+            {
+                case 0: // Telegram
+                    TelegramPanel.Visibility = Visibility.Visible;
+                    break;
+                case 1: // Email
+                    EmailPanel.Visibility = Visibility.Visible;
+                    break;
+                case 2: // VK
+                    VkPanel.Visibility = Visibility.Visible;
+                    break;
+                case 3: // SMS
+                    SmsPanel.Visibility = Visibility.Visible;
+                    break;
+            }
+        }
+
+        private void NotificationHelpButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Формируем текст инструкции в зависимости от выбранного метода
+            int selectedIndex = NotificationMethodCombo?.SelectedIndex ?? 0;
+
+            string instruction = "";
+
+            switch (selectedIndex)
+            {
+                case 0: // Telegram
+                    instruction =
+        @"🤖 ИНСТРУКЦИЯ ДЛЯ TELEGRAM:
+
+1. Получение Token:
+   • Откройте Telegram и найдите бота @BotFather (у него должна быть галочка).
+   • Отправьте ему команду /newbot.
+   • Введите имя бота (например, 'Мой Терминал') и юзернейм (обязательно должен заканчиваться на 'bot', например 'my_terminal_bot').
+   • BotFather пришлет вам длинный токен (вида 123456789:ABCdef...). Скопируйте его в поле 'Telegram Token'.
+
+2. Получение Chat ID:
+   • Найдите в Telegram только что созданного бота и нажмите 'Запустить' (Start).
+   • Отправьте ему любое сообщение (например, 'привет').
+   • В браузере перейдите по ссылке: 
+     https://api.telegram.org/bot<ВАШ_ТОКЕН>/getUpdates
+   • В ответе найдите текст ""chat"":{""id"": 123456789}. Число 123456789 — это ваш Chat ID. Скопируйте его.
+   • Вставьте Chat ID в программу и нажмите 'Тест'.
+
+⚠️ ВАЖНО: Если вы в России, Telegram API может быть заблокирован. Для корректной работы включите VPN (режим TUN или Системный прокси) перед отправкой сообщений.";
+                    break;
+
+                case 1: // Email (SMTP)
+                    instruction =
+        @"📧 ИНСТРУКЦИЯ ДЛЯ EMAIL:
+
+1. Сервер и порт:
+   • Для Яндекс.Почты: SMTP Сервер = smtp.yandex.ru, Порт = 587
+   • Для Mail.ru: SMTP Сервер = smtp.mail.ru, Порт = 587
+   • Для Gmail: SMTP Сервер = smtp.gmail.com, Порт = 587
+
+2. Логин:
+   • Введите ваш полный адрес электронной почты (например, user@yandex.ru).
+
+3. Пароль:
+   • ⚠️ ВАЖНО: Обычный пароль от почты не подойдет! 
+   • Зайдите в настройки своей почты (Безопасность) и создайте 'Пароль приложения' (App Password) для почтовых клиентов. 
+   • Скопируйте этот сгенерированный пароль в поле 'Пароль'.
+
+4. Кому отправлять:
+   • Введите адрес почты, на который должны приходить уведомления (можно указать тот же адрес, с которого отправляете).";
+                    break;
+
+                case 2: // VK
+                    instruction =
+        @"💬 ИНСТРУКЦИЯ ДЛЯ ВКОНТАКТЕ:
+
+1. Получение Access Token:
+   • Зайдите на сайт dev.vk.com и авторизуйтесь.
+   • Создайте Standalone-приложение (тип 'Standalone').
+   • В браузере откройте ссылку (заменив ВАШ_ID на ID вашего приложения):
+     https://oauth.vk.com/authorize?client_id=ВАШ_ID&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=messages&response_type=token&v=5.131
+   • Разрешите доступ. В адресной строке появится 'access_token=...'. Скопируйте его.
+
+2. Ваш ID:
+   • В поле 'Ваш ID' введите ваш числовой ID (например, 12345678).
+   • Если хотите отправлять в беседу, введите ID беседы (начинается с 2000000000, например 2000000001).
+
+⚠️ ВАЖНО: Сообщения можно отправлять только тем людям, кто разрешил сообщения от вашего приложения, поэтому лучше отправлять 'себе' или в свою беседу.";
+                    break;
+
+                case 3: // SMS
+                    instruction =
+        @"📱 ИНСТРУКЦИЯ ДЛЯ SMS (SMSC.ru):
+
+1. Регистрация:
+   • Зайдите на сайт smsc.ru и зарегистрируйте аккаунт.
+   • Пополните баланс (стоимость SMS зависит от оператора, примерно 2-3 руб. за сообщение).
+
+2. Логин и Пароль:
+   • Введите ваш логин и пароль, которые вы указали при регистрации на SMSC.ru.
+
+3. Номер телефона:
+   • Введите номер, на который будут приходить SMS, в формате +79991234567 (без пробелов и тире).
+
+⚠️ ВАЖНО: 
+   • SMS — это ПЛАТНЫЙ канал. Не используйте его для массовых уведомлений о каждом шаге.
+   • Используйте SMS только для критических аварийных сообщений (например, потеря связи во время пакетного режима).
+   • В SMS помещается только 70 символов кириллицы.";
+                    break;
+            }
+
+            // Показываем окно с инструкцией
+            MessageBox.Show(this, instruction, "Инструкция по настройке уведомлений",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }

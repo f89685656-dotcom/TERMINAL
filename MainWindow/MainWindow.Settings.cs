@@ -112,9 +112,23 @@ namespace TERMINAL
                 _loadedSettings = new Settings();
                 _batchKosaEnabled = false;
                 _batchKosaTimerSeconds = 25;
-                _notificationsEnabled = false;
-                _telegramToken = "";
-                _telegramChatId = "";
+
+
+                // ─── Уведомления ───
+                _notificationsEnabled = _loadedSettings.NotificationsEnabled;
+                _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
+                _telegramToken = _loadedSettings.TelegramToken ?? "";
+                _telegramChatId = _loadedSettings.TelegramChatId ?? "";
+                _emailHost = _loadedSettings.EmailHost ?? "";
+                _emailPort = _loadedSettings.EmailPort;
+                _emailUser = _loadedSettings.EmailUser ?? "";
+                _emailPass = _loadedSettings.EmailPass ?? "";
+                _emailTo = _loadedSettings.EmailTo ?? "";
+                _vkToken = _loadedSettings.VkToken ?? "";
+                _vkPeerId = _loadedSettings.VkPeerId;
+                _smsLogin = _loadedSettings.SmsLogin ?? "";
+                _smsPass = _loadedSettings.SmsPass ?? "";
+                _smsPhone = _loadedSettings.SmsPhone ?? "";
 
                 string docs = Environment.GetFolderPath(
                     Environment.SpecialFolder.MyDocuments);
@@ -280,10 +294,21 @@ namespace TERMINAL
                     ReadPlatinum = _readPlatinum,
                     PlatinumMtkCommand = _platinumMtkCommand,
 
+                    // ─── Уведомления ───
                     NotificationsEnabled = _notificationsEnabled,
-                    NotificationMethod = "Telegram",
+                    NotificationMethodIndex = _notificationMethodIndex,
                     TelegramToken = _telegramToken,
                     TelegramChatId = _telegramChatId,
+                    EmailHost = _emailHost,
+                    EmailPort = _emailPort,
+                    EmailUser = _emailUser,
+                    EmailPass = _emailPass,
+                    EmailTo = _emailTo,
+                    VkToken = _vkToken,
+                    VkPeerId = _vkPeerId,
+                    SmsLogin = _smsLogin,
+                    SmsPass = _smsPass,
+                    SmsPhone = _smsPhone,
 
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
@@ -463,9 +488,27 @@ namespace TERMINAL
 
             // ─── Уведомления ───
             public bool NotificationsEnabled { get; set; } = false;
-            public string NotificationMethod { get; set; } = "Telegram";
+            public int NotificationMethodIndex { get; set; } = 0; // 0-TG, 1-Email, 2-VK, 3-SMS
+
+            // Telegram
             public string TelegramToken { get; set; } = "";
             public string TelegramChatId { get; set; } = "";
+
+            // Email
+            public string EmailHost { get; set; } = "";
+            public int EmailPort { get; set; } = 587;
+            public string EmailUser { get; set; } = "";
+            public string EmailPass { get; set; } = "";
+            public string EmailTo { get; set; } = "";
+
+            // VK
+            public string VkToken { get; set; } = "";
+            public long VkPeerId { get; set; } = 0;
+
+            // SMS
+            public string SmsLogin { get; set; } = "";
+            public string SmsPass { get; set; } = "";
+            public string SmsPhone { get; set; } = "";
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");

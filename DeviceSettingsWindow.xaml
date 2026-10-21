@@ -2,9 +2,11 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Настройки приборов"
-        Width="500" Height="520"
+        Width="500" Height="620" 
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
+
+    <!-- Немного увеличил высоту окна (Height="620"), чтобы вкладка Уведомлений помещалась целиком -->
 
     <Grid Margin="15">
         <Grid.RowDefinitions>
@@ -65,11 +67,9 @@
                         <TextBlock Text="Регистр режима:" FontWeight="Bold" Margin="0,10,0,0"/>
                         <TextBox x:Name="FurnaceModeRegBox" Height="24" Padding="4,2"/>
 
-                        <!-- ★ НОВОЕ ПОЛЕ: Допуск стабилизации -->
                         <TextBlock Text="Допуск стабилизации, °C:" FontWeight="Bold" Margin="0,10,0,0"/>
                         <TextBox x:Name="FurnaceStabilizationToleranceBox" Height="24" Padding="4,2"/>
 
-                        <!-- ★ ПЕРЕИМЕНОВАННЫЙ ЧЕКБОКС (текст сокращен, описание в ToolTip) -->
                         <CheckBox x:Name="AutoStopFurnaceCheck"
                                   Content="Автовыключение после пакета"
                                   Margin="0,15,0,0"
@@ -140,7 +140,6 @@
                         <StackPanel x:Name="PlatinumMtkCommandPanel" Margin="0,10,0,0">
                             <TextBlock Text="Команда МтК @ TERMEX:" FontWeight="Bold"/>
 
-                            <!-- Поле ввода: текст по левому краю, но по центру по вертикали -->
                             <TextBox x:Name="PlatinumMtkCommandBox"
                                      Height="24" Margin="0,4,0,0"
                                      HorizontalContentAlignment="Left"
@@ -148,7 +147,6 @@
                                      Padding="4,0"
                                      ToolTip="Например: pass2 meas2? 2  (символы \n\0 добавляются автоматически)"/>
 
-                            <!-- Подсказка под полем -->
                             <TextBlock Text="Символы \n\0 добавляются автоматически при отправке"
                                        FontSize="11" Foreground="Gray" 
                                        Margin="4,2,0,0"
@@ -171,30 +169,89 @@
             <TabItem Header="Уведомления">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
-                        <CheckBox x:Name="NotificationsEnabledCheck"
-                      Content="Включить уведомления"
-                      FontWeight="Bold"
-                      Margin="0,0,0,15"/>
+
+                        <!-- Блок включения и инструкции -->
+                        <Grid Margin="0,0,0,15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <CheckBox x:Name="NotificationsEnabledCheck"
+                                      Grid.Column="0"
+                                      Content="Включить уведомления"
+                                      FontWeight="Bold"
+                                      VerticalAlignment="Center"/>
+
+                            <Button x:Name="NotificationHelpButton"
+                                    Grid.Column="1"
+                                    Content="❓ Инструкция"
+                                    Padding="10,2"
+                                    VerticalAlignment="Center"
+                                    Click="NotificationHelpButton_Click"/>
+                        </Grid>
 
                         <TextBlock Text="Способ отправки:" FontWeight="Bold" Margin="0,0,0,5"/>
-                        <ComboBox x:Name="NotificationMethodCombo" Height="24" SelectedIndex="0">
+                        <ComboBox x:Name="NotificationMethodCombo" Height="24" SelectedIndex="0" SelectionChanged="NotificationMethodCombo_SelectionChanged">
                             <ComboBoxItem Content="Telegram"/>
-                            <!-- В будущем можно добавить Email, если захотите -->
+                            <ComboBoxItem Content="Email (SMTP)"/>
+                            <ComboBoxItem Content="ВКонтакте (VK)"/>
+                            <ComboBoxItem Content="SMS (SMSC.ru)"/>
                         </ComboBox>
 
-                        <TextBlock Text="Telegram Token:" FontWeight="Bold" Margin="0,15,0,5"/>
-                        <TextBox x:Name="TelegramTokenBox" Height="24" Padding="4,2" 
-                     ToolTip="Токен, полученный от @BotFather"/>
+                        <!-- ═══ Панель 1: Telegram ═══ -->
+                        <StackPanel x:Name="TelegramPanel" Margin="0,10,0,0">
+                            <TextBlock Text="Telegram Token:" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBox x:Name="TelegramTokenBox" Height="24" Padding="4,2" ToolTip="Токен от @BotFather"/>
 
-                        <TextBlock Text="Telegram Chat ID:" FontWeight="Bold" Margin="0,10,0,5"/>
-                        <TextBox x:Name="TelegramChatIdBox" Height="24" Padding="4,2" 
-                     ToolTip="ID вашего чата с ботом (можно узнать через getUpdates)"/>
+                            <TextBlock Text="Telegram Chat ID:" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="TelegramChatIdBox" Height="24" Padding="4,2" ToolTip="ID вашего чата (можно узнать через getUpdates)"/>
+                        </StackPanel>
+
+                        <!-- ═══ Панель 2: Email ═══ -->
+                        <StackPanel x:Name="EmailPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="SMTP Сервер (напр. smtp.yandex.ru):" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBox x:Name="EmailHostBox" Height="24" Padding="4,2"/>
+
+                            <TextBlock Text="Порт (напр. 587):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="EmailPortBox" Height="24" Padding="4,2" Text="587"/>
+
+                            <TextBlock Text="Логин (ваша почта):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="EmailUserBox" Height="24" Padding="4,2"/>
+
+                            <TextBlock Text="Пароль (или пароль приложения):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <PasswordBox x:Name="EmailPassBox" Height="24" Padding="4,2"/>
+
+                            <TextBlock Text="Кому отправлять (Email):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="EmailToBox" Height="24" Padding="4,2"/>
+                        </StackPanel>
+
+                        <!-- ═══ Панель 3: VK ═══ -->
+                        <StackPanel x:Name="VkPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="Access Token:" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBox x:Name="VkTokenBox" Height="24" Padding="4,2" ToolTip="Токен из OAuth ВКонтакте"/>
+
+                            <TextBlock Text="Ваш ID (или ID беседы):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="VkPeerIdBox" Height="24" Padding="4,2" ToolTip="Например: 12345678 (личка) или 2000000001 (беседа)"/>
+                        </StackPanel>
+
+                        <!-- ═══ Панель 4: SMS ═══ -->
+                        <StackPanel x:Name="SmsPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="Логин SMSC.ru:" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBox x:Name="SmsLoginBox" Height="24" Padding="4,2"/>
+
+                            <TextBlock Text="Пароль SMSC.ru:" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <PasswordBox x:Name="SmsPassBox" Height="24" Padding="4,2"/>
+
+                            <TextBlock Text="Номер телефона (напр. +79991234567):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="SmsPhoneBox" Height="24" Padding="4,2"/>
+                        </StackPanel>
 
                         <Button x:Name="TestNotificationButton" 
-                    Content="Отправить тестовое сообщение" 
-                    Width="220" Height="30" Margin="0,20,0,0"
-                    HorizontalAlignment="Left"
-                    Click="TestNotificationButton_Click"/>
+                                Content="Отправить тестовое сообщение" 
+                                Width="220" Height="30" Margin="0,20,0,0"
+                                HorizontalAlignment="Left"
+                                Click="TestNotificationButton_Click"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
