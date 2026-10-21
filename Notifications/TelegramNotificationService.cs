@@ -13,7 +13,7 @@ namespace TERMINAL.Notifications
 
         static TelegramNotificationService()
         {
-            var proxy = new WebProxy("http://127.0.0.1:2080"); // ваш NekoBox
+            var proxy = new WebProxy("http://127.0.0.1:10809");
             var handler = new HttpClientHandler
             {
                 Proxy = proxy,
