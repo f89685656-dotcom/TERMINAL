@@ -300,6 +300,10 @@ namespace TERMINAL
                 double v = steps[i];
                 int duration = GetStepDuration(steps, i, longTimers);
 
+                // ★★★ ОБНОВЛЯЕМ ПРОГРЕСС-БАР В TELEGRAM ★★★
+                string units = _selectedTargetPressure?.Contains("МПа") == true ? "МПа" : "кгс/см²";
+                await _batchProgress.UpdateProgressAsync($"🔄 Градуировка: шаг {human}/{steps.Length} (давление {v} {units})");
+
                 if (IsTestPressureRange())
                 {
                     SetStatus($"Шаг {human}: ТЕСТ — проверка атмосферного давления");

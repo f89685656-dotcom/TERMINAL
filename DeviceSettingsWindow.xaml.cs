@@ -74,7 +74,6 @@ namespace TERMINAL.Windows
             AutoStopFurnaceCheck.IsChecked = mw.AutoStopFurnace;
             ShowFurnaceCardCheck.IsChecked = mw.ShowFurnaceCard;
 
-
             // АГК
             AgkIpBox.Text = mw.DeviceIp;
             AgkPortBox.Text = mw.DevicePort.ToString();
@@ -92,31 +91,38 @@ namespace TERMINAL.Windows
             };
             ShowSktbCardCheck.IsChecked = mw.ShowSktbCard;
 
+            // Платина
             PlatinumSourceCombo.SelectedIndex = mw.PlatinumSource switch
             {
                 "mit_803" => 1,
                 "tercon" => 2,
                 _ => 0
             };
-
             FillComPorts(mw.PlatinumComPort);
             ReadPlatinumCheck.IsChecked = mw.ReadPlatinum;
             PlatinumMtkCommandBox.Text = mw.PlatinumMtkCommand;
-
-            // После установки индекса — пересчитать видимость панели COM
             PlatinumSourceCombo_SelectionChanged(null, null);
 
-            // ─── Уведомления ───
-            NotificationMethodCombo.SelectedIndex = mw.NotificationMethodIndex;
-            NotificationMethodCombo_SelectionChanged(null, null); // Чтобы панели показались
+            // ═══════════════════════════════════════════════════════════════════
+            // Уведомления
+            // ═══════════════════════════════════════════════════════════════════
+            NotificationsEnabledCheck.IsChecked = mw.NotificationsEnabled;
 
+            // Выбор метода (0-Telegram, 1-Email, 2-VK, 3-SMS)
+            NotificationMethodCombo.SelectedIndex = mw.NotificationMethodIndex;
+
+            // Принудительно обновляем видимость панелей, так как событие SelectionChanged 
+            // могло не сработать при программной установке SelectedIndex
+            NotificationMethodCombo_SelectionChanged(null, null);
+
+            // Заполнение полей для всех каналов
             TelegramTokenBox.Text = mw.TelegramToken;
             TelegramChatIdBox.Text = mw.TelegramChatId;
 
             EmailHostBox.Text = mw.EmailHost;
             EmailPortBox.Text = mw.EmailPort.ToString();
             EmailUserBox.Text = mw.EmailUser;
-            EmailPassBox.Password = mw.EmailPass;
+            EmailPassBox.Password = mw.EmailPass; // В PasswordBox используем .Password
             EmailToBox.Text = mw.EmailTo;
 
             VkTokenBox.Text = mw.VkToken;
@@ -125,13 +131,6 @@ namespace TERMINAL.Windows
             SmsLoginBox.Text = mw.SmsLogin;
             SmsPassBox.Password = mw.SmsPass;
             SmsPhoneBox.Text = mw.SmsPhone;
-
-
-
-            // ─── Общие настройки ───
-            // Конструктор уже заполнил General* значениями, переданными из MainWindow.
-            // Здесь ничего делать не нужно.
-
         }
 
         private void Default_Click(object sender, RoutedEventArgs e)
@@ -316,18 +315,21 @@ namespace TERMINAL.Windows
             // ═══════════════════════════════════════════════════════════════
             // 6.5. Применяем настройки уведомлений
             // ═══════════════════════════════════════════════════════════════
+            int emailPort = int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587;
+            long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
+
             mw.ApplyNotificationSettings(
                 enabled: NotificationsEnabledCheck.IsChecked == true,
-                methodIndex: NotificationMethodCombo.SelectedIndex,
+                methodIndex: NotificationMethodCombo.SelectedIndex, // <-- ВЫБОР МЕТОДА
                 tgToken: TelegramTokenBox.Text.Trim(),
                 tgChatId: TelegramChatIdBox.Text.Trim(),
                 emailHost: EmailHostBox.Text.Trim(),
-                emailPort: int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587,
+                emailPort: emailPort,
                 emailUser: EmailUserBox.Text.Trim(),
-                emailPass: EmailPassBox.Password,
+                emailPass: EmailPassBox.Password,                   // <-- ПАРОЛЬ ПОЧТЫ
                 emailTo: EmailToBox.Text.Trim(),
                 vkToken: VkTokenBox.Text.Trim(),
-                vkPeerId: long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0,
+                vkPeerId: vkId,
                 smsLogin: SmsLoginBox.Text.Trim(),
                 smsPass: SmsPassBox.Password,
                 smsPhone: SmsPhoneBox.Text.Trim()

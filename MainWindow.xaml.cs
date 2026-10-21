@@ -1387,13 +1387,14 @@ namespace TERMINAL
         // УВЕДОМЛЕНИЯ — применение настроек
         // ═══════════════════════════════════════════════════════════════════
         public void ApplyNotificationSettings(
-            bool enabled,
-            int methodIndex,
-            string tgToken, string tgChatId,
-            string emailHost, int emailPort, string emailUser, string emailPass, string emailTo,
-            string vkToken, long vkPeerId,
-            string smsLogin, string smsPass, string smsPhone)
+    bool enabled,
+    int methodIndex,
+    string tgToken, string tgChatId,
+    string emailHost, int emailPort, string emailUser, string emailPass, string emailTo,
+    string vkToken, long vkPeerId,
+    string smsLogin, string smsPass, string smsPhone)
         {
+            // 1. Сохраняем все настройки в поля MainWindow
             _notificationsEnabled = enabled;
             _notificationMethodIndex = methodIndex;
 
@@ -1403,47 +1404,41 @@ namespace TERMINAL
             _emailHost = emailHost ?? "";
             _emailPort = emailPort;
             _emailUser = emailUser ?? "";
-            _emailPass = emailPass ?? "";
+            _emailPass = emailPass ?? ""; // <--- ПАРОЛЬ ПОЧТЫ СОХРАНЯЕТСЯ СЮДА
             _emailTo = emailTo ?? "";
 
             _vkToken = vkToken ?? "";
             _vkPeerId = vkPeerId;
 
             _smsLogin = smsLogin ?? "";
-            _smsPass = smsPass ?? "";
+            _smsPass = smsPass ?? "";     // <--- ПАРОЛЬ SMS СОХРАНЯЕТСЯ СЮДА
             _smsPhone = smsPhone ?? "";
 
-            NotificationManager.ClearServices(); // Очищаем старые
+            // 2. Применяем сервис в зависимости от выбора
+            NotificationManager.ClearServices();
 
             if (enabled)
             {
                 switch (methodIndex)
                 {
-                    case 0:
+                    case 0: // Telegram
                         if (!string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long chatIdLong))
-                        {
                             NotificationManager.AddService(new TelegramNotificationService(_telegramToken, chatIdLong));
-                        }
                         break;
-                    case 1:
+
+                    case 1: // Email
                         if (!string.IsNullOrEmpty(_emailHost) && !string.IsNullOrEmpty(_emailUser))
-                        {
                             NotificationManager.AddService(new EmailNotificationService(_emailHost, _emailPort, _emailUser, _emailPass, _emailTo));
-                        }
                         break;
-                    case 2:
+
+                    case 2: // VK
                         if (!string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
-                        {
                             NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
-                        }
-                        break;
-                    case 3:
-                        // SMS обычно не добавляем в общий список, но если хотите - раскомментируйте
-                        // NotificationManager.AddService(new SmsNotificationService(_smsLogin, _smsPass, _smsPhone));
                         break;
                 }
             }
 
+            // 3. Сохраняем в JSON
             SaveSettings();
         }
 

@@ -77,11 +77,21 @@ namespace TERMINAL
                 _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
                 _logSlowTicks = _loadedSettings.LogSlowTicks;
 
-                // ─── Уведомления ───
+                // ─── Уведомления (ЧТЕНИЕ ИЗ JSON) ───
                 _notificationsEnabled = _loadedSettings.NotificationsEnabled;
+                _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
                 _telegramToken = _loadedSettings.TelegramToken ?? "";
                 _telegramChatId = _loadedSettings.TelegramChatId ?? "";
-
+                _emailHost = _loadedSettings.EmailHost ?? "";
+                _emailPort = _loadedSettings.EmailPort;
+                _emailUser = _loadedSettings.EmailUser ?? "";
+                _emailPass = _loadedSettings.EmailPass ?? "";
+                _emailTo = _loadedSettings.EmailTo ?? "";
+                _vkToken = _loadedSettings.VkToken ?? "";
+                _vkPeerId = _loadedSettings.VkPeerId;
+                _smsLogin = _loadedSettings.SmsLogin ?? "";
+                _smsPass = _loadedSettings.SmsPass ?? "";
+                _smsPhone = _loadedSettings.SmsPhone ?? "";
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
                 {
@@ -113,25 +123,15 @@ namespace TERMINAL
                 _batchKosaEnabled = false;
                 _batchKosaTimerSeconds = 25;
 
+                // Сброс уведомлений при ошибке
+                _notificationsEnabled = false;
+                _notificationMethodIndex = 0;
+                _telegramToken = ""; _telegramChatId = "";
+                _emailHost = ""; _emailPort = 587; _emailUser = ""; _emailPass = ""; _emailTo = "";
+                _vkToken = ""; _vkPeerId = 0;
+                _smsLogin = ""; _smsPass = ""; _smsPhone = "";
 
-                // ─── Уведомления ───
-                _notificationsEnabled = _loadedSettings.NotificationsEnabled;
-                _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
-                _telegramToken = _loadedSettings.TelegramToken ?? "";
-                _telegramChatId = _loadedSettings.TelegramChatId ?? "";
-                _emailHost = _loadedSettings.EmailHost ?? "";
-                _emailPort = _loadedSettings.EmailPort;
-                _emailUser = _loadedSettings.EmailUser ?? "";
-                _emailPass = _loadedSettings.EmailPass ?? "";
-                _emailTo = _loadedSettings.EmailTo ?? "";
-                _vkToken = _loadedSettings.VkToken ?? "";
-                _vkPeerId = _loadedSettings.VkPeerId;
-                _smsLogin = _loadedSettings.SmsLogin ?? "";
-                _smsPass = _loadedSettings.SmsPass ?? "";
-                _smsPhone = _loadedSettings.SmsPhone ?? "";
-
-                string docs = Environment.GetFolderPath(
-                    Environment.SpecialFolder.MyDocuments);
+                string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                 _loadedSettings.SavePath = Path.Combine(docs, "TERMINAL");
             }
         }
@@ -155,7 +155,6 @@ namespace TERMINAL
             _agkPressureTimeoutMinutes = _loadedSettings.AgkPressureTimeoutMinutes > 0
                 ? _loadedSettings.AgkPressureTimeoutMinutes : 5;
 
-
             _sktbFilterScript = _loadedSettings.SktbFilterScript;
             _showSktbCard = _loadedSettings.ShowSktbCard;
 
@@ -164,10 +163,20 @@ namespace TERMINAL
             _readPlatinum = _loadedSettings.ReadPlatinum;
             _platinumMtkCommand = _loadedSettings.PlatinumMtkCommand;
 
-            // ─── Уведомления ───
             _notificationsEnabled = _loadedSettings.NotificationsEnabled;
+            _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
             _telegramToken = _loadedSettings.TelegramToken ?? "";
             _telegramChatId = _loadedSettings.TelegramChatId ?? "";
+            _emailHost = _loadedSettings.EmailHost ?? "";
+            _emailPort = _loadedSettings.EmailPort;
+            _emailUser = _loadedSettings.EmailUser ?? "";
+            _emailPass = _loadedSettings.EmailPass ?? "";
+            _emailTo = _loadedSettings.EmailTo ?? "";
+            _vkToken = _loadedSettings.VkToken ?? "";
+            _vkPeerId = _loadedSettings.VkPeerId;
+            _smsLogin = _loadedSettings.SmsLogin ?? "";
+            _smsPass = _loadedSettings.SmsPass ?? "";
+            _smsPhone = _loadedSettings.SmsPhone ?? "";
 
             RefreshDeviceCardsVisibility();
 
