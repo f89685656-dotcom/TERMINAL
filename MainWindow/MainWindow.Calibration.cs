@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {

@@ -4,6 +4,8 @@ using System.Net;
 using System.IO.Ports;
 using System.Windows;
 using System.Windows.Controls;
+using System.Threading.Tasks;
+using TERMINAL.Notifications;
 
 namespace TERMINAL.Windows
 {
@@ -51,6 +53,7 @@ namespace TERMINAL.Windows
             //   чтобы LoadCurrent мог их перезаписать из MainWindow.Current (актуальнее).
             //   Если MainWindow.Current == null — останутся переданные.
             PlatinumMtkCommandBox.Text = platinumMtkCommand;
+
 
             LoadCurrent();
         }
@@ -103,6 +106,12 @@ namespace TERMINAL.Windows
             // После установки индекса — пересчитать видимость панели COM
             PlatinumSourceCombo_SelectionChanged(null, null);
 
+            // ─── Уведомления ───
+            NotificationsEnabledCheck.IsChecked = mw.NotificationsEnabled;
+            TelegramTokenBox.Text = mw.TelegramToken;
+            TelegramChatIdBox.Text = mw.TelegramChatId;
+            NotificationMethodCombo.SelectedIndex = 0;   // пока только Telegram
+
             // ─── Общие настройки ───
             // Конструктор уже заполнил General* значениями, переданными из MainWindow.
             // Здесь ничего делать не нужно.
@@ -134,6 +143,12 @@ namespace TERMINAL.Windows
             GeneralAutoExcelCheck.IsChecked = true;
             GeneralTickTimingCheck.IsChecked = true;
             GeneralLogSlowTicksCheck.IsChecked = true;
+
+            // ─── Уведомления ───
+            NotificationsEnabledCheck.IsChecked = false;
+            TelegramTokenBox.Text = "";
+            TelegramChatIdBox.Text = "";
+            NotificationMethodCombo.SelectedIndex = 0;
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -282,6 +297,17 @@ namespace TERMINAL.Windows
                 logSlowTicksEnabled);
 
             // ═══════════════════════════════════════════════════════════════
+            // 6.5. Применяем настройки уведомлений
+            // ═══════════════════════════════════════════════════════════════
+
+            mw.ApplyNotificationSettings(
+                NotificationsEnabledCheck.IsChecked == true,
+                TelegramTokenBox.Text.Trim(),
+                TelegramChatIdBox.Text.Trim());
+
+
+
+            // ═══════════════════════════════════════════════════════════════
             // 7. Закрываем окно
             // ═══════════════════════════════════════════════════════════════
 
@@ -292,6 +318,43 @@ namespace TERMINAL.Windows
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;
+        }
+
+        private async void TestNotificationButton_Click(object sender, RoutedEventArgs e)
+        {
+            string token = TelegramTokenBox.Text.Trim();
+            string chatId = TelegramChatIdBox.Text.Trim();
+
+            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(chatId))
+            {
+                MessageBox.Show(this,
+                    "Заполните Token и Chat ID.",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!long.TryParse(chatId, out long chatIdLong))
+            {
+                MessageBox.Show(this,
+                    "Chat ID должен быть числом (например, -1001234567890).",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                var service = new TelegramNotificationService(token, chatIdLong);
+                await service.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L. Всё работает!");
+                MessageBox.Show(this,
+                    "Сообщение отправлено! Проверьте Telegram.",
+                    "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this,
+                    $"Ошибка: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private bool Validate()

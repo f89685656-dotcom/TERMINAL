@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {
@@ -219,6 +220,13 @@ namespace TERMINAL
                         AgkStatusTextBox.Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)); // Серый
                 }
 
+
+
+                if (_agkFailCount >= ConnectionLostThreshold)
+                {
+                    _ = NotificationManager.NotifyAsync(
+                        $"🟢 АГК: связь восстановлена ({_deviceIp}:{_devicePort})");
+                }
                 _agkFailCount = 0;
                 AgkStatusEllipse.Fill = Brushes.Green;
             }
@@ -228,6 +236,8 @@ namespace TERMINAL
 
                 if (_agkFailCount >= ConnectionLostThreshold)
                 {
+                    _ = NotificationManager.NotifyAsync(
+                    $"🔴 АГК: потеря связи ({_deviceIp}:{_devicePort})");
                     AgkPressureText.Text = "—";
                     AgkSetPointText.Text = "—";
                     AgkStatusEllipse.Fill = Brushes.Red;

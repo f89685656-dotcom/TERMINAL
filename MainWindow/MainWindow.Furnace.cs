@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {
@@ -106,6 +107,14 @@ namespace TERMINAL
 
             if (snap.CurrentTemp.HasValue)
             {
+                // ★ Восстановление связи — шлём ОДИН раз при переходе из «плохо» в «хорошо».
+                //   Проверяем ДО сброса счётчика, иначе условие никогда не сработает.
+                if (_furnaceTempFailCount >= ConnectionLostThreshold)
+                {
+                    _ = NotificationManager.NotifyAsync(
+                        $"🟢 ST-351: связь восстановлена ({_furnaceIp}:{_furnacePort})");
+                }
+
                 _furnaceTempFailCount = 0;
                 double rounded = Math.Round((double)snap.CurrentTemp.Value, 3);
                 string sign = rounded >= 0 ? "+" : "";
@@ -118,6 +127,15 @@ namespace TERMINAL
             else
             {
                 _furnaceTempFailCount++;
+
+                // ★ Потеря связи — шлём ОДИН раз в момент пересечения порога.
+                //   Именно ==, а не >=, иначе будет спам каждую секунду после порога.
+                if (_furnaceTempFailCount == ConnectionLostThreshold)
+                {
+                    _ = NotificationManager.NotifyAsync(
+                        $"🔴 ST-351: потеря связи ({_furnaceIp}:{_furnacePort})");
+                }
+
                 if (_furnaceTempFailCount >= ConnectionLostThreshold)
                 {
                     FurnaceCurrentTempText.Text = "— °C";

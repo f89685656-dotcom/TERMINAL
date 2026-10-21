@@ -167,6 +167,38 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- ═══ Уведомления ═══ -->
+            <TabItem Header="Уведомления">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+                        <CheckBox x:Name="NotificationsEnabledCheck"
+                      Content="Включить уведомления"
+                      FontWeight="Bold"
+                      Margin="0,0,0,15"/>
+
+                        <TextBlock Text="Способ отправки:" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <ComboBox x:Name="NotificationMethodCombo" Height="24" SelectedIndex="0">
+                            <ComboBoxItem Content="Telegram"/>
+                            <!-- В будущем можно добавить Email, если захотите -->
+                        </ComboBox>
+
+                        <TextBlock Text="Telegram Token:" FontWeight="Bold" Margin="0,15,0,5"/>
+                        <TextBox x:Name="TelegramTokenBox" Height="24" Padding="4,2" 
+                     ToolTip="Токен, полученный от @BotFather"/>
+
+                        <TextBlock Text="Telegram Chat ID:" FontWeight="Bold" Margin="0,10,0,5"/>
+                        <TextBox x:Name="TelegramChatIdBox" Height="24" Padding="4,2" 
+                     ToolTip="ID вашего чата с ботом (можно узнать через getUpdates)"/>
+
+                        <Button x:Name="TestNotificationButton" 
+                    Content="Отправить тестовое сообщение" 
+                    Width="220" Height="30" Margin="0,20,0,0"
+                    HorizontalAlignment="Left"
+                    Click="TestNotificationButton_Click"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
         </TabControl>
 
         <!-- Кнопки -->

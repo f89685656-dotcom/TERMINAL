@@ -22,6 +22,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {
@@ -94,8 +95,6 @@ namespace TERMINAL
 
         private SerialPort? _platinumSerial;
         private readonly object _platinumSerialLock = new object();
-
-
 
         public string PlatinumSource => _platinumSource;
         public string PlatinumComPort => _platinumComPort;
@@ -290,6 +289,22 @@ namespace TERMINAL
 
         private string _currentAgkMode = "";
 
+        // ═══════════════════════════════════════════════════════════════════
+        // УВЕДОМЛЕНИЯ
+        // ═══════════════════════════════════════════════════════════════════
+        private bool _notificationsEnabled = false;
+        private string _telegramToken = "";
+        private string _telegramChatId = "";
+
+
+
+        // ═══════════════════════════════════════════════════════════════════
+        // УВЕДОМЛЕНИЯ
+        // ═══════════════════════════════════════════════════════════════════
+        public bool NotificationsEnabled => _notificationsEnabled;
+        public string TelegramToken => _telegramToken;
+        public string TelegramChatId => _telegramChatId;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -308,11 +323,36 @@ namespace TERMINAL
             LoadTimerSets();
             LoadSettings();
 
+            // ─── Инициализация сервиса уведомлений из сохранённых настроек ───
+            if (_notificationsEnabled
+                && !string.IsNullOrEmpty(_telegramToken)
+                && long.TryParse(_telegramChatId, out long _initChatId))
+            {
+                try
+                {
+                    NotificationManager.SetService(
+                        new TelegramNotificationService(_telegramToken, _initChatId));
+                }
+                catch (Exception ex)
+                {
+                    NotificationManager.SetService(new NullNotificationService());
+                    // AppendLog здесь ещё может не работать (окно не Loaded) — пишем в отладочный вывод
+                    System.Diagnostics.Debug.WriteLine(
+                        "Уведомления: не удалось инициализировать — " + ex.Message);
+                }
+            }
+            else
+            {
+                NotificationManager.SetService(new NullNotificationService());
+            }
+
             ApplyWindowPositionOrFallback();
 
             _uiLoaded = true;
 
             ApplyLoadedSettingsToUi();
+
+
 
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
@@ -498,9 +538,9 @@ namespace TERMINAL
                     _logSlowTicks,
                     _autoStopFurnace,
                     _platinumSource,
-                    _platinumComPort,
-                    _readPlatinum);
-
+                    _platinumComPort,        // ← 10-й, ДОБАВЛЕН
+                    _readPlatinum,           // ← 11-й
+                    _platinumMtkCommand);    // ← 12-й
 
                 win.Owner = this;
                 win.ShowDialog();
@@ -1311,6 +1351,38 @@ namespace TERMINAL
 
             ApplyTickTimingVisibility();
             UpdateKosaBadge();
+            SaveSettings();
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // УВЕДОМЛЕНИЯ — применение настроек
+        // ═══════════════════════════════════════════════════════════════════
+        public void ApplyNotificationSettings(bool enabled, string token, string chatId)
+        {
+            _notificationsEnabled = enabled;
+            _telegramToken = token ?? "";
+            _telegramChatId = chatId ?? "";
+
+            if (enabled && !string.IsNullOrEmpty(_telegramToken))
+            {
+                if (!long.TryParse(_telegramChatId, out long chatIdLong))
+                {
+                    NotificationManager.SetService(new NullNotificationService());
+                    AppendLog("Уведомления: некорректный Chat ID, сервис отключён", Brushes.Orange);
+                }
+                else
+                {
+                    NotificationManager.SetService(
+                        new TelegramNotificationService(_telegramToken, chatIdLong));
+                    AppendLog("Уведомления: Telegram-сервис активирован", Brushes.Green);
+                }
+            }
+            else
+            {
+                NotificationManager.SetService(new NullNotificationService());
+                AppendLog("Уведомления: отключены", Brushes.Gray);
+            }
+
             SaveSettings();
         }
 

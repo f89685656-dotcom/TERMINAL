@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {
@@ -231,6 +232,9 @@ namespace TERMINAL
                     LogSlowTicks = _logSlowTicks,
 
 
+
+
+
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
                         SetPoint = j.SetPointText,
@@ -439,6 +443,12 @@ namespace TERMINAL
             public bool ReadPlatinum { get; set; } = true;               // читать ли платину сейчас
 
             public string PlatinumMtkCommand { get; set; } = "pass2 meas2? 2";
+
+            // ─── Уведомления ───
+            public bool NotificationsEnabled { get; set; } = false;
+            public string NotificationMethod { get; set; } = "Telegram";
+            public string TelegramToken { get; set; } = "";
+            public string TelegramChatId { get; set; } = "";
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");
