@@ -563,6 +563,12 @@ namespace TERMINAL
             OpenDeviceSettings(1);
         }
 
+        private void NotificationsButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Открываем окно настроек сразу на вкладке "Уведомления" (индекс 4)
+            OpenDeviceSettings(4);
+        }
+
         private void FurnaceTitle_Click(object sender, MouseButtonEventArgs e)
         {
             OpenDeviceSettings(1);
