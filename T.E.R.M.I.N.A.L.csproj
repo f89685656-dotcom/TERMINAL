@@ -43,6 +43,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <None Include="Setup.vdproj" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="HidSharp" Version="2.6.4" />
 		<PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
 		<PackageReference Include="System.IO.Ports" Version="8.0.0" />   <!-- ← 8.0.0 вместо 11.0.0-rc -->

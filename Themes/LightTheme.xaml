@@ -1,0 +1,24 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="WindowBackground" Color="#F0F0F0"/>
+    <SolidColorBrush x:Key="TextForeground" Color="#000000"/>
+    <SolidColorBrush x:Key="PanelBackground" Color="#F8F8F8"/>
+    <SolidColorBrush x:Key="PanelBorder" Color="#DDDDDD"/>
+
+    <SolidColorBrush x:Key="ButtonStart" Color="#2E8B8B"/>
+    <SolidColorBrush x:Key="ButtonPause" Color="#B0A050"/>
+    <SolidColorBrush x:Key="ButtonSettings" Color="#607090"/>
+
+    <Style TargetType="TextBox">
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    </Style>
+
+    <Style TargetType="ComboBox">
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    </Style>
+</ResourceDictionary>

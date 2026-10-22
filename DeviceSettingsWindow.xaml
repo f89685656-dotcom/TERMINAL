@@ -4,9 +4,17 @@
         Title="Настройки приборов"
         Width="500" Height="620" 
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource TextForeground}">
 
-    <!-- Немного увеличил высоту окна (Height="620"), чтобы вкладка Уведомлений помещалась целиком -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/LightTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
 
     <Grid Margin="15">
         <Grid.RowDefinitions>
@@ -14,7 +22,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TabControl x:Name="DeviceTabs" Grid.Row="0">
+        <TabControl x:Name="DeviceTabs" Grid.Row="0" Background="{DynamicResource WindowBackground}">
 
             <!-- ═══ Общие ═══ -->
             <TabItem Header="Общие">
@@ -125,7 +133,6 @@
                             <ComboBoxItem Content="TERCON"/>
                         </ComboBox>
 
-                        <!-- Панель COM-порта: показывается только для МИТ 8.03 -->
                         <StackPanel x:Name="PlatinumComPanel"
                                     Orientation="Horizontal"
                                     Margin="0,10,0,0"
@@ -170,7 +177,6 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
 
-                        <!-- Блок включения и инструкции -->
                         <Grid Margin="0,0,0,15">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -200,8 +206,8 @@
                             <ComboBoxItem Content="SMS (SMSC.ru)"/>
                         </ComboBox>
 
-                        <!-- ═══ Панель 1: Telegram ═══ -->
                         <StackPanel x:Name="TelegramPanel" Margin="0,10,0,0">
+                            <CheckBox x:Name="TelegramEnabledCheck" Content="Отправлять в Telegram" FontWeight="Bold" Margin="0,0,0,10"/>
                             <TextBlock Text="Telegram Token:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <TextBox x:Name="TelegramTokenBox" Height="24" Padding="4,2" ToolTip="Токен от @BotFather"/>
 
@@ -209,8 +215,8 @@
                             <TextBox x:Name="TelegramChatIdBox" Height="24" Padding="4,2" ToolTip="ID вашего чата (можно узнать через getUpdates)"/>
                         </StackPanel>
 
-                        <!-- ═══ Панель 2: Email ═══ -->
                         <StackPanel x:Name="EmailPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <CheckBox x:Name="EmailEnabledCheck" Content="Отправлять на Email" FontWeight="Bold" Margin="0,0,0,10"/>
                             <TextBlock Text="Почтовый провайдер:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <ComboBox x:Name="EmailProviderCombo" Height="24" SelectionChanged="EmailProviderCombo_SelectionChanged">
                                 <ComboBoxItem Content="Яндекс (yandex.ru)"/>
@@ -235,8 +241,8 @@
                             <TextBox x:Name="EmailToBox" Height="24" Padding="4,2"/>
                         </StackPanel>
 
-                        <!-- ═══ Панель 3: VK ═══ -->
                         <StackPanel x:Name="VkPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <CheckBox x:Name="VkEnabledCheck" Content="Отправлять в VK" FontWeight="Bold" Margin="0,0,0,10"/>
                             <TextBlock Text="Access Token:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <TextBox x:Name="VkTokenBox" Height="24" Padding="4,2" ToolTip="Токен из OAuth ВКонтакте"/>
 
@@ -244,8 +250,8 @@
                             <TextBox x:Name="VkPeerIdBox" Height="24" Padding="4,2" ToolTip="Например: 12345678 (личка) или 2000000001 (беседа)"/>
                         </StackPanel>
 
-                        <!-- ═══ Панель 4: MAX ═══ -->
                         <StackPanel x:Name="MaxPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <CheckBox x:Name="MaxEnabledCheck" Content="Отправлять в MAX" FontWeight="Bold" Margin="0,0,0,10"/>
                             <TextBlock Text="Токен бота MAX:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <TextBox x:Name="MaxTokenBox" Height="24" Padding="4,2" ToolTip="Токен из платформы МАКС для партнеров"/>
 
@@ -253,7 +259,6 @@
                             <TextBox x:Name="MaxChatIdBox" Height="24" Padding="4,2" ToolTip="Например: 123456789"/>
                         </StackPanel>
 
-                        <!-- ═══ Панель 5: SMS ═══ -->
                         <StackPanel x:Name="SmsPanel" Margin="0,10,0,0" Visibility="Collapsed">
                             <TextBlock Text="Логин SMSC.ru:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <TextBox x:Name="SmsLoginBox" Height="24" Padding="4,2"/>
@@ -276,7 +281,6 @@
 
         </TabControl>
 
-        <!-- Кнопки -->
         <StackPanel Grid.Row="1" Orientation="Horizontal"
                     HorizontalAlignment="Right" Margin="0,15,0,0">
             <Button Content="По умолчанию" Width="120" Height="30"

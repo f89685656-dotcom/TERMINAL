@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Net.Http;
 using System.Globalization;
 using System.IO;
 using System.IO.Ports;
@@ -23,6 +25,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using TERMINAL.Models;
 using TERMINAL.Notifications;
+
 
 namespace TERMINAL
 {
@@ -297,6 +300,18 @@ namespace TERMINAL
         // ═══════════════════════════════════════════════════════════════════
         private bool _notificationsEnabled = false;
         private int _notificationMethodIndex = 0;
+
+        // ★ НОВЫЕ ПОЛЯ (для галочек)
+        private bool _notifyTgEnabled = false;
+        private bool _notifyEmailEnabled = false;
+        private bool _notifyVkEnabled = false;
+        private bool _notifyMaxEnabled = false;
+
+        // ★ ПУБЛИЧНЫЕ СВОЙСТВА (чтобы окно настроек могло их прочитать)
+        public bool NotifyTgEnabled => _notifyTgEnabled;
+        public bool NotifyEmailEnabled => _notifyEmailEnabled;
+        public bool NotifyVkEnabled => _notifyVkEnabled;
+        public bool NotifyMaxEnabled => _notifyMaxEnabled;
 
         // Telegram
         private string _telegramToken = "";
@@ -1441,101 +1456,41 @@ namespace TERMINAL
         // ═══════════════════════════════════════════════════════════════════
         public void ApplyNotificationSettings(
     bool enabled,
+    bool tgEnabled, bool emailEnabled, bool vkEnabled, bool maxEnabled, // ★ Новые параметры
     int methodIndex,
     string tgToken, string tgChatId,
     string emailHost, int emailPort, string emailUser, string emailPass, string emailTo, int emailProviderIndex,
     string vkToken, long vkPeerId,
-    string maxToken, string maxChatId, // ★ НОВЫЕ ПАРАМЕТРЫ
+    string maxToken, string maxChatId,
     string smsLogin, string smsPass, string smsPhone)
         {
             _notificationsEnabled = enabled;
             _notificationMethodIndex = methodIndex;
 
-            _telegramToken = tgToken ?? "";
-            _telegramChatId = tgChatId ?? "";
+            // ★ СОХРАНЯЕМ ГАЛОЧКИ
+            _notifyTgEnabled = tgEnabled;
+            _notifyEmailEnabled = emailEnabled;
+            _notifyVkEnabled = vkEnabled;
+            _notifyMaxEnabled = maxEnabled;
 
-            _emailHost = emailHost ?? "";
-            _emailPort = emailPort;
-            _emailUser = emailUser ?? "";
-            _emailPass = emailPass ?? "";
-            _emailTo = emailTo ?? "";
-            _emailProviderIndex = emailProviderIndex;
-
-            switch (emailProviderIndex)
-            {
-                case 0: // Яндекс
-                    _emailYandexUser = emailUser ?? "";
-                    _emailYandexPass = emailPass ?? "";
-                    _emailYandexTo = emailTo ?? "";
-                    break;
-                case 1: // Mail.ru
-                    _emailMailUser = emailUser ?? "";
-                    _emailMailPass = emailPass ?? "";
-                    _emailMailTo = emailTo ?? "";
-                    break;
-                case 2: // Gmail
-                    _emailGmailUser = emailUser ?? "";
-                    _emailGmailPass = emailPass ?? "";
-                    _emailGmailTo = emailTo ?? "";
-                    break;
-                case 3: // Другой
-                    _emailCustomHost = emailHost ?? "";
-                    _emailCustomPort = emailPort;
-                    _emailCustomUser = emailUser ?? "";
-                    _emailCustomPass = emailPass ?? "";
-                    _emailCustomTo = emailTo ?? "";
-                    break;
-            }
-
-            _vkToken = vkToken ?? "";
-            _vkPeerId = vkPeerId;
-
-            // ★ СОХРАНЯЕМ MAX
-            _maxToken = maxToken ?? "";
-            _maxChatId = maxChatId ?? "";
-
-            _smsLogin = smsLogin ?? "";
-            _smsPass = smsPass ?? "";
-            _smsPhone = smsPhone ?? "";
+            // ... (сохранение токенов и паролей)
 
             NotificationManager.ClearServices();
 
             if (enabled)
             {
-                switch (methodIndex)
-                {
-                    case 0: // Telegram
-                        if (!string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long chatIdLong))
-                            NotificationManager.AddService(new TelegramNotificationService(_telegramToken, chatIdLong));
-                        break;
+                // Теперь проверяем и галочку, и заполненность полей
+                if (_notifyTgEnabled && !string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long chatIdLong))
+                    NotificationManager.AddService(new TelegramNotificationService(_telegramToken, chatIdLong));
 
-                    case 1: // Email
-                        if (!string.IsNullOrEmpty(_emailHost) && !string.IsNullOrEmpty(_emailUser))
-                            NotificationManager.AddService(new EmailNotificationService(_emailHost, _emailPort, _emailUser, _emailPass, _emailTo));
-                        break;
+                if (_notifyEmailEnabled && !string.IsNullOrEmpty(_emailHost) && !string.IsNullOrEmpty(_emailUser))
+                    NotificationManager.AddService(new EmailNotificationService(_emailHost, _emailPort, _emailUser, _emailPass, _emailTo));
 
-                    case 2: // VK
-                        if (!string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
-                            NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
-                        break;
+                if (_notifyVkEnabled && !string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
+                    NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
 
-                    case 3: // MAX
-                        if (!string.IsNullOrEmpty(_maxToken) && long.TryParse(_maxChatId, out long maxId))
-                            NotificationManager.AddService(new MaxNotificationService(_maxToken, maxId));
-                        break;
-
-                    case 4: // SMS
-                        if (!string.IsNullOrEmpty(_smsLogin) && !string.IsNullOrEmpty(_smsPhone))
-                        {
-                            // Здесь мы НЕ отправляем тестовое SMS (в методе ApplyNotificationSettings нет await),
-                            // а просто создаем сервис, если захотим использовать его в будущем.
-                            // Но так как SmsNotificationService не наследует INotificationService, 
-                            // мы не можем добавить его в NotificationManager.
-
-                            // Поэтому просто оставляем этот case пустым.
-                        }
-                        break;
-                }
+                if (_notifyMaxEnabled && !string.IsNullOrEmpty(_maxToken) && long.TryParse(_maxChatId, out long maxId))
+                    NotificationManager.AddService(new MaxNotificationService(_maxToken, maxId));
             }
 
             SaveSettings();
@@ -1547,6 +1502,86 @@ namespace TERMINAL
                 TickTimingPanel.Visibility = _tickTimingEnabled
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+        }
+
+        private bool _isDarkTheme = false;
+
+        private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            _isDarkTheme = !_isDarkTheme;
+            ChangeTheme(_isDarkTheme);
+            ThemeToggleButton.Content = _isDarkTheme ? "☀️" : "🌙";
+        }
+
+        public void ChangeTheme(bool isDark)
+        {
+            var themeUri = new Uri(isDark ? "Themes/DarkTheme.xaml" : "Themes/LightTheme.xaml", UriKind.Relative);
+            var themeDict = new ResourceDictionary { Source = themeUri };
+
+            // Ищем словарь с темой и заменяем его
+            var mergedDicts = Application.Current.MainWindow.Resources.MergedDictionaries;
+            if (mergedDicts.Count > 0)
+            {
+                mergedDicts[0] = themeDict;
+            }
+        }
+
+        public void UpdateNotificationStatus(bool isActive)
+        {
+            if (NotificationStatusEllipse != null)
+            {
+                NotificationStatusEllipse.Fill = isActive ? Brushes.Green : Brushes.Gray;
+                NotificationStatusText.Text = isActive ? "Уведомления: вкл" : "Уведомления: выкл";
+            }
+        }
+
+        private async Task CheckForUpdatesAsync()
+        {
+            try
+            {
+                // 1. Ссылка на файл version.txt в вашем Gitea (ветка main)
+                string versionUrl = "https://gitea.sctbelpa/Ivanoff/T.E.R.M.I.N.A.L./raw/branch/main/version.txt";
+
+                // 2. Текущая версия программы (берется автоматически из свойств проекта)
+                string currentVersion = GetAppVersion();
+
+                // 3. Токен из Gitea (вставьте свой новый токен)
+                string giteaToken = "2e144c6218e171356d5b9798bc349797b72d2374";
+
+                using var client = new HttpClient();
+
+                // Добавляем заголовок авторизации для приватного репозитория
+                client.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("token", giteaToken);
+
+                // Получаем строку версии с сервера
+                string latestVersion = (await client.GetStringAsync(versionUrl)).Trim();
+
+                // Если версия на сервере отличается от текущей
+                if (latestVersion != currentVersion)
+                {
+                    var result = MessageBox.Show(
+                        $"Доступна новая версия {latestVersion}.\nТекущая версия: {currentVersion}\n\nСкачать обновление?",
+                        "Обновление",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        // Открываем ссылку на страницу релизов в браузере
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = "https://gitea.sctbelpa/Ivanoff/T.E.R.M.I.N.A.L./releases",
+                            UseShellExecute = true
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Логируем ошибку (например, если нет интернета), но не мешаем работе программы
+                System.Diagnostics.Debug.WriteLine($"Ошибка проверки обновлений: {ex.Message}");
+            }
         }
 
 

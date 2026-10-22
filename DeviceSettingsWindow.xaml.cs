@@ -117,6 +117,12 @@ namespace TERMINAL.Windows
             // могло не сработать при программной установке SelectedIndex
             NotificationMethodCombo_SelectionChanged(null, null);
 
+            // ★ ЗАГРУЖАЕМ ГАЛОЧКИ
+            TelegramEnabledCheck.IsChecked = mw.NotifyTgEnabled;
+            EmailEnabledCheck.IsChecked = mw.NotifyEmailEnabled;
+            VkEnabledCheck.IsChecked = mw.NotifyVkEnabled;
+            MaxEnabledCheck.IsChecked = mw.NotifyMaxEnabled;
+
             // Заполнение полей для всех каналов
             TelegramTokenBox.Text = mw.TelegramToken;
             TelegramChatIdBox.Text = mw.TelegramChatId;
@@ -345,39 +351,36 @@ namespace TERMINAL.Windows
             long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
 
             mw.ApplyNotificationSettings(
-    enabled: NotificationsEnabledCheck.IsChecked == true,
-    methodIndex: NotificationMethodCombo.SelectedIndex,
+                enabled: NotificationsEnabledCheck.IsChecked == true,
 
-    tgToken: TelegramTokenBox.Text.Trim(),
-    tgChatId: TelegramChatIdBox.Text.Trim(),
+                // ★ ПЕРЕДАЕМ ГАЛОЧКИ АКТИВНОСТИ КАНАЛОВ
+                tgEnabled: TelegramEnabledCheck.IsChecked == true,
+                emailEnabled: EmailEnabledCheck.IsChecked == true,
+                vkEnabled: VkEnabledCheck.IsChecked == true,
+                maxEnabled: MaxEnabledCheck.IsChecked == true,
 
-    emailHost: EmailHostBox.Text.Trim(),
-    emailPort: emailPort,
-    emailUser: EmailUserBox.Text.Trim(),
-    emailPass: EmailPassBox.Password,
-    emailTo: EmailToBox.Text.Trim(),
-    emailProviderIndex: EmailProviderCombo.SelectedIndex,
+                methodIndex: NotificationMethodCombo.SelectedIndex,
 
-    vkToken: VkTokenBox.Text.Trim(),
-    vkPeerId: vkId,
+                tgToken: TelegramTokenBox.Text.Trim(),
+                tgChatId: TelegramChatIdBox.Text.Trim(),
 
-    // ★ ПЕРЕДАЕМ ДАННЫЕ MAX
-    maxToken: MaxTokenBox.Text.Trim(),
-    maxChatId: MaxChatIdBox.Text.Trim(),
+                emailHost: EmailHostBox.Text.Trim(),
+                emailPort: emailPort,
+                emailUser: EmailUserBox.Text.Trim(),
+                emailPass: EmailPassBox.Password,
+                emailTo: EmailToBox.Text.Trim(),
+                emailProviderIndex: EmailProviderCombo.SelectedIndex,
 
-    smsLogin: SmsLoginBox.Text.Trim(),
-    smsPass: SmsPassBox.Password,
-    smsPhone: SmsPhoneBox.Text.Trim()
-);
+                vkToken: VkTokenBox.Text.Trim(),
+                vkPeerId: vkId,
 
+                maxToken: MaxTokenBox.Text.Trim(),
+                maxChatId: MaxChatIdBox.Text.Trim(),
 
-
-            // ═══════════════════════════════════════════════════════════════
-            // 7. Закрываем окно
-            // ═══════════════════════════════════════════════════════════════
-
-            DialogResult = true;
-            Close();
+                smsLogin: SmsLoginBox.Text.Trim(),
+                smsPass: SmsPassBox.Password,
+                smsPhone: SmsPhoneBox.Text.Trim()
+            );
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)

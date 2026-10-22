@@ -80,6 +80,12 @@ namespace TERMINAL
                 // ─── Уведомления (ЧТЕНИЕ ИЗ JSON) ───
                 _notificationsEnabled = _loadedSettings.NotificationsEnabled;
                 _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
+
+                _notifyTgEnabled = _loadedSettings.NotifyTgEnabled;
+                _notifyEmailEnabled = _loadedSettings.NotifyEmailEnabled;
+                _notifyVkEnabled = _loadedSettings.NotifyVkEnabled;
+                _notifyMaxEnabled = _loadedSettings.NotifyMaxEnabled;
+
                 _telegramToken = _loadedSettings.TelegramToken ?? "";
                 _telegramChatId = _loadedSettings.TelegramChatId ?? "";
                 _emailProviderIndex = _loadedSettings.EmailProviderIndex;
@@ -187,6 +193,13 @@ namespace TERMINAL
 
             _notificationsEnabled = _loadedSettings.NotificationsEnabled;
             _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
+
+            _notifyTgEnabled = _loadedSettings.NotifyTgEnabled;
+            _notifyEmailEnabled = _loadedSettings.NotifyEmailEnabled;
+            _notifyVkEnabled = _loadedSettings.NotifyVkEnabled;
+            _notifyMaxEnabled = _loadedSettings.NotifyMaxEnabled;
+
+
             _telegramToken = _loadedSettings.TelegramToken ?? "";
             _telegramChatId = _loadedSettings.TelegramChatId ?? "";
             _emailHost = _loadedSettings.EmailHost ?? "";
@@ -329,6 +342,12 @@ namespace TERMINAL
                     // ─── Уведомления ───
                     NotificationsEnabled = _notificationsEnabled,
                     NotificationMethodIndex = _notificationMethodIndex,
+
+                    NotifyTgEnabled = _notifyTgEnabled,
+                    NotifyEmailEnabled = _notifyEmailEnabled,
+                    NotifyVkEnabled = _notifyVkEnabled,
+                    NotifyMaxEnabled = _notifyMaxEnabled,
+
                     TelegramToken = _telegramToken,
                     TelegramChatId = _telegramChatId,
 
@@ -545,6 +564,12 @@ namespace TERMINAL
             // ─── Уведомления ───
             public bool NotificationsEnabled { get; set; } = false;
             public int NotificationMethodIndex { get; set; } = 0; // 0-TG, 1-Email, 2-VK, 3-SMS
+
+            // ★ НОВЫЕ СВОЙСТВА (Галочки активности)
+            public bool NotifyTgEnabled { get; set; } = false;
+            public bool NotifyEmailEnabled { get; set; } = false;
+            public bool NotifyVkEnabled { get; set; } = false;
+            public bool NotifyMaxEnabled { get; set; } = false;
 
             // Telegram
             public string TelegramToken { get; set; } = "";
