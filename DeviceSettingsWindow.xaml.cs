@@ -637,7 +637,7 @@ namespace TERMINAL.Windows
                     break;
                 case 1: // Mail.ru
                     EmailHostBox.Text = "smtp.mail.ru";
-                    EmailPortBox.Text = "465";
+                    EmailPortBox.Text = "587";
                     break;
                 case 2: // Gmail
                     EmailHostBox.Text = "smtp.gmail.com";
