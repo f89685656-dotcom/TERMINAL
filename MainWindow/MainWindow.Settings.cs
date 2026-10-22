@@ -82,11 +82,31 @@ namespace TERMINAL
                 _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
                 _telegramToken = _loadedSettings.TelegramToken ?? "";
                 _telegramChatId = _loadedSettings.TelegramChatId ?? "";
+                _emailProviderIndex = _loadedSettings.EmailProviderIndex;
                 _emailHost = _loadedSettings.EmailHost ?? "";
                 _emailPort = _loadedSettings.EmailPort;
                 _emailUser = _loadedSettings.EmailUser ?? "";
                 _emailPass = _loadedSettings.EmailPass ?? "";
                 _emailTo = _loadedSettings.EmailTo ?? "";
+
+                // ★ НОВЫЕ СТРОКИ:
+                _emailYandexUser = _loadedSettings.EmailYandexUser ?? "";
+                _emailYandexPass = _loadedSettings.EmailYandexPass ?? "";
+                _emailYandexTo = _loadedSettings.EmailYandexTo ?? "";
+
+                _emailMailUser = _loadedSettings.EmailMailUser ?? "";
+                _emailMailPass = _loadedSettings.EmailMailPass ?? "";
+                _emailMailTo = _loadedSettings.EmailMailTo ?? "";
+
+                _emailGmailUser = _loadedSettings.EmailGmailUser ?? "";
+                _emailGmailPass = _loadedSettings.EmailGmailPass ?? "";
+                _emailGmailTo = _loadedSettings.EmailGmailTo ?? "";
+
+                _emailCustomHost = _loadedSettings.EmailCustomHost ?? "";
+                _emailCustomPort = _loadedSettings.EmailCustomPort;
+                _emailCustomUser = _loadedSettings.EmailCustomUser ?? "";
+                _emailCustomPass = _loadedSettings.EmailCustomPass ?? "";
+                _emailCustomTo = _loadedSettings.EmailCustomTo ?? "";
                 _vkToken = _loadedSettings.VkToken ?? "";
                 _vkPeerId = _loadedSettings.VkPeerId;
                 _smsLogin = _loadedSettings.SmsLogin ?? "";
@@ -172,6 +192,7 @@ namespace TERMINAL
             _emailUser = _loadedSettings.EmailUser ?? "";
             _emailPass = _loadedSettings.EmailPass ?? "";
             _emailTo = _loadedSettings.EmailTo ?? "";
+            _emailProviderIndex = _loadedSettings.EmailProviderIndex;
             _vkToken = _loadedSettings.VkToken ?? "";
             _vkPeerId = _loadedSettings.VkPeerId;
             _smsLogin = _loadedSettings.SmsLogin ?? "";
@@ -308,17 +329,39 @@ namespace TERMINAL
                     NotificationMethodIndex = _notificationMethodIndex,
                     TelegramToken = _telegramToken,
                     TelegramChatId = _telegramChatId,
+
+                    // Email
+                    EmailProviderIndex = _emailProviderIndex,
                     EmailHost = _emailHost,
                     EmailPort = _emailPort,
                     EmailUser = _emailUser,
                     EmailPass = _emailPass,
                     EmailTo = _emailTo,
+
+                    // ★ НОВЫЕ СТРОКИ:
+                    EmailYandexUser = _emailYandexUser,
+                    EmailYandexPass = _emailYandexPass,
+                    EmailYandexTo = _emailYandexTo,
+
+                    EmailMailUser = _emailMailUser,
+                    EmailMailPass = _emailMailPass,
+                    EmailMailTo = _emailMailTo,
+
+                    EmailGmailUser = _emailGmailUser,
+                    EmailGmailPass = _emailGmailPass,
+                    EmailGmailTo = _emailGmailTo,
+
+                    EmailCustomHost = _emailCustomHost,
+                    EmailCustomPort = _emailCustomPort,
+                    EmailCustomUser = _emailCustomUser,
+                    EmailCustomPass = _emailCustomPass,
+                    EmailCustomTo = _emailCustomTo,
+
                     VkToken = _vkToken,
                     VkPeerId = _vkPeerId,
                     SmsLogin = _smsLogin,
                     SmsPass = _smsPass,
                     SmsPhone = _smsPhone,
-
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
                     WindowWidth = _loadedSettings?.WindowWidth ?? double.NaN,
@@ -509,6 +552,31 @@ namespace TERMINAL
             public string EmailUser { get; set; } = "";
             public string EmailPass { get; set; } = "";
             public string EmailTo { get; set; } = "";
+
+            // ─── Уведомления: Email ───
+            public int EmailProviderIndex { get; set; } = 0;
+
+            // Яндекс
+            public string EmailYandexUser { get; set; } = "";
+            public string EmailYandexPass { get; set; } = "";
+            public string EmailYandexTo { get; set; } = "";
+
+            // Mail.ru
+            public string EmailMailUser { get; set; } = "";
+            public string EmailMailPass { get; set; } = "";
+            public string EmailMailTo { get; set; } = "";
+
+            // Gmail
+            public string EmailGmailUser { get; set; } = "";
+            public string EmailGmailPass { get; set; } = "";
+            public string EmailGmailTo { get; set; } = "";
+
+            // Другой
+            public string EmailCustomHost { get; set; } = "";
+            public int EmailCustomPort { get; set; } = 587;
+            public string EmailCustomUser { get; set; } = "";
+            public string EmailCustomPass { get; set; } = "";
+            public string EmailCustomTo { get; set; } = "";
 
             // VK
             public string VkToken { get; set; } = "";

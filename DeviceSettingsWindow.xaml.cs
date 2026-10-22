@@ -11,6 +11,8 @@ namespace TERMINAL.Windows
 {
     public partial class DeviceSettingsWindow : Window
     {
+        private int _lastSelectedProvider = 0;
+        private bool _isLoadingData = false;
         public DeviceSettingsWindow(int initialTab = 0,
                                      bool q2viewEnabled = false,
                                      bool timerEnabled = true,
@@ -119,11 +121,35 @@ namespace TERMINAL.Windows
             TelegramTokenBox.Text = mw.TelegramToken;
             TelegramChatIdBox.Text = mw.TelegramChatId;
 
-            EmailHostBox.Text = mw.EmailHost;
-            EmailPortBox.Text = mw.EmailPort.ToString();
-            EmailUserBox.Text = mw.EmailUser;
-            EmailPassBox.Password = mw.EmailPass; // В PasswordBox используем .Password
-            EmailToBox.Text = mw.EmailTo;
+            // ─── Уведомления: Email ───
+            // 1. Включаем защиту от срабатывания события SelectionChanged
+            _isLoadingData = true;
+            EmailProviderCombo.SelectedIndex = mw.EmailProviderIndex;
+            _isLoadingData = false;
+
+            // 2. Вручную выставляем сервер и порт в зависимости от провайдера
+            switch (mw.EmailProviderIndex)
+            {
+                case 0: // Яндекс
+                    EmailHostBox.Text = "smtp.yandex.ru";
+                    EmailPortBox.Text = "587";
+                    break;
+                case 1: // Mail.ru
+                    EmailHostBox.Text = "smtp.mail.ru";
+                    EmailPortBox.Text = "465";
+                    break;
+                case 2: // Gmail
+                    EmailHostBox.Text = "smtp.gmail.com";
+                    EmailPortBox.Text = "587";
+                    break;
+                case 3: // Другой
+                    EmailHostBox.Text = mw.EmailCustomHost;
+                    EmailPortBox.Text = mw.EmailCustomPort.ToString();
+                    break;
+            }
+
+            // 3. Загружаем сохраненные логин/пароль/получателя для этого провайдера
+            LoadEmailFields(mw.EmailProviderIndex);
 
             VkTokenBox.Text = mw.VkToken;
             VkPeerIdBox.Text = mw.VkPeerId.ToString();
@@ -320,16 +346,21 @@ namespace TERMINAL.Windows
 
             mw.ApplyNotificationSettings(
                 enabled: NotificationsEnabledCheck.IsChecked == true,
-                methodIndex: NotificationMethodCombo.SelectedIndex, // <-- ВЫБОР МЕТОДА
+                methodIndex: NotificationMethodCombo.SelectedIndex,
+
                 tgToken: TelegramTokenBox.Text.Trim(),
                 tgChatId: TelegramChatIdBox.Text.Trim(),
+
                 emailHost: EmailHostBox.Text.Trim(),
-                emailPort: emailPort,
+                emailPort: emailPort, // <-- используем переменную, созданную выше
                 emailUser: EmailUserBox.Text.Trim(),
-                emailPass: EmailPassBox.Password,                   // <-- ПАРОЛЬ ПОЧТЫ
+                emailPass: EmailPassBox.Password,
                 emailTo: EmailToBox.Text.Trim(),
+                emailProviderIndex: EmailProviderCombo.SelectedIndex,
+
                 vkToken: VkTokenBox.Text.Trim(),
-                vkPeerId: vkId,
+                vkPeerId: vkId, // <-- используем переменную, созданную выше
+
                 smsLogin: SmsLoginBox.Text.Trim(),
                 smsPass: SmsPassBox.Password,
                 smsPhone: SmsPhoneBox.Text.Trim()
@@ -554,6 +585,114 @@ namespace TERMINAL.Windows
                     break;
                 case 3: // SMS
                     SmsPanel.Visibility = Visibility.Visible;
+                    break;
+            }
+        }
+
+        private void EmailProviderCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (EmailHostBox == null || EmailPortBox == null) return;
+
+            // ★ Защита от срабатывания во время загрузки данных
+            if (_isLoadingData) return;
+
+            // ★ Берем данные того провайдера, с которого мы УХОДИМ.
+            // Если список только инициализируется, e.RemovedItems может быть пустым.
+            if (e.RemovedItems.Count > 0)
+            {
+                var oldItem = e.RemovedItems[0] as ComboBoxItem;
+                if (oldItem != null)
+                {
+                    int oldIndex = EmailProviderCombo.Items.IndexOf(oldItem);
+                    SaveCurrentEmailFields(oldIndex);
+                }
+            }
+
+            // 2. Меняем сервер и порт для НОВОГО провайдера
+            int newIndex = EmailProviderCombo.SelectedIndex;
+            switch (newIndex)
+            {
+                case 0: // Яндекс
+                    EmailHostBox.Text = "smtp.yandex.ru";
+                    EmailPortBox.Text = "587";
+                    break;
+                case 1: // Mail.ru
+                    EmailHostBox.Text = "smtp.mail.ru";
+                    EmailPortBox.Text = "465";
+                    break;
+                case 2: // Gmail
+                    EmailHostBox.Text = "smtp.gmail.com";
+                    EmailPortBox.Text = "587";
+                    break;
+                case 3: // Другой
+                        // Для "Другого" поля сервера и порта не трогаем, чтобы можно было ввести свои
+                    break;
+            }
+
+            // 3. Загружаем данные для НОВОГО провайдера
+            LoadEmailFields(newIndex);
+        }
+
+        private void SaveCurrentEmailFields(int providerIndex)
+        {
+            if (MainWindow.Current == null) return;
+            var mw = MainWindow.Current;
+
+            switch (providerIndex)
+            {
+                case 0:
+                    mw.EmailYandexUser = EmailUserBox.Text;
+                    mw.EmailYandexPass = EmailPassBox.Password;
+                    mw.EmailYandexTo = EmailToBox.Text;
+                    break;
+                case 1:
+                    mw.EmailMailUser = EmailUserBox.Text;
+                    mw.EmailMailPass = EmailPassBox.Password;
+                    mw.EmailMailTo = EmailToBox.Text;
+                    break;
+                case 2:
+                    mw.EmailGmailUser = EmailUserBox.Text;
+                    mw.EmailGmailPass = EmailPassBox.Password;
+                    mw.EmailGmailTo = EmailToBox.Text;
+                    break;
+                case 3:
+                    mw.EmailCustomHost = EmailHostBox.Text;
+                    mw.EmailCustomPort = int.TryParse(EmailPortBox.Text, out int p) ? p : 587;
+                    mw.EmailCustomUser = EmailUserBox.Text;
+                    mw.EmailCustomPass = EmailPassBox.Password;
+                    mw.EmailCustomTo = EmailToBox.Text;
+                    break;
+            }
+        }
+
+        private void LoadEmailFields(int providerIndex)
+        {
+            if (MainWindow.Current == null) return;
+            var mw = MainWindow.Current;
+
+            switch (providerIndex)
+            {
+                case 0:
+                    EmailUserBox.Text = mw.EmailYandexUser;
+                    EmailPassBox.Password = mw.EmailYandexPass;
+                    EmailToBox.Text = mw.EmailYandexTo;
+                    break;
+                case 1:
+                    EmailUserBox.Text = mw.EmailMailUser;
+                    EmailPassBox.Password = mw.EmailMailPass;
+                    EmailToBox.Text = mw.EmailMailTo;
+                    break;
+                case 2:
+                    EmailUserBox.Text = mw.EmailGmailUser;
+                    EmailPassBox.Password = mw.EmailGmailPass;
+                    EmailToBox.Text = mw.EmailGmailTo;
+                    break;
+                case 3:
+                    EmailHostBox.Text = mw.EmailCustomHost;
+                    EmailPortBox.Text = mw.EmailCustomPort.ToString();
+                    EmailUserBox.Text = mw.EmailCustomUser;
+                    EmailPassBox.Password = mw.EmailCustomPass;
+                    EmailToBox.Text = mw.EmailCustomTo;
                     break;
             }
         }

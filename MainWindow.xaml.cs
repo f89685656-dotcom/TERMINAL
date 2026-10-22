@@ -308,6 +308,26 @@ namespace TERMINAL
         private string _emailUser = "";
         private string _emailPass = "";
         private string _emailTo = "";
+        private int _emailProviderIndex = 0;
+
+        // ★ ВОТ ЭТИ ПЕРЕМЕННЫЕ НУЖНО ДОБАВИТЬ:
+        private string _emailYandexUser = "";
+        private string _emailYandexPass = "";
+        private string _emailYandexTo = "";
+
+        private string _emailMailUser = "";
+        private string _emailMailPass = "";
+        private string _emailMailTo = "";
+
+        private string _emailGmailUser = "";
+        private string _emailGmailPass = "";
+        private string _emailGmailTo = "";
+
+        private string _emailCustomHost = "";
+        private int _emailCustomPort = 587;
+        private string _emailCustomUser = "";
+        private string _emailCustomPass = "";
+        private string _emailCustomTo = "";
 
         // VK
         private string _vkToken = "";
@@ -328,6 +348,26 @@ namespace TERMINAL
         public string EmailUser => _emailUser;
         public string EmailPass => _emailPass;
         public string EmailTo => _emailTo;
+        public int EmailProviderIndex => _emailProviderIndex;
+
+        // ★ ВОТ ЭТИ СВОЙСТВА НУЖНО ДОБАВИТЬ (с сеттерами!):
+        public string EmailYandexUser { get => _emailYandexUser; set => _emailYandexUser = value ?? ""; }
+        public string EmailYandexPass { get => _emailYandexPass; set => _emailYandexPass = value ?? ""; }
+        public string EmailYandexTo { get => _emailYandexTo; set => _emailYandexTo = value ?? ""; }
+
+        public string EmailMailUser { get => _emailMailUser; set => _emailMailUser = value ?? ""; }
+        public string EmailMailPass { get => _emailMailPass; set => _emailMailPass = value ?? ""; }
+        public string EmailMailTo { get => _emailMailTo; set => _emailMailTo = value ?? ""; }
+
+        public string EmailGmailUser { get => _emailGmailUser; set => _emailGmailUser = value ?? ""; }
+        public string EmailGmailPass { get => _emailGmailPass; set => _emailGmailPass = value ?? ""; }
+        public string EmailGmailTo { get => _emailGmailTo; set => _emailGmailTo = value ?? ""; }
+
+        public string EmailCustomHost { get => _emailCustomHost; set => _emailCustomHost = value ?? ""; }
+        public int EmailCustomPort { get => _emailCustomPort; set => _emailCustomPort = value; }
+        public string EmailCustomUser { get => _emailCustomUser; set => _emailCustomUser = value ?? ""; }
+        public string EmailCustomPass { get => _emailCustomPass; set => _emailCustomPass = value ?? ""; }
+        public string EmailCustomTo { get => _emailCustomTo; set => _emailCustomTo = value ?? ""; }
         public string VkToken => _vkToken;
         public long VkPeerId => _vkPeerId;
         public string SmsLogin => _smsLogin;
@@ -1390,11 +1430,10 @@ namespace TERMINAL
     bool enabled,
     int methodIndex,
     string tgToken, string tgChatId,
-    string emailHost, int emailPort, string emailUser, string emailPass, string emailTo,
+    string emailHost, int emailPort, string emailUser, string emailPass, string emailTo, int emailProviderIndex,
     string vkToken, long vkPeerId,
     string smsLogin, string smsPass, string smsPhone)
         {
-            // 1. Сохраняем все настройки в поля MainWindow
             _notificationsEnabled = enabled;
             _notificationMethodIndex = methodIndex;
 
@@ -1404,17 +1443,43 @@ namespace TERMINAL
             _emailHost = emailHost ?? "";
             _emailPort = emailPort;
             _emailUser = emailUser ?? "";
-            _emailPass = emailPass ?? ""; // <--- ПАРОЛЬ ПОЧТЫ СОХРАНЯЕТСЯ СЮДА
+            _emailPass = emailPass ?? "";
             _emailTo = emailTo ?? "";
+            _emailProviderIndex = emailProviderIndex;
+
+            switch (emailProviderIndex)
+            {
+                case 0: // Яндекс
+                    _emailYandexUser = emailUser ?? "";
+                    _emailYandexPass = emailPass ?? "";
+                    _emailYandexTo = emailTo ?? "";
+                    break;
+                case 1: // Mail.ru
+                    _emailMailUser = emailUser ?? "";
+                    _emailMailPass = emailPass ?? "";
+                    _emailMailTo = emailTo ?? "";
+                    break;
+                case 2: // Gmail
+                    _emailGmailUser = emailUser ?? "";
+                    _emailGmailPass = emailPass ?? "";
+                    _emailGmailTo = emailTo ?? "";
+                    break;
+                case 3: // Другой
+                    _emailCustomHost = emailHost ?? "";
+                    _emailCustomPort = emailPort;
+                    _emailCustomUser = emailUser ?? "";
+                    _emailCustomPass = emailPass ?? "";
+                    _emailCustomTo = emailTo ?? "";
+                    break;
+            }
 
             _vkToken = vkToken ?? "";
             _vkPeerId = vkPeerId;
 
             _smsLogin = smsLogin ?? "";
-            _smsPass = smsPass ?? "";     // <--- ПАРОЛЬ SMS СОХРАНЯЕТСЯ СЮДА
+            _smsPass = smsPass ?? "";
             _smsPhone = smsPhone ?? "";
 
-            // 2. Применяем сервис в зависимости от выбора
             NotificationManager.ClearServices();
 
             if (enabled)
@@ -1438,7 +1503,6 @@ namespace TERMINAL
                 }
             }
 
-            // 3. Сохраняем в JSON
             SaveSettings();
         }
 
