@@ -8,7 +8,7 @@
 		<UseWPF>true</UseWPF>
 		<ApplicationIcon>6.ico</ApplicationIcon>
 		<AssemblyName>TERMINAL</AssemblyName>
-		<Version>1.5.03</Version>
+		<Version>1.5.04</Version>
 		<PackageIcon>6.png</PackageIcon>
 		<Platforms>AnyCPU;x64</Platforms>
 		<PlatformTarget>x64</PlatformTarget>

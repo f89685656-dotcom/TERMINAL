@@ -577,24 +577,34 @@ namespace TERMINAL.Windows
 
         private void NotificationMethodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // Проверка на null нужна, так как событие может сработать до полной инициализации окна
-            if (TelegramPanel == null || EmailPanel == null || VkPanel == null || SmsPanel == null)
+            if (TelegramPanel == null || EmailPanel == null || VkPanel == null || MaxPanel == null || SmsPanel == null)
                 return;
 
-            // Скрываем все панели по умолчанию
+            // 1. Скрываем ВСЕ панели
             TelegramPanel.Visibility = Visibility.Collapsed;
             EmailPanel.Visibility = Visibility.Collapsed;
             VkPanel.Visibility = Visibility.Collapsed;
+            MaxPanel.Visibility = Visibility.Collapsed;
             SmsPanel.Visibility = Visibility.Collapsed;
 
-            // Показываем ту, которая выбрана в ComboBox
+            // 2. Показываем нужную
             switch (NotificationMethodCombo.SelectedIndex)
             {
-                case 0: TelegramPanel.Visibility = Visibility.Visible; break;
-                case 1: EmailPanel.Visibility = Visibility.Visible; break;
-                case 2: VkPanel.Visibility = Visibility.Visible; break;
-                case 3: MaxPanel.Visibility = Visibility.Visible; break; // ★ MAX (индекс 3)
-                case 4: SmsPanel.Visibility = Visibility.Visible; break; // ★ SMS (индекс 4)
+                case 0: // Telegram
+                    TelegramPanel.Visibility = Visibility.Visible;
+                    break;
+                case 1: // Email
+                    EmailPanel.Visibility = Visibility.Visible;
+                    break;
+                case 2: // VK
+                    VkPanel.Visibility = Visibility.Visible;
+                    break;
+                case 3: // MAX
+                    MaxPanel.Visibility = Visibility.Visible;
+                    break;
+                case 4: // SMS
+                    SmsPanel.Visibility = Visibility.Visible;
+                    break;
             }
         }
 
