@@ -207,9 +207,6 @@ namespace TERMINAL
                     if (string.IsNullOrEmpty(display))
                         display = "(нет данных)";
 
-                    // ★ ДИАГНОСТИКА: пишем, что прочитали из кэша
-                    //AppendLog($"[CACHE] Status: '{display}', Ok={snap.StateInPointOk}, Wait={snap.StateInPointWait}", Brushes.Teal);
-
                     AgkStatusTextBox.Text = display;
 
                     if (display.Contains("ok;"))
@@ -220,12 +217,21 @@ namespace TERMINAL
                         AgkStatusTextBox.Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)); // Серый
                 }
 
-
-
+                // ★ Восстановление связи
                 if (_agkFailCount >= ConnectionLostThreshold)
                 {
-                    _ = NotificationManager.NotifyAsync(
-                        $"🟢 АГК: связь восстановлена ({_deviceIp}:{_devicePort})");
+                    if (_batchRunning)
+                    {
+                        _ = NotificationManager.NotifyAsync(
+                            $"🟢 АГК: связь восстановлена ({_deviceIp}:{_devicePort})");
+
+                        // ★ SMS при восстановлении
+                        if (!string.IsNullOrEmpty(_smsLogin) && !string.IsNullOrEmpty(_smsPhone))
+                        {
+                            _ = new SmsNotificationService(_smsLogin, _smsPass, _smsPhone)
+                                    .SendAsync("АГК: связь восстановлена!");
+                        }
+                    }
                 }
                 _agkFailCount = 0;
                 AgkStatusEllipse.Fill = Brushes.Green;
@@ -234,10 +240,25 @@ namespace TERMINAL
             {
                 _agkFailCount++;
 
+                // ★ Потеря связи (условие ==, а не >=)
+                if (_agkFailCount == ConnectionLostThreshold)
+                {
+                    if (_batchRunning)
+                    {
+                        _ = NotificationManager.NotifyAsync(
+                            $"🔴 АГК: потеря связи ({_deviceIp}:{_devicePort})");
+
+                        // ★ SMS при потере связи
+                        if (!string.IsNullOrEmpty(_smsLogin) && !string.IsNullOrEmpty(_smsPhone))
+                        {
+                            _ = new SmsNotificationService(_smsLogin, _smsPass, _smsPhone)
+                                    .SendAsync($"КРИТИЧНО: Потеря связи АГК ({_devicePort})!");
+                        }
+                    }
+                }
+
                 if (_agkFailCount >= ConnectionLostThreshold)
                 {
-                    _ = NotificationManager.NotifyAsync(
-                    $"🔴 АГК: потеря связи ({_deviceIp}:{_devicePort})");
                     AgkPressureText.Text = "—";
                     AgkSetPointText.Text = "—";
                     AgkStatusEllipse.Fill = Brushes.Red;
@@ -251,12 +272,12 @@ namespace TERMINAL
                     }
                 }
             }
+        }
 
             // ═══════════════════════════════════════════════════════════════
             // ★ Всё, что относится к таймерам пакета, — оставляем как есть.
             //   Но UI обновление АГК — выше, оно работает всегда.
             // ═══════════════════════════════════════════════════════════════
-        }
 
         private void UpdateUnits(string response)
         {

@@ -115,6 +115,13 @@ namespace TERMINAL
                     {
                         _ = NotificationManager.NotifyAsync(
                             $"🟢 ST-351: связь восстановлена ({_furnaceIp}:{_furnacePort})");
+
+                        // ★ Отправка SMS при восстановлении
+                        if (!string.IsNullOrEmpty(_smsLogin) && !string.IsNullOrEmpty(_smsPhone))
+                        {
+                            _ = new SmsNotificationService(_smsLogin, _smsPass, _smsPhone)
+                                    .SendAsync($"ST-351: связь восстановлена!");
+                        }
                     }
                 }
 
@@ -139,6 +146,13 @@ namespace TERMINAL
                     {
                         _ = NotificationManager.NotifyAsync(
                             $"🔴 ST-351: потеря связи ({_furnaceIp}:{_furnacePort})");
+
+                        // ★ Отправка SMS при потере связи
+                        if (!string.IsNullOrEmpty(_smsLogin) && !string.IsNullOrEmpty(_smsPhone))
+                        {
+                            _ = new SmsNotificationService(_smsLogin, _smsPass, _smsPhone)
+                                    .SendAsync($"КРИТИЧНО: Потеря связи ST-351 ({_furnacePort})!");
+                        }
                     }
                 }
 

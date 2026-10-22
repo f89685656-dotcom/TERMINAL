@@ -345,26 +345,30 @@ namespace TERMINAL.Windows
             long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
 
             mw.ApplyNotificationSettings(
-                enabled: NotificationsEnabledCheck.IsChecked == true,
-                methodIndex: NotificationMethodCombo.SelectedIndex,
+    enabled: NotificationsEnabledCheck.IsChecked == true,
+    methodIndex: NotificationMethodCombo.SelectedIndex,
 
-                tgToken: TelegramTokenBox.Text.Trim(),
-                tgChatId: TelegramChatIdBox.Text.Trim(),
+    tgToken: TelegramTokenBox.Text.Trim(),
+    tgChatId: TelegramChatIdBox.Text.Trim(),
 
-                emailHost: EmailHostBox.Text.Trim(),
-                emailPort: emailPort, // <-- используем переменную, созданную выше
-                emailUser: EmailUserBox.Text.Trim(),
-                emailPass: EmailPassBox.Password,
-                emailTo: EmailToBox.Text.Trim(),
-                emailProviderIndex: EmailProviderCombo.SelectedIndex,
+    emailHost: EmailHostBox.Text.Trim(),
+    emailPort: emailPort,
+    emailUser: EmailUserBox.Text.Trim(),
+    emailPass: EmailPassBox.Password,
+    emailTo: EmailToBox.Text.Trim(),
+    emailProviderIndex: EmailProviderCombo.SelectedIndex,
 
-                vkToken: VkTokenBox.Text.Trim(),
-                vkPeerId: vkId, // <-- используем переменную, созданную выше
+    vkToken: VkTokenBox.Text.Trim(),
+    vkPeerId: vkId,
 
-                smsLogin: SmsLoginBox.Text.Trim(),
-                smsPass: SmsPassBox.Password,
-                smsPhone: SmsPhoneBox.Text.Trim()
-            );
+    // ★ ПЕРЕДАЕМ ДАННЫЕ MAX
+    maxToken: MaxTokenBox.Text.Trim(),
+    maxChatId: MaxChatIdBox.Text.Trim(),
+
+    smsLogin: SmsLoginBox.Text.Trim(),
+    smsPass: SmsPassBox.Password,
+    smsPhone: SmsPhoneBox.Text.Trim()
+);
 
 
 
@@ -440,7 +444,19 @@ namespace TERMINAL.Windows
                         await vkService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (VK)");
                         break;
 
-                    case 3: // SMS
+                    case 3: // MAX
+                        string maxToken = MaxTokenBox.Text.Trim();
+                        string maxChatId = MaxChatIdBox.Text.Trim();
+                        if (string.IsNullOrEmpty(maxToken) || !long.TryParse(maxChatId, out long maxId))
+                        {
+                            MessageBox.Show(this, "Заполните Token и числовой Chat ID для MAX.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                        var maxService = new MaxNotificationService(maxToken, maxId);
+                        await maxService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (MAX)");
+                        break;
+
+                    case 4: // SMS (было 3)
                         string smsLogin = SmsLoginBox.Text.Trim();
                         string smsPass = SmsPassBox.Password;
                         string smsPhone = SmsPhoneBox.Text.Trim();
@@ -574,18 +590,11 @@ namespace TERMINAL.Windows
             // Показываем ту, которая выбрана в ComboBox
             switch (NotificationMethodCombo.SelectedIndex)
             {
-                case 0: // Telegram
-                    TelegramPanel.Visibility = Visibility.Visible;
-                    break;
-                case 1: // Email
-                    EmailPanel.Visibility = Visibility.Visible;
-                    break;
-                case 2: // VK
-                    VkPanel.Visibility = Visibility.Visible;
-                    break;
-                case 3: // SMS
-                    SmsPanel.Visibility = Visibility.Visible;
-                    break;
+                case 0: TelegramPanel.Visibility = Visibility.Visible; break;
+                case 1: EmailPanel.Visibility = Visibility.Visible; break;
+                case 2: VkPanel.Visibility = Visibility.Visible; break;
+                case 3: MaxPanel.Visibility = Visibility.Visible; break; // ★ MAX (индекс 3)
+                case 4: SmsPanel.Visibility = Visibility.Visible; break; // ★ SMS (индекс 4)
             }
         }
 
@@ -699,9 +708,7 @@ namespace TERMINAL.Windows
 
         private void NotificationHelpButton_Click(object sender, RoutedEventArgs e)
         {
-            // Формируем текст инструкции в зависимости от выбранного метода
             int selectedIndex = NotificationMethodCombo?.SelectedIndex ?? 0;
-
             string instruction = "";
 
             switch (selectedIndex)
@@ -719,33 +726,34 @@ namespace TERMINAL.Windows
 2. Получение Chat ID:
    • Найдите в Telegram только что созданного бота и нажмите 'Запустить' (Start).
    • Отправьте ему любое сообщение (например, 'привет').
-   • В браузере перейдите по ссылке: 
+   • В браузере перейдите по ссылке (заменив ТОКЕН на свой): 
      https://api.telegram.org/bot<ВАШ_ТОКЕН>/getUpdates
    • В ответе найдите текст ""chat"":{""id"": 123456789}. Число 123456789 — это ваш Chat ID. Скопируйте его.
    • Вставьте Chat ID в программу и нажмите 'Тест'.
 
-⚠️ ВАЖНО: Если вы в России, Telegram API может быть заблокирован. Для корректной работы включите VPN (режим TUN или Системный прокси) перед отправкой сообщений.";
+⚠️ ВАЖНО: Если вы в России, Telegram API может быть заблокирован. Для корректной работы включите VPN (в программе Happ лучше использовать режим TUN или Системный прокси) перед отправкой сообщений.";
                     break;
 
-                case 1: // Email (SMTP)
+                case 1: // Email
                     instruction =
         @"📧 ИНСТРУКЦИЯ ДЛЯ EMAIL:
 
-1. Сервер и порт:
-   • Для Яндекс.Почты: SMTP Сервер = smtp.yandex.ru, Порт = 587
-   • Для Mail.ru: SMTP Сервер = smtp.mail.ru, Порт = 587
-   • Для Gmail: SMTP Сервер = smtp.gmail.com, Порт = 587
+1. Выберите почтового провайдера:
+   • В выпадающем списке выберите вашу почту (Яндекс, Mail.ru, Gmail).
+   • Сервер и порт подставятся автоматически. Если выбрали 'Другой' — введите данные вручную.
 
 2. Логин:
    • Введите ваш полный адрес электронной почты (например, user@yandex.ru).
 
 3. Пароль:
    • ⚠️ ВАЖНО: Обычный пароль от почты не подойдет! 
-   • Зайдите в настройки своей почты (Безопасность) и создайте 'Пароль приложения' (App Password) для почтовых клиентов. 
-   • Скопируйте этот сгенерированный пароль в поле 'Пароль'.
+   • Зайдите в настройки своей почты (раздел 'Безопасность') и создайте 'Пароль приложения' (App Password) для почтовых клиентов. 
+   • Скопируйте этот сгенерированный пароль и вставьте его в поле 'Пароль'.
 
 4. Кому отправлять:
-   • Введите адрес почты, на который должны приходить уведомления (можно указать тот же адрес, с которого отправляете).";
+   • Введите адрес почты, на который должны приходить уведомления (можно указать тот же адрес, с которого отправляете).
+
+⚠️ ВАЖНО: Если вы используете Mail.ru, порт должен быть 465 (с шифрованием SSL). Для Яндекса и Gmail обычно используется порт 587.";
                     break;
 
                 case 2: // VK
@@ -763,7 +771,9 @@ namespace TERMINAL.Windows
    • В поле 'Ваш ID' введите ваш числовой ID (например, 12345678).
    • Если хотите отправлять в беседу, введите ID беседы (начинается с 2000000000, например 2000000001).
 
-⚠️ ВАЖНО: Сообщения можно отправлять только тем людям, кто разрешил сообщения от вашего приложения, поэтому лучше отправлять 'себе' или в свою беседу.";
+⚠️ ВАЖНО: 
+   • Отправка сообщений возможна только тем пользователям, кто разрешил сообщения от вашего приложения (лучше всего отправлять 'себе').
+   • Если VK выдает ошибку 'invalid scope', это значит, что ваше приложение не прошло модерацию или у него нет прав на отправку сообщений. В таком случае используйте Email.";
                     break;
 
                 case 3: // SMS
@@ -787,9 +797,66 @@ namespace TERMINAL.Windows
                     break;
             }
 
-            // Показываем окно с инструкцией
-            MessageBox.Show(this, instruction, "Инструкция по настройке уведомлений",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
+            // ★ Создаем кастомное окно для инструкции
+            var helpWindow = new Window
+            {
+                Title = "Инструкция по настройке уведомлений",
+                Width = 600,
+                Height = 500,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.CanResize
+            };
+
+            var grid = new Grid { Margin = new Thickness(10) };
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var textBox = new TextBox
+            {
+                Text = instruction,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                FontSize = 12,
+                Padding = new Thickness(5),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            Grid.SetRow(textBox, 1);
+
+            var btnCopy = new Button
+            {
+                Content = "📋 Скопировать всё",
+                Width = 150,
+                Height = 30,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            btnCopy.Click += (s, args) =>
+            {
+                Clipboard.SetText(instruction);
+                MessageBox.Show("Текст скопирован в буфер обмена!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+            };
+            Grid.SetRow(btnCopy, 0);
+
+            var btnOk = new Button
+            {
+                Content = "ОК",
+                Width = 100,
+                Height = 30,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            btnOk.Click += (s, args) => helpWindow.Close();
+            Grid.SetRow(btnOk, 2);
+
+            grid.Children.Add(btnCopy);
+            grid.Children.Add(textBox);
+            grid.Children.Add(btnOk);
+
+            helpWindow.Content = grid;
+            helpWindow.ShowDialog();
         }
     }
 }

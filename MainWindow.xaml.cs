@@ -333,6 +333,11 @@ namespace TERMINAL
         private string _vkToken = "";
         private long _vkPeerId = 0;
 
+        // МАКС
+
+        private string _maxToken = "";
+        private string _maxChatId = "";
+
         // SMS
         private string _smsLogin = "";
         private string _smsPass = "";
@@ -370,6 +375,8 @@ namespace TERMINAL
         public string EmailCustomTo { get => _emailCustomTo; set => _emailCustomTo = value ?? ""; }
         public string VkToken => _vkToken;
         public long VkPeerId => _vkPeerId;
+        public string MaxToken => _maxToken;
+        public string MaxChatId => _maxChatId;
         public string SmsLogin => _smsLogin;
         public string SmsPass => _smsPass;
         public string SmsPhone => _smsPhone;
@@ -1438,6 +1445,7 @@ namespace TERMINAL
     string tgToken, string tgChatId,
     string emailHost, int emailPort, string emailUser, string emailPass, string emailTo, int emailProviderIndex,
     string vkToken, long vkPeerId,
+    string maxToken, string maxChatId, // ★ НОВЫЕ ПАРАМЕТРЫ
     string smsLogin, string smsPass, string smsPhone)
         {
             _notificationsEnabled = enabled;
@@ -1482,6 +1490,10 @@ namespace TERMINAL
             _vkToken = vkToken ?? "";
             _vkPeerId = vkPeerId;
 
+            // ★ СОХРАНЯЕМ MAX
+            _maxToken = maxToken ?? "";
+            _maxChatId = maxChatId ?? "";
+
             _smsLogin = smsLogin ?? "";
             _smsPass = smsPass ?? "";
             _smsPhone = smsPhone ?? "";
@@ -1505,6 +1517,23 @@ namespace TERMINAL
                     case 2: // VK
                         if (!string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
                             NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
+                        break;
+
+                    case 3: // MAX
+                        if (!string.IsNullOrEmpty(_maxToken) && long.TryParse(_maxChatId, out long maxId))
+                            NotificationManager.AddService(new MaxNotificationService(_maxToken, maxId));
+                        break;
+
+                    case 4: // SMS
+                        if (!string.IsNullOrEmpty(_smsLogin) && !string.IsNullOrEmpty(_smsPhone))
+                        {
+                            // Здесь мы НЕ отправляем тестовое SMS (в методе ApplyNotificationSettings нет await),
+                            // а просто создаем сервис, если захотим использовать его в будущем.
+                            // Но так как SmsNotificationService не наследует INotificationService, 
+                            // мы не можем добавить его в NotificationManager.
+
+                            // Поэтому просто оставляем этот case пустым.
+                        }
                         break;
                 }
             }

@@ -109,6 +109,8 @@ namespace TERMINAL
                 _emailCustomTo = _loadedSettings.EmailCustomTo ?? "";
                 _vkToken = _loadedSettings.VkToken ?? "";
                 _vkPeerId = _loadedSettings.VkPeerId;
+                _maxToken = _loadedSettings.MaxToken ?? "";
+                _maxChatId = _loadedSettings.MaxChatId ?? "";
                 _smsLogin = _loadedSettings.SmsLogin ?? "";
                 _smsPass = _loadedSettings.SmsPass ?? "";
                 _smsPhone = _loadedSettings.SmsPhone ?? "";
@@ -359,6 +361,8 @@ namespace TERMINAL
 
                     VkToken = _vkToken,
                     VkPeerId = _vkPeerId,
+                    MaxToken = _maxToken,
+                    MaxChatId = _maxChatId,
                     SmsLogin = _smsLogin,
                     SmsPass = _smsPass,
                     SmsPhone = _smsPhone,
@@ -581,6 +585,10 @@ namespace TERMINAL
             // VK
             public string VkToken { get; set; } = "";
             public long VkPeerId { get; set; } = 0;
+
+            // МАКС
+            public string MaxToken { get; set; } = "";
+            public string MaxChatId { get; set; } = "";
 
             // SMS
             public string SmsLogin { get; set; } = "";
