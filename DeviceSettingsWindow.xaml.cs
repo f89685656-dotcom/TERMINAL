@@ -129,7 +129,10 @@ namespace TERMINAL.Windows
 
             // ★ ЗАГРУЖАЕМ НОВЫЕ ОБЩИЕ ГАЛОЧКИ
             ChkSendToTelegram.IsChecked = mw.NotifyTgEnabled;
-            ChkSendToEmail.IsChecked = mw.NotifyEmailEnabled;
+            ChkSendToYandex.IsChecked = mw.NotifyYandexEnabled;
+            ChkSendToMail.IsChecked = mw.NotifyMailEnabled;
+            ChkSendToGmail.IsChecked = mw.NotifyGmailEnabled;
+            ChkSendToCustomEmail.IsChecked = mw.NotifyCustomEnabled;
             ChkSendToVk.IsChecked = mw.NotifyVkEnabled;
             ChkSendToMax.IsChecked = mw.NotifyMaxEnabled;
 
@@ -357,35 +360,39 @@ namespace TERMINAL.Windows
                 long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
 
                 mw.ApplyNotificationSettings(
-                    enabled: NotificationsEnabledCheck.IsChecked == true,
+    enabled: NotificationsEnabledCheck.IsChecked == true,
 
-                    tgEnabled: ChkSendToTelegram.IsChecked == true,
-                    emailEnabled: ChkSendToEmail.IsChecked == true,
-                    vkEnabled: ChkSendToVk.IsChecked == true,
-                    maxEnabled: ChkSendToMax.IsChecked == true,
+    // ★ ПЕРЕДАЕМ НОВЫЕ ОБЩИЕ ГАЛОЧКИ
+    tgEnabled: ChkSendToTelegram.IsChecked == true,
+    yandexEnabled: ChkSendToYandex.IsChecked == true,
+    mailEnabled: ChkSendToMail.IsChecked == true,
+    gmailEnabled: ChkSendToGmail.IsChecked == true,
+    customEnabled: ChkSendToCustomEmail.IsChecked == true,
+    vkEnabled: ChkSendToVk.IsChecked == true,
+    maxEnabled: ChkSendToMax.IsChecked == true,
 
-                    methodIndex: NotificationMethodCombo.SelectedIndex,
+    methodIndex: NotificationMethodCombo.SelectedIndex,
 
-                    tgToken: TelegramTokenBox.Text.Trim(),
-                    tgChatId: TelegramChatIdBox.Text.Trim(),
+    tgToken: TelegramTokenBox.Text.Trim(),
+    tgChatId: TelegramChatIdBox.Text.Trim(),
 
-                    emailHost: EmailHostBox.Text.Trim(),
-                    emailPort: emailPort,
-                    emailUser: EmailUserBox.Text.Trim(),
-                    emailPass: EmailPassBox.Password,
-                    emailTo: EmailToBox.Text.Trim(),
-                    emailProviderIndex: EmailProviderCombo.SelectedIndex,
+    emailHost: EmailHostBox.Text.Trim(),
+    emailPort: emailPort,
+    emailUser: EmailUserBox.Text.Trim(),
+    emailPass: EmailPassBox.Password,
+    emailTo: EmailToBox.Text.Trim(),
+    emailProviderIndex: EmailProviderCombo.SelectedIndex,
 
-                    vkToken: VkTokenBox.Text.Trim(),
-                    vkPeerId: vkId,
+    vkToken: VkTokenBox.Text.Trim(),
+    vkPeerId: vkId,
 
-                    maxToken: MaxTokenBox.Text.Trim(),
-                    maxChatId: MaxChatIdBox.Text.Trim(),
+    maxToken: MaxTokenBox.Text.Trim(),
+    maxChatId: MaxChatIdBox.Text.Trim(),
 
-                    smsLogin: SmsLoginBox.Text.Trim(),
-                    smsPass: SmsPassBox.Password,
-                    smsPhone: SmsPhoneBox.Text.Trim()
-                );
+    smsLogin: SmsLoginBox.Text.Trim(),
+    smsPass: SmsPassBox.Password,
+    smsPhone: SmsPhoneBox.Text.Trim()
+);
 
                 // ★ ЗАКРЫВАЕМ ОКНО ТОЛЬКО ЕСЛИ ВСЁ ПРОШЛО УСПЕШНО
                 DialogResult = true;

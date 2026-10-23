@@ -85,12 +85,15 @@ namespace TERMINAL
                 _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
                 _logSlowTicks = _loadedSettings.LogSlowTicks;
 
-                // ─── Уведомления (ЧТЕНИЕ ИЗ JSON) ───
+                // ─── Уведомления ───
                 _notificationsEnabled = _loadedSettings.NotificationsEnabled;
                 _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
 
                 _notifyTgEnabled = _loadedSettings.NotifyTgEnabled;
-                _notifyEmailEnabled = _loadedSettings.NotifyEmailEnabled;
+                _notifyYandexEnabled = _loadedSettings.NotifyYandexEnabled;
+                _notifyMailEnabled = _loadedSettings.NotifyMailEnabled;
+                _notifyGmailEnabled = _loadedSettings.NotifyGmailEnabled;
+                _notifyCustomEnabled = _loadedSettings.NotifyCustomEnabled;
                 _notifyVkEnabled = _loadedSettings.NotifyVkEnabled;
                 _notifyMaxEnabled = _loadedSettings.NotifyMaxEnabled;
 
@@ -104,7 +107,6 @@ namespace TERMINAL
                 _emailPass = SecurityHelper.DecryptString(_loadedSettings.EmailPass);
                 _emailTo = _loadedSettings.EmailTo ?? "";
 
-                // ★ РАСШИФРОВЫВАЕМ ПАРОЛИ ДЛЯ ПРОВАЙДЕРОВ
                 _emailYandexUser = _loadedSettings.EmailYandexUser ?? "";
                 _emailYandexPass = SecurityHelper.DecryptString(_loadedSettings.EmailYandexPass);
                 _emailYandexTo = _loadedSettings.EmailYandexTo ?? "";
@@ -161,10 +163,11 @@ namespace TERMINAL
                 _batchKosaEnabled = false;
                 _batchKosaTimerSeconds = 25;
 
-                // Сброс уведомлений при ошибке
+                // Сброс при ошибке
                 _notificationsEnabled = false;
                 _notificationMethodIndex = 0;
-                _notifyTgEnabled = false; _notifyEmailEnabled = false; _notifyVkEnabled = false; _notifyMaxEnabled = false;
+                _notifyTgEnabled = false; _notifyYandexEnabled = false; _notifyMailEnabled = false;
+                _notifyGmailEnabled = false; _notifyCustomEnabled = false; _notifyVkEnabled = false; _notifyMaxEnabled = false;
                 _telegramToken = ""; _telegramChatId = "";
                 _emailHost = ""; _emailPort = 587; _emailUser = ""; _emailPass = ""; _emailTo = "";
                 _emailYandexUser = ""; _emailYandexPass = ""; _emailYandexTo = "";
@@ -211,7 +214,10 @@ namespace TERMINAL
             _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
 
             _notifyTgEnabled = _loadedSettings.NotifyTgEnabled;
-            _notifyEmailEnabled = _loadedSettings.NotifyEmailEnabled;
+            _notifyYandexEnabled = _loadedSettings.NotifyYandexEnabled;
+            _notifyMailEnabled = _loadedSettings.NotifyMailEnabled;
+            _notifyGmailEnabled = _loadedSettings.NotifyGmailEnabled;
+            _notifyCustomEnabled = _loadedSettings.NotifyCustomEnabled;
             _notifyVkEnabled = _loadedSettings.NotifyVkEnabled;
             _notifyMaxEnabled = _loadedSettings.NotifyMaxEnabled;
 
@@ -225,7 +231,6 @@ namespace TERMINAL
             _emailTo = _loadedSettings.EmailTo ?? "";
             _emailProviderIndex = _loadedSettings.EmailProviderIndex;
 
-            // ★ РАСШИФРОВЫВАЕМ ПАРОЛИ ДЛЯ ПРОВАЙДЕРОВ
             _emailYandexUser = _loadedSettings.EmailYandexUser ?? "";
             _emailYandexPass = SecurityHelper.DecryptString(_loadedSettings.EmailYandexPass);
             _emailYandexTo = _loadedSettings.EmailYandexTo ?? "";
@@ -246,10 +251,8 @@ namespace TERMINAL
 
             _vkToken = SecurityHelper.DecryptString(_loadedSettings.VkToken);
             _vkPeerId = _loadedSettings.VkPeerId;
-
             _maxToken = SecurityHelper.DecryptString(_loadedSettings.MaxToken);
-            _maxChatId = _loadedSettings.MaxChatId ?? ""; // ★ ДОБАВЛЕНО (было пропущено)
-
+            _maxChatId = _loadedSettings.MaxChatId ?? "";
             _smsLogin = _loadedSettings.SmsLogin ?? "";
             _smsPass = SecurityHelper.DecryptString(_loadedSettings.SmsPass);
             _smsPhone = _loadedSettings.SmsPhone ?? "";
@@ -379,15 +382,19 @@ namespace TERMINAL
                     NotificationsEnabled = _notificationsEnabled,
                     NotificationMethodIndex = _notificationMethodIndex,
 
+                    // ★ ГАЛОЧКИ
                     NotifyTgEnabled = _notifyTgEnabled,
-                    NotifyEmailEnabled = _notifyEmailEnabled,
+                    NotifyYandexEnabled = _notifyYandexEnabled,
+                    NotifyMailEnabled = _notifyMailEnabled,
+                    NotifyGmailEnabled = _notifyGmailEnabled,
+                    NotifyCustomEnabled = _notifyCustomEnabled,
                     NotifyVkEnabled = _notifyVkEnabled,
                     NotifyMaxEnabled = _notifyMaxEnabled,
 
+                    // ★ ДАННЫЕ КАНАЛОВ
                     TelegramToken = _telegramToken,
                     TelegramChatId = _telegramChatId,
 
-                    // Email (Основные поля)
                     EmailProviderIndex = _emailProviderIndex,
                     EmailHost = _emailHost,
                     EmailPort = _emailPort,
@@ -395,23 +402,22 @@ namespace TERMINAL
                     EmailPass = SecurityHelper.EncryptString(_emailPass),
                     EmailTo = _emailTo,
 
-                    // Email (Раздельные данные по провайдерам) - ШИФРУЕМ ПАРОЛИ!
                     EmailYandexUser = _emailYandexUser,
-                    EmailYandexPass = SecurityHelper.EncryptString(_emailYandexPass), // Шифруем
+                    EmailYandexPass = SecurityHelper.EncryptString(_emailYandexPass),
                     EmailYandexTo = _emailYandexTo,
 
                     EmailMailUser = _emailMailUser,
-                    EmailMailPass = SecurityHelper.EncryptString(_emailMailPass),     // Шифруем
+                    EmailMailPass = SecurityHelper.EncryptString(_emailMailPass),
                     EmailMailTo = _emailMailTo,
 
                     EmailGmailUser = _emailGmailUser,
-                    EmailGmailPass = SecurityHelper.EncryptString(_emailGmailPass),   // Шифруем
+                    EmailGmailPass = SecurityHelper.EncryptString(_emailGmailPass),
                     EmailGmailTo = _emailGmailTo,
 
                     EmailCustomHost = _emailCustomHost,
                     EmailCustomPort = _emailCustomPort,
                     EmailCustomUser = _emailCustomUser,
-                    EmailCustomPass = SecurityHelper.EncryptString(_emailCustomPass), // Шифруем
+                    EmailCustomPass = SecurityHelper.EncryptString(_emailCustomPass),
                     EmailCustomTo = _emailCustomTo,
 
                     VkToken = SecurityHelper.EncryptString(_vkToken),
@@ -600,11 +606,14 @@ namespace TERMINAL
 
             // ─── Уведомления ───
             public bool NotificationsEnabled { get; set; } = false;
-            public int NotificationMethodIndex { get; set; } = 0; // 0-TG, 1-Email, 2-VK, 3-SMS
+            public int NotificationMethodIndex { get; set; } = 0;
 
-            // ★ НОВЫЕ СВОЙСТВА (Галочки активности)
+            // ★ ГАЛОЧКИ КАНАЛОВ
             public bool NotifyTgEnabled { get; set; } = false;
-            public bool NotifyEmailEnabled { get; set; } = false;
+            public bool NotifyYandexEnabled { get; set; } = false;
+            public bool NotifyMailEnabled { get; set; } = false;
+            public bool NotifyGmailEnabled { get; set; } = false;
+            public bool NotifyCustomEnabled { get; set; } = false;
             public bool NotifyVkEnabled { get; set; } = false;
             public bool NotifyMaxEnabled { get; set; } = false;
 

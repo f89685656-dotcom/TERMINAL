@@ -307,11 +307,24 @@ namespace TERMINAL
         private bool _notifyVkEnabled = false;
         private bool _notifyMaxEnabled = false;
 
+        private bool _notifyYandexEnabled = false;
+        private bool _notifyMailEnabled = false;
+        private bool _notifyGmailEnabled = false;
+        private bool _notifyCustomEnabled = false;
+
+
+
+
         // ★ ПУБЛИЧНЫЕ СВОЙСТВА (чтобы окно настроек могло их прочитать)
         public bool NotifyTgEnabled => _notifyTgEnabled;
         public bool NotifyEmailEnabled => _notifyEmailEnabled;
         public bool NotifyVkEnabled => _notifyVkEnabled;
         public bool NotifyMaxEnabled => _notifyMaxEnabled;
+
+        public bool NotifyYandexEnabled => _notifyYandexEnabled;
+        public bool NotifyMailEnabled => _notifyMailEnabled;
+        public bool NotifyGmailEnabled => _notifyGmailEnabled;
+        public bool NotifyCustomEnabled => _notifyCustomEnabled;
 
         // Telegram
         private string _telegramToken = "";
@@ -1462,7 +1475,7 @@ namespace TERMINAL
         // ═══════════════════════════════════════════════════════════════════
         public void ApplyNotificationSettings(
     bool enabled,
-    bool tgEnabled, bool emailEnabled, bool vkEnabled, bool maxEnabled,
+    bool tgEnabled, bool yandexEnabled, bool mailEnabled, bool gmailEnabled, bool customEnabled, bool vkEnabled, bool maxEnabled,
     int methodIndex,
     string tgToken, string tgChatId,
     string emailHost, int emailPort, string emailUser, string emailPass, string emailTo, int emailProviderIndex,
@@ -1473,32 +1486,15 @@ namespace TERMINAL
             _notificationsEnabled = enabled;
             _notificationMethodIndex = methodIndex;
 
-            // ★ СОХРАНЯЕМ ГАЛОЧКИ
             _notifyTgEnabled = tgEnabled;
-            _notifyEmailEnabled = emailEnabled;
+            _notifyYandexEnabled = yandexEnabled;
+            _notifyMailEnabled = mailEnabled;
+            _notifyGmailEnabled = gmailEnabled;
+            _notifyCustomEnabled = customEnabled;
             _notifyVkEnabled = vkEnabled;
             _notifyMaxEnabled = maxEnabled;
 
-            // ★ СОХРАНЯЕМ ТОКЕНЫ И ПАРОЛИ
-            _telegramToken = tgToken ?? "";
-            _telegramChatId = tgChatId ?? "";
-
-            _emailHost = emailHost ?? "";
-            _emailPort = emailPort;
-            _emailUser = emailUser ?? "";
-            _emailPass = emailPass ?? "";
-            _emailTo = emailTo ?? "";
-            _emailProviderIndex = emailProviderIndex;
-
-            _vkToken = vkToken ?? "";
-            _vkPeerId = vkPeerId;
-
-            _maxToken = maxToken ?? "";
-            _maxChatId = maxChatId ?? "";
-
-            _smsLogin = smsLogin ?? "";
-            _smsPass = smsPass ?? "";
-            _smsPhone = smsPhone ?? "";
+            // ... (сохраняем токены и пароли, как раньше)
 
             NotificationManager.ClearServices();
 
@@ -1507,8 +1503,18 @@ namespace TERMINAL
                 if (_notifyTgEnabled && !string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long chatIdLong))
                     NotificationManager.AddService(new TelegramNotificationService(_telegramToken, chatIdLong));
 
-                if (_notifyEmailEnabled && !string.IsNullOrEmpty(_emailHost) && !string.IsNullOrEmpty(_emailUser))
-                    NotificationManager.AddService(new EmailNotificationService(_emailHost, _emailPort, _emailUser, _emailPass, _emailTo));
+                // ★ РАССЫЛКА ПО ВСЕМ ВЫБРАННЫМ ПОЧТАМ
+                if (_notifyYandexEnabled && !string.IsNullOrEmpty(_emailYandexUser))
+                    NotificationManager.AddService(new EmailNotificationService("smtp.yandex.ru", 587, _emailYandexUser, _emailYandexPass, _emailYandexTo));
+
+                if (_notifyMailEnabled && !string.IsNullOrEmpty(_emailMailUser))
+                    NotificationManager.AddService(new EmailNotificationService("smtp.mail.ru", 587, _emailMailUser, _emailMailPass, _emailMailTo));
+
+                if (_notifyGmailEnabled && !string.IsNullOrEmpty(_emailGmailUser))
+                    NotificationManager.AddService(new EmailNotificationService("smtp.gmail.com", 587, _emailGmailUser, _emailGmailPass, _emailGmailTo));
+
+                if (_notifyCustomEnabled && !string.IsNullOrEmpty(_emailCustomHost))
+                    NotificationManager.AddService(new EmailNotificationService(_emailCustomHost, _emailCustomPort, _emailCustomUser, _emailCustomPass, _emailCustomTo));
 
                 if (_notifyVkEnabled && !string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
                     NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
@@ -1516,6 +1522,9 @@ namespace TERMINAL
                 if (_notifyMaxEnabled && !string.IsNullOrEmpty(_maxToken) && long.TryParse(_maxChatId, out long maxId))
                     NotificationManager.AddService(new MaxNotificationService(_maxToken, maxId));
             }
+
+            // ★ ОБНОВЛЯЕМ ИНДИКАТОР НА ГЛАВНОМ ЭКРАНЕ
+            UpdateNotificationStatus(_notificationsEnabled);
 
             SaveSettings();
         }

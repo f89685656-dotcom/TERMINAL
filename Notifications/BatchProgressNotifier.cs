@@ -66,12 +66,11 @@ namespace TERMINAL.Notifications
             {
                 if (_tableMsgId.HasValue)
                 {
-                    // Пытаемся отредактировать существующее сообщение
                     bool ok = await NotificationManager.EditMessageAsync(_tableMsgId.Value, text);
-                    if (ok) return; // Если успешно, выходим
+                    if (ok) return;
                 }
 
-                // Если ID нет или редактирование не удалось — шлём новое
+                // Если ID нет, шлем новое и ЗАПОМИНАЕМ его
                 int? newId = await NotificationManager.SendMessageAsync(text);
                 _tableMsgId = newId;
             }

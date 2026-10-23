@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Настройки приборов"
-        Width="500" Height="620" 
+        Width="500" Height="650" 
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource WindowBackground}"
@@ -177,16 +177,15 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
 
+                        <!-- Блок с галочкой, списком и инструкцией -->
                         <Grid Margin="0,0,0,15">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
-                                <!-- 0: Галочка "Включить" -->
-                                <ColumnDefinition Width="Auto"/>
-                                <!-- 1: Выпадающий список -->
+                                <!-- Галочка -->
                                 <ColumnDefinition Width="*"/>
-                                <!-- 2: Пустое место -->
+                                <!-- Список (растягиваем) -->
                                 <ColumnDefinition Width="Auto"/>
-                                <!-- 3: Кнопка "Инструкция" -->
+                                <!-- Кнопка -->
                             </Grid.ColumnDefinitions>
 
                             <!-- 1. Галочка "Включить уведомления" -->
@@ -197,31 +196,62 @@
               VerticalAlignment="Center"
               Margin="0,0,15,0"/>
 
-                            <!-- 2. Выпадающий список с каналами (сузили до 120) -->
-                            <ComboBox x:Name="NotifyChannelsCombo" 
-              Grid.Column="1"
-              Width="120" Height="28" 
-              VerticalAlignment="Center">
-                                <ComboBoxItem>
-                                    <CheckBox x:Name="ChkSendToTelegram" Content="Telegram" Margin="2,2"/>
-                                </ComboBoxItem>
-                                <ComboBoxItem>
-                                    <CheckBox x:Name="ChkSendToEmail" Content="Email" Margin="2,2"/>
-                                </ComboBoxItem>
-                                <ComboBoxItem>
-                                    <CheckBox x:Name="ChkSendToVk" Content="ВКонтакте" Margin="2,2"/>
-                                </ComboBoxItem>
-                                <ComboBoxItem>
-                                    <CheckBox x:Name="ChkSendToMax" Content="MAX" Margin="2,2"/>
-                                </ComboBoxItem>
-                            </ComboBox>
+                            <!-- 2. Выпадающий список с подписью внутри -->
+                            <Grid Grid.Column="1" Margin="0,0,5,0">
+                                <!-- Ширина 110, чтобы ужать по максимуму -->
+                                <ComboBox x:Name="NotifyChannelsCombo" 
+              Width="110" Height="26" 
+              HorizontalAlignment="Left"
+              VerticalAlignment="Center"
+              Padding="2,0">
+                                    <ComboBoxItem Padding="0">
+                                        <CheckBox x:Name="ChkSendToTelegram" Content="Telegram" Margin="0,1"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0">
+                                        <CheckBox x:Name="ChkSendToYandex" Content="Яндекс" Margin="0,1"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0">
+                                        <CheckBox x:Name="ChkSendToMail" Content="Mail.ru" Margin="0,1"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0">
+                                        <CheckBox x:Name="ChkSendToGmail" Content="Gmail" Margin="0,1"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0">
+                                        <CheckBox x:Name="ChkSendToCustomEmail" Content="Другой" Margin="0,1"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0">
+                                        <CheckBox x:Name="ChkSendToVk" Content="VK" Margin="0,1"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0">
+                                        <CheckBox x:Name="ChkSendToMax" Content="MAX" Margin="0,1"/>
+                                    </ComboBoxItem>
+                                </ComboBox>
 
-                            <!-- 3. Кнопка "Инструкция" (прижата вправо) -->
+                                <!-- Подпись внутри списка -->
+                                <TextBlock x:Name="NotifyPlaceholderText" 
+               Text="Выбрать..." 
+               Foreground="Gray" 
+               VerticalAlignment="Center" 
+               Margin="5,0,0,0"
+               IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ElementName=NotifyChannelsCombo, Path=IsDropDownOpen}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <!-- 3. Кнопка "Инструкция" -->
                             <Button x:Name="NotificationHelpButton"
-            Grid.Column="3"
+            Grid.Column="2"
             Content="❓ Инструкция"
             Padding="10,2"
-            Margin="10,0,0,0"
             VerticalAlignment="Center"
             Click="NotificationHelpButton_Click"/>
                         </Grid>
@@ -235,6 +265,7 @@
                             <ComboBoxItem Content="SMS (SMSC.ru)"/>
                         </ComboBox>
 
+                        <!-- ═══ Панель 1: Telegram ═══ -->
                         <StackPanel x:Name="TelegramPanel" Margin="0,10,0,0">
                             <TextBlock Text="Telegram Token:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <TextBox x:Name="TelegramTokenBox" Height="24" Padding="4,2" ToolTip="Токен от @BotFather"/>
@@ -243,6 +274,7 @@
                             <TextBox x:Name="TelegramChatIdBox" Height="24" Padding="4,2" ToolTip="ID вашего чата (можно узнать через getUpdates)"/>
                         </StackPanel>
 
+                        <!-- ═══ Панель 2: Email ═══ -->
                         <StackPanel x:Name="EmailPanel" Margin="0,10,0,0" Visibility="Collapsed">
                             <TextBlock Text="Почтовый провайдер:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <ComboBox x:Name="EmailProviderCombo" Height="24" SelectionChanged="EmailProviderCombo_SelectionChanged">
@@ -268,6 +300,7 @@
                             <TextBox x:Name="EmailToBox" Height="24" Padding="4,2"/>
                         </StackPanel>
 
+                        <!-- ═══ Панель 3: VK ═══ -->
                         <StackPanel x:Name="VkPanel" Margin="0,10,0,0" Visibility="Collapsed">
                             <TextBlock Text="Access Token:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <TextBox x:Name="VkTokenBox" Height="24" Padding="4,2" ToolTip="Токен из OAuth ВКонтакте"/>
@@ -276,6 +309,7 @@
                             <TextBox x:Name="VkPeerIdBox" Height="24" Padding="4,2" ToolTip="Например: 12345678 (личка) или 2000000001 (беседа)"/>
                         </StackPanel>
 
+                        <!-- ═══ Панель 4: MAX ═══ -->
                         <StackPanel x:Name="MaxPanel" Margin="0,10,0,0" Visibility="Collapsed">
                             <TextBlock Text="Токен бота MAX:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <TextBox x:Name="MaxTokenBox" Height="24" Padding="4,2" ToolTip="Токен из платформы МАКС для партнеров"/>
@@ -284,6 +318,7 @@
                             <TextBox x:Name="MaxChatIdBox" Height="24" Padding="4,2" ToolTip="Например: 123456789"/>
                         </StackPanel>
 
+                        <!-- ═══ Панель 5: SMS ═══ -->
                         <StackPanel x:Name="SmsPanel" Margin="0,10,0,0" Visibility="Collapsed">
                             <TextBlock Text="Логин SMSC.ru:" FontWeight="Bold" Margin="0,5,0,5"/>
                             <TextBox x:Name="SmsLoginBox" Height="24" Padding="4,2"/>
@@ -296,10 +331,10 @@
                         </StackPanel>
 
                         <Button x:Name="TestNotificationButton" 
-                                Content="Отправить тестовое сообщение" 
-                                Width="220" Height="30" Margin="0,20,0,0"
-                                HorizontalAlignment="Left"
-                                Click="TestNotificationButton_Click"/>
+                    Content="Отправить тестовое сообщение" 
+                    Width="220" Height="30" Margin="0,20,0,0"
+                    HorizontalAlignment="Left"
+                    Click="TestNotificationButton_Click"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

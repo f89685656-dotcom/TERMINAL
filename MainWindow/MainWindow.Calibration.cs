@@ -303,7 +303,7 @@ namespace TERMINAL
 
                 // ★★★ ОБНОВЛЯЕМ ПРОГРЕСС-БАР В TELEGRAM ★★★
                 string units = _selectedTargetPressure?.Contains("МПа") == true ? "МПа" : "кгс/см²";
-                await _batchProgress.UpdateProgressAsync($"🔄 Градуировка: шаг {human}/{steps.Length} (давление {v} {units})");
+                //await _batchProgress.UpdateProgressAsync($"🔄 Градуировка: шаг {human}/{steps.Length} (давление {v} {units})");
 
                 if (IsTestPressureRange())
                 {
