@@ -317,6 +317,12 @@ namespace TERMINAL
         private string _telegramToken = "";
         private string _telegramChatId = "";
 
+        // ★ Для живой таблицы в Telegram
+        private int _currentStepIndexForNotify = -1;
+        private int _currentTimerRemaining = 0;
+        private string _currentStepStatus = "ожидание";
+        private string _lastSentTable = "";
+
         // Email
         private string _emailHost = "";
         private int _emailPort = 587;

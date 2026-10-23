@@ -55,5 +55,33 @@ namespace TERMINAL.Notifications
                 _lastProgressText = null;
             }
         }
+
+        private int? _tableMsgId; // ★ Храним ID сообщения с таблицей
+
+        public async Task UpdateTableAsync(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+
+            try
+            {
+                if (_tableMsgId.HasValue)
+                {
+                    // Пытаемся отредактировать существующее сообщение
+                    bool ok = await NotificationManager.EditMessageAsync(_tableMsgId.Value, text);
+                    if (ok) return; // Если успешно, выходим
+                }
+
+                // Если ID нет или редактирование не удалось — шлём новое
+                int? newId = await NotificationManager.SendMessageAsync(text);
+                _tableMsgId = newId;
+            }
+            catch { }
+        }
+
+        // Сброс ID таблицы (вызывать при завершении пакета)
+        public void ResetTable()
+        {
+            _tableMsgId = null;
+        }
     }
 }

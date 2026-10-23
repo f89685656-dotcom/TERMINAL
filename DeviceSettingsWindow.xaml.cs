@@ -197,6 +197,7 @@ namespace TERMINAL.Windows
             TelegramTokenBox.Text = "";
             TelegramChatIdBox.Text = "";
             NotificationMethodCombo.SelectedIndex = 0;
+
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)

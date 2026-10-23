@@ -128,7 +128,7 @@ namespace TERMINAL
                 job.StatusColor = Brushes.Gray;
             }
 
-            // Валидация активных заданий (оставлена без изменений)
+            // Валидация активных заданий
             for (int i = 0; i < _batchJobs.Count; i++)
             {
                 var job = _batchJobs[i];
@@ -213,8 +213,19 @@ namespace TERMINAL
 
             try
             {
-                // ★★★ 1. СТАРТ ПАКЕТА (НОВОЕ СООБЩЕНИЕ) ★★★
-                await _batchProgress.SendStatusAsync($"🚀 Пакетный режим запущен. Заданий: {enabledCount}");
+                // ★★★ 1. СТАРТ ПАКЕТА (ПОДРОБНОЕ СООБЩЕНИЕ) ★★★
+                var activeTemps = _batchJobs.Where(j => j.IsEnabled).Select(j => $"+{j.SetPointText} °C");
+                string tempsString = string.Join(", ", activeTemps);
+
+                var selectedClient = _connectedClients.FirstOrDefault(c => c.IsSelected);
+                string clientInfo = selectedClient != null
+                    ? $" Заказ: {selectedClient.CustomName}, датчиков: {selectedClient.CaseValue}."
+                    : "";
+
+                await _batchProgress.SendStatusAsync(
+                    $"🚀 Пакетный режим запущен.\n" +
+                    $"Заданий: {enabledCount} (диапазон: {_selectedTargetPressure}, температуры: {tempsString}).\n" +
+                    $"{clientInfo}");
 
                 int completedCount = 0;
 
@@ -267,7 +278,6 @@ namespace TERMINAL
                         return;
                     }
 
-                    // ─── Успешная запись уставки ───
                     _lastValidFurnaceSetPoint = job.SetPoint;
                     await RefreshFurnaceSetPointAsync();
 
@@ -287,7 +297,6 @@ namespace TERMINAL
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации " +
                                   $"{job.StabilizationMinutes} мин...", false);
 
-                        // Обновляем прогресс-бар, показывая ожидание
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
 
                         bool stable = await WaitForBatchStabilizationAsync(
@@ -367,7 +376,6 @@ namespace TERMINAL
                         _ = Dispatcher.InvokeAsync(() => RunPumpForBatchAsync(cycles));
                     }
 
-                    // ★ Читаем результат — true = все циклы/шаги отработаны, false = прервано
                     bool taskCompleted = await _batchRunDoneSignal.Task;
                     _batchRunDoneSignal = null;
 
@@ -402,7 +410,6 @@ namespace TERMINAL
                 await _batchProgress.SendStatusAsync($"🏁 Пакетный режим завершён успешно. Обработано: {completedCount}/{enabledCount}");
                 await _batchProgress.ResetAsync();
 
-                // ─── Автовыключение печки ───
                 if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
                 {
                     try
@@ -418,7 +425,6 @@ namespace TERMINAL
             }
             catch (Exception ex)
             {
-                // ★ Ловим ВСЁ, что прорвалось сквозь внутренние проверки
                 AppendLog($"ПАКЕТ: необработанное исключение — " +
                           $"{ex.GetType().Name}: {ex.Message}", Brushes.Red);
 
@@ -431,7 +437,6 @@ namespace TERMINAL
 
                 SetStatusError($"Пакет: необработанная ошибка — {ex.Message}");
 
-                // ★★★ 7. КОНЕЦ ПАКЕТА (ОШИБКА) ★★★
                 await _batchProgress.SendStatusAsync($"❌ Пакетный режим завершён с ошибкой: {ex.Message}");
                 await _batchProgress.ResetAsync();
             }
@@ -458,7 +463,55 @@ namespace TERMINAL
 
                 BatchProgressText.Text = "";
                 UpdateStartButtonMode();
+                _batchProgress.ResetTable();
             }
+        }
+
+        private async Task UpdatePressureTableInTelegram()
+        {
+            if (!_batchRunning || _selectedTargetPressure == null) return;
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"📊 *Процесс: {_selectedTargetPressure}*");
+            sb.AppendLine("```");
+            sb.AppendLine("Шаг  | Давл.  | Таймер | Статус");
+            sb.AppendLine("-----|--------|--------|------------------");
+
+            for (int i = 0; i < steps.Length; i++)
+            {
+                // Определяем иконку: ▶️ (текущий), ✅ (выполнен), ⏳ (ожидает)
+                string mark = (i == _currentStepIndexForNotify) ? "▶️" : (i < _completedSteps ? "✅" : "⏳");
+
+                // Форматируем давление (добавляем пробелы для ровности)
+                string pressure = $"{steps[i],-5} МПа";
+
+                string timerText = "-";
+                string status = "ожидание";
+
+                if (i == _currentStepIndexForNotify)
+                {
+                    timerText = _currentTimerRemaining.ToString();
+                    status = _currentStepStatus;
+                }
+                else if (i < _completedSteps)
+                {
+                    timerText = "0";
+                    status = "завершён";
+                }
+
+                // Формируем строку
+                sb.AppendLine($"{mark} {i + 1,2}/{steps.Length} | {pressure} | {timerText,6} | {status}");
+            }
+            sb.AppendLine("```");
+
+            string newText = sb.ToString();
+
+            // Если текст не изменился, не дергаем Telegram API
+            if (newText == _lastSentTable) return;
+            _lastSentTable = newText;
+
+            await _batchProgress.UpdateTableAsync(newText);
         }
 
         private async Task RunPumpForBatchAsync(int cycles)

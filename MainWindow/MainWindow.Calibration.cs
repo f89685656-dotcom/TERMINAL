@@ -288,6 +288,7 @@ namespace TERMINAL
                 if (!await WaitIfPausedAsync()) { SetStatus("Остановлено оператором"); return; }
 
                 _currentStepIndex = i;
+                _ = UpdatePressureTableInTelegram(); // Принудительно обновить таблицу
 
                 for (int k = 0; k < _stepItems.Count; k++)
                     _stepItems[k].ArrowText = "  ";
@@ -777,9 +778,12 @@ namespace TERMINAL
         private async Task RunTimerWithStepAsync(int seconds, int stepIndex, bool waitForState)
         {
             int remaining = seconds;
+            _currentStepIndexForNotify = stepIndex;
+            _currentTimerRemaining = remaining;
 
             if (!waitForState)
             {
+                _currentStepStatus = "таймер";
                 SetStatus($"До начала съёма данных: {remaining} сек — таймер запущен");
 
                 while (remaining > 0)
@@ -789,6 +793,7 @@ namespace TERMINAL
                     var cycleStart = DateTime.Now;
 
                     remaining--;
+                    _currentTimerRemaining = remaining; // ★ Обновляем для Telegram
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
@@ -801,6 +806,7 @@ namespace TERMINAL
                     if (sleep > 0) await SafeDelayAsync(sleep);
                 }
 
+                _currentStepStatus = "съём";
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].TimerText = "0";
                 return;
@@ -808,7 +814,7 @@ namespace TERMINAL
 
             // ─── waitForState == true ───
             bool firstOkReceived = false;
-
+            _currentStepStatus = "ожидание";
             SetStatus($"До начала съёма данных: таймер запущен на {remaining} сек");
 
             while (remaining > 0)
@@ -821,20 +827,17 @@ namespace TERMINAL
                 long unitsMs = 0;
                 long stateMs = 0;
 
-                // ─── RefreshPressure (из кэша, мгновенно) ───
                 var t1 = DateTime.Now;
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
                 _lastKnownPressure = snap.Pressure;
                 refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
 
-                // ─── get_units (из кэша) ───
                 var t2 = DateTime.Now;
                 if (!string.IsNullOrEmpty(snap.Units))
                     UpdateUnits(snap.Units);
                 unitsMs = (long)(DateTime.Now - t2).TotalMilliseconds;
 
-                // ─── get_state_in_point (из кэша) ───
                 var t3 = DateTime.Now;
                 bool stateOk = snap.StateInPointOk;
                 bool stateWait = snap.StateInPointWait;
@@ -844,6 +847,8 @@ namespace TERMINAL
                 {
                     firstOkReceived = true;
                     remaining--;
+                    _currentTimerRemaining = remaining; // ★ Обновляем для Telegram
+                    _currentStepStatus = "таймер";      // ★ Обновляем для Telegram
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
@@ -852,12 +857,14 @@ namespace TERMINAL
                     if (firstOkReceived)
                     {
                         remaining += 30;
+                        _currentTimerRemaining = remaining; // ★
                         SetStatus($"Срыв! Таймер +30 сек. Осталось: {remaining}");
                         if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                             _stepItems[stepIndex].TimerText = remaining.ToString();
                     }
                     else
                     {
+                        _currentStepStatus = "ожидание стабилизации"; // ★
                         SetStatus("Ожидание стабилизации давления...");
                     }
 
@@ -877,7 +884,6 @@ namespace TERMINAL
                     }
                 }
 
-                // ─── Замер чистого времени такта ───
                 long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
                 AddTickTiming("timer-step", pureMs);
 
@@ -892,6 +898,7 @@ namespace TERMINAL
                 if (sleep > 0) await SafeDelayAsync(sleep);
             }
 
+            _currentTimerRemaining = 0;
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
         }
