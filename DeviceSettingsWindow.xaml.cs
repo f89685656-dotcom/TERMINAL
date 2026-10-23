@@ -117,11 +117,11 @@ namespace TERMINAL.Windows
             // могло не сработать при программной установке SelectedIndex
             NotificationMethodCombo_SelectionChanged(null, null);
 
-            // ★ ЗАГРУЖАЕМ ГАЛОЧКИ
-            TelegramEnabledCheck.IsChecked = mw.NotifyTgEnabled;
-            EmailEnabledCheck.IsChecked = mw.NotifyEmailEnabled;
-            VkEnabledCheck.IsChecked = mw.NotifyVkEnabled;
-            MaxEnabledCheck.IsChecked = mw.NotifyMaxEnabled;
+            // ★ ЗАГРУЖАЕМ НОВЫЕ ОБЩИЕ ГАЛОЧКИ
+            ChkSendToTelegram.IsChecked = mw.NotifyTgEnabled;
+            ChkSendToEmail.IsChecked = mw.NotifyEmailEnabled;
+            ChkSendToVk.IsChecked = mw.NotifyVkEnabled;
+            ChkSendToMax.IsChecked = mw.NotifyMaxEnabled;
 
             // Заполнение полей для всех каналов
             TelegramTokenBox.Text = mw.TelegramToken;
@@ -352,36 +352,36 @@ namespace TERMINAL.Windows
             long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
 
             mw.ApplyNotificationSettings(
-                enabled: NotificationsEnabledCheck.IsChecked == true,
+            enabled: NotificationsEnabledCheck.IsChecked == true,
 
-                // ★ ПЕРЕДАЕМ ГАЛОЧКИ АКТИВНОСТИ КАНАЛОВ
-                tgEnabled: TelegramEnabledCheck.IsChecked == true,
-                emailEnabled: EmailEnabledCheck.IsChecked == true,
-                vkEnabled: VkEnabledCheck.IsChecked == true,
-                maxEnabled: MaxEnabledCheck.IsChecked == true,
+    // ★ ПЕРЕДАЕМ НОВЫЕ ОБЩИЕ ГАЛОЧКИ
+            tgEnabled: ChkSendToTelegram.IsChecked == true,
+            emailEnabled: ChkSendToEmail.IsChecked == true,
+            vkEnabled: ChkSendToVk.IsChecked == true,
+            maxEnabled: ChkSendToMax.IsChecked == true,
 
-                methodIndex: NotificationMethodCombo.SelectedIndex,
+            methodIndex: NotificationMethodCombo.SelectedIndex,
 
-                tgToken: TelegramTokenBox.Text.Trim(),
-                tgChatId: TelegramChatIdBox.Text.Trim(),
+            tgToken: TelegramTokenBox.Text.Trim(),
+            tgChatId: TelegramChatIdBox.Text.Trim(),
 
-                emailHost: EmailHostBox.Text.Trim(),
-                emailPort: emailPort,
-                emailUser: EmailUserBox.Text.Trim(),
-                emailPass: EmailPassBox.Password,
-                emailTo: EmailToBox.Text.Trim(),
-                emailProviderIndex: EmailProviderCombo.SelectedIndex,
+            emailHost: EmailHostBox.Text.Trim(),
+            emailPort: emailPort,
+            emailUser: EmailUserBox.Text.Trim(),
+            emailPass: EmailPassBox.Password,
+            emailTo: EmailToBox.Text.Trim(),
+            emailProviderIndex: EmailProviderCombo.SelectedIndex,
 
-                vkToken: VkTokenBox.Text.Trim(),
-                vkPeerId: vkId,
+            vkToken: VkTokenBox.Text.Trim(),
+            vkPeerId: vkId,
 
-                maxToken: MaxTokenBox.Text.Trim(),
-                maxChatId: MaxChatIdBox.Text.Trim(),
+            maxToken: MaxTokenBox.Text.Trim(),
+            maxChatId: MaxChatIdBox.Text.Trim(),
 
-                smsLogin: SmsLoginBox.Text.Trim(),
-                smsPass: SmsPassBox.Password,
-                smsPhone: SmsPhoneBox.Text.Trim()
-            );
+            smsLogin: SmsLoginBox.Text.Trim(),
+            smsPass: SmsPassBox.Password,
+            smsPhone: SmsPhoneBox.Text.Trim()
+);
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)

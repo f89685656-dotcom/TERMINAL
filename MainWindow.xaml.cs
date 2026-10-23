@@ -1462,7 +1462,7 @@ namespace TERMINAL
         // ═══════════════════════════════════════════════════════════════════
         public void ApplyNotificationSettings(
     bool enabled,
-    bool tgEnabled, bool emailEnabled, bool vkEnabled, bool maxEnabled, // ★ Новые параметры
+    bool tgEnabled, bool emailEnabled, bool vkEnabled, bool maxEnabled,
     int methodIndex,
     string tgToken, string tgChatId,
     string emailHost, int emailPort, string emailUser, string emailPass, string emailTo, int emailProviderIndex,
@@ -1479,13 +1479,31 @@ namespace TERMINAL
             _notifyVkEnabled = vkEnabled;
             _notifyMaxEnabled = maxEnabled;
 
-            // ... (сохранение токенов и паролей)
+            // ★ СОХРАНЯЕМ ТОКЕНЫ И ПАРОЛИ
+            _telegramToken = tgToken ?? "";
+            _telegramChatId = tgChatId ?? "";
+
+            _emailHost = emailHost ?? "";
+            _emailPort = emailPort;
+            _emailUser = emailUser ?? "";
+            _emailPass = emailPass ?? "";
+            _emailTo = emailTo ?? "";
+            _emailProviderIndex = emailProviderIndex;
+
+            _vkToken = vkToken ?? "";
+            _vkPeerId = vkPeerId;
+
+            _maxToken = maxToken ?? "";
+            _maxChatId = maxChatId ?? "";
+
+            _smsLogin = smsLogin ?? "";
+            _smsPass = smsPass ?? "";
+            _smsPhone = smsPhone ?? "";
 
             NotificationManager.ClearServices();
 
             if (enabled)
             {
-                // Теперь проверяем и галочку, и заполненность полей
                 if (_notifyTgEnabled && !string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long chatIdLong))
                     NotificationManager.AddService(new TelegramNotificationService(_telegramToken, chatIdLong));
 

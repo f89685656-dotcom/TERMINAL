@@ -58,13 +58,12 @@ namespace TERMINAL
                     try
                     {
                         byte[] encryptedBytes = File.ReadAllBytes(SettingsFile);
-                        byte[] jsonBytes = SecurityHelper.DecryptBytes(encryptedBytes); // Расшифровываем
+                        byte[] jsonBytes = SecurityHelper.DecryptBytes(encryptedBytes);
                         string json = System.Text.Encoding.UTF8.GetString(jsonBytes);
                         _loadedSettings = JsonSerializer.Deserialize<Settings>(json);
                     }
                     catch
                     {
-                        // Если файл поврежден или зашифрован на другом ПК — создаем новые настройки
                         _loadedSettings = new Settings();
                     }
                 }
@@ -74,8 +73,7 @@ namespace TERMINAL
 
                 if (string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
                 {
-                    string docs = Environment.GetFolderPath(
-                        Environment.SpecialFolder.MyDocuments);
+                    string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                     _loadedSettings.SavePath = Path.Combine(docs, "TERMINAL");
                 }
 
@@ -98,6 +96,7 @@ namespace TERMINAL
 
                 _telegramToken = _loadedSettings.TelegramToken ?? "";
                 _telegramChatId = _loadedSettings.TelegramChatId ?? "";
+
                 _emailProviderIndex = _loadedSettings.EmailProviderIndex;
                 _emailHost = _loadedSettings.EmailHost ?? "";
                 _emailPort = _loadedSettings.EmailPort;
@@ -105,24 +104,25 @@ namespace TERMINAL
                 _emailPass = SecurityHelper.DecryptString(_loadedSettings.EmailPass);
                 _emailTo = _loadedSettings.EmailTo ?? "";
 
-                // ★ НОВЫЕ СТРОКИ:
+                // ★ РАСШИФРОВЫВАЕМ ПАРОЛИ ДЛЯ ПРОВАЙДЕРОВ
                 _emailYandexUser = _loadedSettings.EmailYandexUser ?? "";
-                _emailYandexPass = _loadedSettings.EmailYandexPass ?? "";
+                _emailYandexPass = SecurityHelper.DecryptString(_loadedSettings.EmailYandexPass);
                 _emailYandexTo = _loadedSettings.EmailYandexTo ?? "";
 
                 _emailMailUser = _loadedSettings.EmailMailUser ?? "";
-                _emailMailPass = _loadedSettings.EmailMailPass ?? "";
+                _emailMailPass = SecurityHelper.DecryptString(_loadedSettings.EmailMailPass);
                 _emailMailTo = _loadedSettings.EmailMailTo ?? "";
 
                 _emailGmailUser = _loadedSettings.EmailGmailUser ?? "";
-                _emailGmailPass = _loadedSettings.EmailGmailPass ?? "";
+                _emailGmailPass = SecurityHelper.DecryptString(_loadedSettings.EmailGmailPass);
                 _emailGmailTo = _loadedSettings.EmailGmailTo ?? "";
 
                 _emailCustomHost = _loadedSettings.EmailCustomHost ?? "";
                 _emailCustomPort = _loadedSettings.EmailCustomPort;
                 _emailCustomUser = _loadedSettings.EmailCustomUser ?? "";
-                _emailCustomPass = _loadedSettings.EmailCustomPass ?? "";
+                _emailCustomPass = SecurityHelper.DecryptString(_loadedSettings.EmailCustomPass);
                 _emailCustomTo = _loadedSettings.EmailCustomTo ?? "";
+
                 _vkToken = SecurityHelper.DecryptString(_loadedSettings.VkToken);
                 _vkPeerId = _loadedSettings.VkPeerId;
                 _maxToken = SecurityHelper.DecryptString(_loadedSettings.MaxToken);
@@ -164,9 +164,15 @@ namespace TERMINAL
                 // Сброс уведомлений при ошибке
                 _notificationsEnabled = false;
                 _notificationMethodIndex = 0;
+                _notifyTgEnabled = false; _notifyEmailEnabled = false; _notifyVkEnabled = false; _notifyMaxEnabled = false;
                 _telegramToken = ""; _telegramChatId = "";
                 _emailHost = ""; _emailPort = 587; _emailUser = ""; _emailPass = ""; _emailTo = "";
+                _emailYandexUser = ""; _emailYandexPass = ""; _emailYandexTo = "";
+                _emailMailUser = ""; _emailMailPass = ""; _emailMailTo = "";
+                _emailGmailUser = ""; _emailGmailPass = ""; _emailGmailTo = "";
+                _emailCustomHost = ""; _emailCustomPort = 587; _emailCustomUser = ""; _emailCustomPass = ""; _emailCustomTo = "";
                 _vkToken = ""; _vkPeerId = 0;
+                _maxToken = ""; _maxChatId = "";
                 _smsLogin = ""; _smsPass = ""; _smsPhone = "";
 
                 string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -209,18 +215,41 @@ namespace TERMINAL
             _notifyVkEnabled = _loadedSettings.NotifyVkEnabled;
             _notifyMaxEnabled = _loadedSettings.NotifyMaxEnabled;
 
-
             _telegramToken = _loadedSettings.TelegramToken ?? "";
             _telegramChatId = _loadedSettings.TelegramChatId ?? "";
+
             _emailHost = _loadedSettings.EmailHost ?? "";
             _emailPort = _loadedSettings.EmailPort;
             _emailUser = _loadedSettings.EmailUser ?? "";
             _emailPass = SecurityHelper.DecryptString(_loadedSettings.EmailPass);
             _emailTo = _loadedSettings.EmailTo ?? "";
             _emailProviderIndex = _loadedSettings.EmailProviderIndex;
+
+            // ★ РАСШИФРОВЫВАЕМ ПАРОЛИ ДЛЯ ПРОВАЙДЕРОВ
+            _emailYandexUser = _loadedSettings.EmailYandexUser ?? "";
+            _emailYandexPass = SecurityHelper.DecryptString(_loadedSettings.EmailYandexPass);
+            _emailYandexTo = _loadedSettings.EmailYandexTo ?? "";
+
+            _emailMailUser = _loadedSettings.EmailMailUser ?? "";
+            _emailMailPass = SecurityHelper.DecryptString(_loadedSettings.EmailMailPass);
+            _emailMailTo = _loadedSettings.EmailMailTo ?? "";
+
+            _emailGmailUser = _loadedSettings.EmailGmailUser ?? "";
+            _emailGmailPass = SecurityHelper.DecryptString(_loadedSettings.EmailGmailPass);
+            _emailGmailTo = _loadedSettings.EmailGmailTo ?? "";
+
+            _emailCustomHost = _loadedSettings.EmailCustomHost ?? "";
+            _emailCustomPort = _loadedSettings.EmailCustomPort;
+            _emailCustomUser = _loadedSettings.EmailCustomUser ?? "";
+            _emailCustomPass = SecurityHelper.DecryptString(_loadedSettings.EmailCustomPass);
+            _emailCustomTo = _loadedSettings.EmailCustomTo ?? "";
+
             _vkToken = SecurityHelper.DecryptString(_loadedSettings.VkToken);
             _vkPeerId = _loadedSettings.VkPeerId;
+
             _maxToken = SecurityHelper.DecryptString(_loadedSettings.MaxToken);
+            _maxChatId = _loadedSettings.MaxChatId ?? ""; // ★ ДОБАВЛЕНО (было пропущено)
+
             _smsLogin = _loadedSettings.SmsLogin ?? "";
             _smsPass = SecurityHelper.DecryptString(_loadedSettings.SmsPass);
             _smsPhone = _loadedSettings.SmsPhone ?? "";
@@ -314,10 +343,6 @@ namespace TERMINAL
                     TickTimingEnabled = _tickTimingEnabled,
                     LogSlowTicks = _logSlowTicks,
 
-
-
-
-
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
                         SetPoint = j.SetPointText,
@@ -362,7 +387,7 @@ namespace TERMINAL
                     TelegramToken = _telegramToken,
                     TelegramChatId = _telegramChatId,
 
-                    // Email
+                    // Email (Основные поля)
                     EmailProviderIndex = _emailProviderIndex,
                     EmailHost = _emailHost,
                     EmailPort = _emailPort,
@@ -370,23 +395,23 @@ namespace TERMINAL
                     EmailPass = SecurityHelper.EncryptString(_emailPass),
                     EmailTo = _emailTo,
 
-                    // ★ НОВЫЕ СТРОКИ:
+                    // Email (Раздельные данные по провайдерам) - ШИФРУЕМ ПАРОЛИ!
                     EmailYandexUser = _emailYandexUser,
-                    EmailYandexPass = _emailYandexPass,
+                    EmailYandexPass = SecurityHelper.EncryptString(_emailYandexPass), // Шифруем
                     EmailYandexTo = _emailYandexTo,
 
                     EmailMailUser = _emailMailUser,
-                    EmailMailPass = _emailMailPass,
+                    EmailMailPass = SecurityHelper.EncryptString(_emailMailPass),     // Шифруем
                     EmailMailTo = _emailMailTo,
 
                     EmailGmailUser = _emailGmailUser,
-                    EmailGmailPass = _emailGmailPass,
+                    EmailGmailPass = SecurityHelper.EncryptString(_emailGmailPass),   // Шифруем
                     EmailGmailTo = _emailGmailTo,
 
                     EmailCustomHost = _emailCustomHost,
                     EmailCustomPort = _emailCustomPort,
                     EmailCustomUser = _emailCustomUser,
-                    EmailCustomPass = _emailCustomPass,
+                    EmailCustomPass = SecurityHelper.EncryptString(_emailCustomPass), // Шифруем
                     EmailCustomTo = _emailCustomTo,
 
                     VkToken = SecurityHelper.EncryptString(_vkToken),
@@ -396,6 +421,7 @@ namespace TERMINAL
                     SmsLogin = _smsLogin,
                     SmsPass = SecurityHelper.EncryptString(_smsPass),
                     SmsPhone = _smsPhone,
+
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
                     WindowWidth = _loadedSettings?.WindowWidth ?? double.NaN,
@@ -404,8 +430,8 @@ namespace TERMINAL
 
                 string json = JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true });
                 byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
-                byte[] encryptedBytes = SecurityHelper.EncryptBytes(jsonBytes); // Шифруем
-                File.WriteAllBytes(SettingsFile, encryptedBytes); // Пишем бинарник
+                byte[] encryptedBytes = SecurityHelper.EncryptBytes(jsonBytes);
+                File.WriteAllBytes(SettingsFile, encryptedBytes);
             }
             catch { }
         }
