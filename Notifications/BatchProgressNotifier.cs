@@ -58,23 +58,26 @@ namespace TERMINAL.Notifications
 
                 if (id.HasValue)
                 {
-                    // Пытаемся отредактировать. Если не вышло — просто выходим (не спамим).
+                    // Пытаемся отредактировать существующее сообщение
                     bool ok = await tgService.EditMessageAsync(id.Value, text);
                     if (ok)
                     {
                         lock (_lock) { _lastTableText = text; }
                         return;
                     }
-                    // Если не удалось отредактировать (например, таймаут), 
-                    // просто выходим. При следующем тике попробуем снова.
+
+                    // ★ ЕСЛИ НЕ УДАЛОСЬ ОТРЕДАКТИРОВАТЬ — НЕ ШЛЕМ НОВОЕ, ПРОСТО ВЫХОДИМ
                     return;
                 }
 
-                // Если ID нет — отправляем новое и сохраняем ID
+                // Если ID еще нет — отправляем первое сообщение и сохраняем ID
                 int? newId = await tgService.SendMessageAsync(text);
                 lock (_lock) { _tableMsgId = newId; _lastTableText = text; }
             }
-            catch { }
+            catch
+            {
+                // Ошибку сети игнорируем, попробуем в следующую секунду
+            }
         }
 
         public async Task ResetAsync()
