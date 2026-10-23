@@ -28,6 +28,16 @@ namespace TERMINAL.Windows
         {
             InitializeComponent();
 
+            // Предотвращаем закрытие выпадающего списка при клике на галочку
+            NotifyChannelsCombo.AddHandler(ComboBox.MouseDownEvent, new System.Windows.Input.MouseButtonEventHandler((s, e) =>
+            {
+                // Если клик был внутри открытого выпадающего списка, не закрываем его
+                if (NotifyChannelsCombo.IsDropDownOpen && e.OriginalSource is CheckBox)
+                {
+                    e.Handled = true;
+                }
+            }), true);
+
             // ─── Общие настройки ───
             GeneralQ2ViewCheck.IsChecked = q2viewEnabled;
             GeneralTimerBox.Text = timerSeconds.ToString(CultureInfo.InvariantCulture);
@@ -210,178 +220,186 @@ namespace TERMINAL.Windows
                 return;
             }
 
-            // ═══════════════════════════════════════════════════════════════
-            // 1. Читаем и валидируем значения из полей ST-351
-            // ═══════════════════════════════════════════════════════════════
-
-            string furnaceIp = FurnaceIpBox.Text.Trim();
-            if (string.IsNullOrWhiteSpace(furnaceIp))
-                furnaceIp = "192.168.0.167";
-
-            int furnacePort = 502;
-            if (!int.TryParse(FurnacePortBox.Text, out furnacePort) || furnacePort <= 0 || furnacePort > 65535)
-                furnacePort = 502;
-
-            ushort furnaceSetPointReg = 201;
-            if (!ushort.TryParse(FurnaceSetPointRegBox.Text, out furnaceSetPointReg))
-                furnaceSetPointReg = 201;
-
-            ushort furnaceCurrentTempReg = 205;
-            if (!ushort.TryParse(FurnaceCurrentTempRegBox.Text, out furnaceCurrentTempReg))
-                furnaceCurrentTempReg = 205;
-
-            ushort furnaceModeReg = 200;
-            if (!ushort.TryParse(FurnaceModeRegBox.Text, out furnaceModeReg))
-                furnaceModeReg = 200;
-
-            // ★ НОВОЕ: парсинг допуска
-            double furnaceStabilizationTolerance = 0.1;
-            if (!double.TryParse(FurnaceStabilizationToleranceBox.Text.Replace(',', '.'),
-                NumberStyles.Float, CultureInfo.InvariantCulture, out furnaceStabilizationTolerance)
-                || furnaceStabilizationTolerance <= 0)
+            try
             {
-                furnaceStabilizationTolerance = 0.1;
+                // ═══════════════════════════════════════════════════════════════
+                // 1. Читаем и валидируем значения из полей ST-351
+                // ═══════════════════════════════════════════════════════════════
+
+                string furnaceIp = FurnaceIpBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(furnaceIp))
+                    furnaceIp = "192.168.0.167";
+
+                int furnacePort = 502;
+                if (!int.TryParse(FurnacePortBox.Text, out furnacePort) || furnacePort <= 0 || furnacePort > 65535)
+                    furnacePort = 502;
+
+                ushort furnaceSetPointReg = 201;
+                if (!ushort.TryParse(FurnaceSetPointRegBox.Text, out furnaceSetPointReg))
+                    furnaceSetPointReg = 201;
+
+                ushort furnaceCurrentTempReg = 205;
+                if (!ushort.TryParse(FurnaceCurrentTempRegBox.Text, out furnaceCurrentTempReg))
+                    furnaceCurrentTempReg = 205;
+
+                ushort furnaceModeReg = 200;
+                if (!ushort.TryParse(FurnaceModeRegBox.Text, out furnaceModeReg))
+                    furnaceModeReg = 200;
+
+                // ★ НОВОЕ: парсинг допуска
+                double furnaceStabilizationTolerance = 0.1;
+                if (!double.TryParse(FurnaceStabilizationToleranceBox.Text.Replace(',', '.'),
+                    NumberStyles.Float, CultureInfo.InvariantCulture, out furnaceStabilizationTolerance)
+                    || furnaceStabilizationTolerance <= 0)
+                {
+                    furnaceStabilizationTolerance = 0.1;
+                }
+
+                bool autoStopFurnace = AutoStopFurnaceCheck.IsChecked == true;
+                bool showFurnaceCard = ShowFurnaceCardCheck.IsChecked == true;
+
+                // ═══════════════════════════════════════════════════════════════
+                // 2. Читаем и валидируем значения из полей АГК
+                // ═══════════════════════════════════════════════════════════════
+
+                string agkIp = AgkIpBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(agkIp))
+                    agkIp = "192.168.0.159";
+
+                int agkPort = 8888;
+                if (!int.TryParse(AgkPortBox.Text, out agkPort) || agkPort <= 0 || agkPort > 65535)
+                    agkPort = 8888;
+
+                int agkPressureTimeoutMinutes = 5;
+                if (!int.TryParse(AgkPressureTimeoutBox.Text, out agkPressureTimeoutMinutes) ||
+                    agkPressureTimeoutMinutes <= 0)
+                    agkPressureTimeoutMinutes = 5;
+
+                bool showAgkCard = ShowAgkCardCheck.IsChecked == true;
+
+                // ═══════════════════════════════════════════════════════════════
+                // 3. Читаем значения СКТБ ЭлПА
+                // ═══════════════════════════════════════════════════════════════
+
+                string sktbFilterScript = "Filter_for_KOSA_GUI";
+                switch (SktbFilterScriptCombo.SelectedIndex)
+                {
+                    case 0: sktbFilterScript = "Фильтр_данных_ПДС"; break;
+                    case 1: sktbFilterScript = "Фильтр_данных_БИДТ"; break;
+                    case 2: sktbFilterScript = "Фильтр_РЧ"; break;
+                    case 3:
+                    default: sktbFilterScript = "Filter_for_KOSA_GUI"; break;
+                }
+
+                bool showSktbCard = ShowSktbCardCheck.IsChecked == true;
+
+                string platinumSource = PlatinumSourceCombo.SelectedIndex switch
+                {
+                    1 => "mit_803",
+                    2 => "tercon",
+                    _ => "mtk_termex"
+                };
+
+                string platinumComPort = PlatinumComPortCombo.SelectedItem as string ?? "COM1";
+                bool readPlatinum = ReadPlatinumCheck.IsChecked == true;
+
+                string platinumMtkCommand = (PlatinumMtkCommandBox.Text ?? "").Trim();
+                if (string.IsNullOrEmpty(platinumMtkCommand))
+                    platinumMtkCommand = "pass2 meas2? 2";
+
+                // ═══════════════════════════════════════════════════════════════
+                // 4. Читаем и валидируем общие настройки
+                // ═══════════════════════════════════════════════════════════════
+
+                bool q2viewEnabled = GeneralQ2ViewCheck.IsChecked == true;
+                bool timerEnabled = q2viewEnabled;
+
+                int timerSeconds = 5;
+                if (!int.TryParse(GeneralTimerBox.Text, out timerSeconds) || timerSeconds <= 0)
+                    timerSeconds = 5;
+
+                bool autoExcelEnabled = GeneralAutoExcelCheck.IsChecked == true;
+                bool tickTimingEnabled = GeneralTickTimingCheck.IsChecked == true;
+                bool logSlowTicksEnabled = GeneralLogSlowTicksCheck.IsChecked == true;
+
+                // ═══════════════════════════════════════════════════════════════
+                // 5. Применяем настройки приборов к MainWindow
+                // ═══════════════════════════════════════════════════════════════
+
+                mw.ApplyDeviceSettings(
+                    furnaceIp, furnacePort,
+                    furnaceSetPointReg, furnaceCurrentTempReg, furnaceModeReg,
+                    autoStopFurnace,
+                    showFurnaceCard,
+                    agkIp, agkPort, showAgkCard,
+                    agkPressureTimeoutMinutes,
+                    sktbFilterScript, showSktbCard,
+                    platinumSource, platinumComPort, readPlatinum,
+                    platinumMtkCommand,
+                    furnaceStabilizationTolerance);
+
+                // ═══════════════════════════════════════════════════════════════
+                // 6. Применяем общие настройки к MainWindow
+                // ═══════════════════════════════════════════════════════════════
+
+                mw.ApplyGeneralSettings(
+                    q2viewEnabled,
+                    timerEnabled,
+                    timerSeconds,
+                    autoExcelEnabled,
+                    tickTimingEnabled,
+                    logSlowTicksEnabled);
+
+                // ═══════════════════════════════════════════════════════════════
+                // 6.5. Применяем настройки уведомлений
+                // ═══════════════════════════════════════════════════════════════
+                int emailPort = int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587;
+                long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
+
+                mw.ApplyNotificationSettings(
+                    enabled: NotificationsEnabledCheck.IsChecked == true,
+
+                    tgEnabled: ChkSendToTelegram.IsChecked == true,
+                    emailEnabled: ChkSendToEmail.IsChecked == true,
+                    vkEnabled: ChkSendToVk.IsChecked == true,
+                    maxEnabled: ChkSendToMax.IsChecked == true,
+
+                    methodIndex: NotificationMethodCombo.SelectedIndex,
+
+                    tgToken: TelegramTokenBox.Text.Trim(),
+                    tgChatId: TelegramChatIdBox.Text.Trim(),
+
+                    emailHost: EmailHostBox.Text.Trim(),
+                    emailPort: emailPort,
+                    emailUser: EmailUserBox.Text.Trim(),
+                    emailPass: EmailPassBox.Password,
+                    emailTo: EmailToBox.Text.Trim(),
+                    emailProviderIndex: EmailProviderCombo.SelectedIndex,
+
+                    vkToken: VkTokenBox.Text.Trim(),
+                    vkPeerId: vkId,
+
+                    maxToken: MaxTokenBox.Text.Trim(),
+                    maxChatId: MaxChatIdBox.Text.Trim(),
+
+                    smsLogin: SmsLoginBox.Text.Trim(),
+                    smsPass: SmsPassBox.Password,
+                    smsPhone: SmsPhoneBox.Text.Trim()
+                );
+
+                // ★ ЗАКРЫВАЕМ ОКНО ТОЛЬКО ЕСЛИ ВСЁ ПРОШЛО УСПЕШНО
+                DialogResult = true;
+                Close();
             }
-
-            bool autoStopFurnace = AutoStopFurnaceCheck.IsChecked == true;
-
-            bool showFurnaceCard = ShowFurnaceCardCheck.IsChecked == true;
-
-
-
-            // ═══════════════════════════════════════════════════════════════
-            // 2. Читаем и валидируем значения из полей АГК
-            // ═══════════════════════════════════════════════════════════════
-
-            string agkIp = AgkIpBox.Text.Trim();
-            if (string.IsNullOrWhiteSpace(agkIp))
-                agkIp = "192.168.0.159";
-
-            int agkPort = 8888;
-            if (!int.TryParse(AgkPortBox.Text, out agkPort) || agkPort <= 0 || agkPort > 65535)
-                agkPort = 8888;
-
-            int agkPressureTimeoutMinutes = 5;
-            if (!int.TryParse(AgkPressureTimeoutBox.Text, out agkPressureTimeoutMinutes) ||
-                agkPressureTimeoutMinutes <= 0)
-                agkPressureTimeoutMinutes = 5;
-
-            bool showAgkCard = ShowAgkCardCheck.IsChecked == true;
-
-            // ═══════════════════════════════════════════════════════════════
-            // 3. Читаем значения СКТБ ЭлПА
-            // ═══════════════════════════════════════════════════════════════
-
-            string sktbFilterScript = "Filter_for_KOSA_GUI";
-            switch (SktbFilterScriptCombo.SelectedIndex)
+            catch (Exception ex)
             {
-                case 0: sktbFilterScript = "Фильтр_данных_ПДС"; break;
-                case 1: sktbFilterScript = "Фильтр_данных_БИДТ"; break;
-                case 2: sktbFilterScript = "Фильтр_РЧ"; break;
-                case 3:
-                default: sktbFilterScript = "Filter_for_KOSA_GUI"; break;
+                // Показываем ошибку, если что-то пошло не так
+                MessageBox.Show(this,
+                    $"Ошибка при сохранении настроек:\n{ex.Message}\n\n{ex.StackTrace}",
+                    "Ошибка",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
-
-            bool showSktbCard = ShowSktbCardCheck.IsChecked == true;
-
-            string platinumSource = PlatinumSourceCombo.SelectedIndex switch
-            {
-                1 => "mit_803",
-                2 => "tercon",
-                _ => "mtk_termex"
-            };
-
-            string platinumComPort = PlatinumComPortCombo.SelectedItem as string ?? "COM1";
-
-            bool readPlatinum = ReadPlatinumCheck.IsChecked == true;
-
-            string platinumMtkCommand = (PlatinumMtkCommandBox.Text ?? "").Trim();
-            if (string.IsNullOrEmpty(platinumMtkCommand))
-                platinumMtkCommand = "pass2 meas2? 2";
-
-            // ═══════════════════════════════════════════════════════════════
-            // 4. Читаем и валидируем общие настройки
-            // ═══════════════════════════════════════════════════════════════
-
-            bool q2viewEnabled = GeneralQ2ViewCheck.IsChecked == true;
-            bool timerEnabled = q2viewEnabled;    // таймер включается вместе с q2view
-
-            int timerSeconds = 5;
-            if (!int.TryParse(GeneralTimerBox.Text, out timerSeconds) || timerSeconds <= 0)
-                timerSeconds = 5;
-
-            bool autoExcelEnabled = GeneralAutoExcelCheck.IsChecked == true;
-
-            bool tickTimingEnabled = GeneralTickTimingCheck.IsChecked == true;
-
-            bool logSlowTicksEnabled = GeneralLogSlowTicksCheck.IsChecked == true;
-
-            // ═══════════════════════════════════════════════════════════════
-            // 5. Применяем настройки приборов к MainWindow
-            // ═══════════════════════════════════════════════════════════════
-
-            mw.ApplyDeviceSettings(
-                furnaceIp, furnacePort,
-                furnaceSetPointReg, furnaceCurrentTempReg, furnaceModeReg,
-                autoStopFurnace,
-                showFurnaceCard,
-                agkIp, agkPort, showAgkCard,
-                agkPressureTimeoutMinutes,
-                sktbFilterScript, showSktbCard,
-                platinumSource, platinumComPort, readPlatinum,
-                platinumMtkCommand,
-                furnaceStabilizationTolerance);
-
-
-            // ═══════════════════════════════════════════════════════════════
-            // 6. Применяем общие настройки к MainWindow
-            // ═══════════════════════════════════════════════════════════════
-
-            mw.ApplyGeneralSettings(
-                q2viewEnabled,
-                timerEnabled,
-                timerSeconds,
-                autoExcelEnabled,
-                tickTimingEnabled,
-                logSlowTicksEnabled);
-
-            // ═══════════════════════════════════════════════════════════════
-            // 6.5. Применяем настройки уведомлений
-            // ═══════════════════════════════════════════════════════════════
-            int emailPort = int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587;
-            long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
-
-            mw.ApplyNotificationSettings(
-            enabled: NotificationsEnabledCheck.IsChecked == true,
-
-    // ★ ПЕРЕДАЕМ НОВЫЕ ОБЩИЕ ГАЛОЧКИ
-            tgEnabled: ChkSendToTelegram.IsChecked == true,
-            emailEnabled: ChkSendToEmail.IsChecked == true,
-            vkEnabled: ChkSendToVk.IsChecked == true,
-            maxEnabled: ChkSendToMax.IsChecked == true,
-
-            methodIndex: NotificationMethodCombo.SelectedIndex,
-
-            tgToken: TelegramTokenBox.Text.Trim(),
-            tgChatId: TelegramChatIdBox.Text.Trim(),
-
-            emailHost: EmailHostBox.Text.Trim(),
-            emailPort: emailPort,
-            emailUser: EmailUserBox.Text.Trim(),
-            emailPass: EmailPassBox.Password,
-            emailTo: EmailToBox.Text.Trim(),
-            emailProviderIndex: EmailProviderCombo.SelectedIndex,
-
-            vkToken: VkTokenBox.Text.Trim(),
-            vkPeerId: vkId,
-
-            maxToken: MaxTokenBox.Text.Trim(),
-            maxChatId: MaxChatIdBox.Text.Trim(),
-
-            smsLogin: SmsLoginBox.Text.Trim(),
-            smsPass: SmsPassBox.Password,
-            smsPhone: SmsPhoneBox.Text.Trim()
-);
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)

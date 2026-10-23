@@ -179,31 +179,51 @@
 
                         <Grid Margin="0,0,0,15">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <!-- 0: Галочка "Включить" -->
+                                <ColumnDefinition Width="Auto"/>
+                                <!-- 1: Выпадающий список -->
+                                <ColumnDefinition Width="*"/>
+                                <!-- 2: Пустое место -->
+                                <ColumnDefinition Width="Auto"/>
+                                <!-- 3: Кнопка "Инструкция" -->
                             </Grid.ColumnDefinitions>
 
-                            <!-- ★ НОВЫЙ БЛОК: Выбор каналов ★ -->
-                            <TextBlock Text="Куда отправлять уведомления:" FontWeight="Bold" Margin="0,0,0,5"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                <CheckBox x:Name="ChkSendToTelegram" Content="Telegram" Margin="0,0,15,0"/>
-                                <CheckBox x:Name="ChkSendToEmail" Content="Email" Margin="0,0,15,0"/>
-                                <CheckBox x:Name="ChkSendToVk" Content="ВКонтакте" Margin="0,0,15,0"/>
-                                <CheckBox x:Name="ChkSendToMax" Content="MAX" Margin="0,0,15,0"/>
-                            </StackPanel>
-
+                            <!-- 1. Галочка "Включить уведомления" -->
                             <CheckBox x:Name="NotificationsEnabledCheck"
-                                      Grid.Column="0"
-                                      Content="Включить уведомления"
-                                      FontWeight="Bold"
-                                      VerticalAlignment="Center"/>
+              Grid.Column="0"
+              Content="Включить уведомления"
+              FontWeight="Bold"
+              VerticalAlignment="Center"
+              Margin="0,0,15,0"/>
 
+                            <!-- 2. Выпадающий список с каналами (сузили до 120) -->
+                            <ComboBox x:Name="NotifyChannelsCombo" 
+              Grid.Column="1"
+              Width="120" Height="28" 
+              VerticalAlignment="Center">
+                                <ComboBoxItem>
+                                    <CheckBox x:Name="ChkSendToTelegram" Content="Telegram" Margin="2,2"/>
+                                </ComboBoxItem>
+                                <ComboBoxItem>
+                                    <CheckBox x:Name="ChkSendToEmail" Content="Email" Margin="2,2"/>
+                                </ComboBoxItem>
+                                <ComboBoxItem>
+                                    <CheckBox x:Name="ChkSendToVk" Content="ВКонтакте" Margin="2,2"/>
+                                </ComboBoxItem>
+                                <ComboBoxItem>
+                                    <CheckBox x:Name="ChkSendToMax" Content="MAX" Margin="2,2"/>
+                                </ComboBoxItem>
+                            </ComboBox>
+
+                            <!-- 3. Кнопка "Инструкция" (прижата вправо) -->
                             <Button x:Name="NotificationHelpButton"
-                                    Grid.Column="1"
-                                    Content="❓ Инструкция"
-                                    Padding="10,2"
-                                    VerticalAlignment="Center"
-                                    Click="NotificationHelpButton_Click"/>
+            Grid.Column="3"
+            Content="❓ Инструкция"
+            Padding="10,2"
+            Margin="10,0,0,0"
+            VerticalAlignment="Center"
+            Click="NotificationHelpButton_Click"/>
                         </Grid>
 
                         <TextBlock Text="Способ отправки:" FontWeight="Bold" Margin="0,0,0,5"/>
