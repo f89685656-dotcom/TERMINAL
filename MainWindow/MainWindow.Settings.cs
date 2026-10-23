@@ -84,6 +84,7 @@ namespace TERMINAL
                 _autoExcelEnabled = _loadedSettings.AutoExcelEnabled;
                 _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
                 _logSlowTicks = _loadedSettings.LogSlowTicks;
+                _isDarkTheme = _loadedSettings.IsDarkTheme;
 
                 // ─── Уведомления ───
                 _notificationsEnabled = _loadedSettings.NotificationsEnabled;
@@ -195,6 +196,7 @@ namespace TERMINAL
             _showFurnaceCard = _loadedSettings.ShowFurnaceCard;
             _autoStopFurnace = _loadedSettings.AutoStopFurnace;
             _furnaceStabilizationTolerance = _loadedSettings.FurnaceStabilizationTolerance;
+            _isDarkTheme = _loadedSettings.IsDarkTheme;
 
             _deviceIp = _loadedSettings.DeviceIp;
             _devicePort = _loadedSettings.DevicePort;
@@ -377,6 +379,8 @@ namespace TERMINAL
                     PlatinumComPort = _platinumComPort,
                     ReadPlatinum = _readPlatinum,
                     PlatinumMtkCommand = _platinumMtkCommand,
+
+                    IsDarkTheme = _isDarkTheme,
 
                     // ─── Уведомления ───
                     NotificationsEnabled = _notificationsEnabled,
@@ -573,6 +577,7 @@ namespace TERMINAL
             public List<BatchPreset> BatchPresets { get; set; } = new();
             public int LastUsedPresetIndex { get; set; } = -1;
             public bool AutoExcelEnabled { get; set; } = true;
+            public bool IsDarkTheme { get; set; } = false;
 
             public bool TickTimingEnabled { get; set; } = true;
 

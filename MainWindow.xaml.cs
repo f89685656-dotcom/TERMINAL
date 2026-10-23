@@ -418,6 +418,7 @@ namespace TERMINAL
         public MainWindow()
         {
             InitializeComponent();
+
             Current = this;
 
             if (StartButtonBatchBrush is SolidColorBrush sb2 && sb2.CanFreeze)
@@ -431,7 +432,7 @@ namespace TERMINAL
 
             LoadTargetPressures();
             LoadTimerSets();
-            LoadSettings();
+            LoadSettings(); // ★ Читаем JSON, заполняем _loadedSettings (и _isDarkTheme, если добавили в LoadSettings)
 
             // ─── Инициализация сервиса уведомлений из сохранённых настроек ───
             if (_notificationsEnabled
@@ -446,7 +447,6 @@ namespace TERMINAL
                 catch (Exception ex)
                 {
                     NotificationManager.SetService(new NullNotificationService());
-                    // AppendLog здесь ещё может не работать (окно не Loaded) — пишем в отладочный вывод
                     System.Diagnostics.Debug.WriteLine(
                         "Уведомления: не удалось инициализировать — " + ex.Message);
                 }
@@ -460,9 +460,15 @@ namespace TERMINAL
 
             _uiLoaded = true;
 
-            ApplyLoadedSettingsToUi();
+            ApplyLoadedSettingsToUi(); // ★ Здесь _isDarkTheme тоже обновляется (если добавили)
 
-
+            // ★★★ ВОТ СЮДА ПЕРЕНОСИМ ПРИМЕНЕНИЕ ТЕМЫ ★★★
+            if (_isDarkTheme)
+            {
+                ChangeTheme(true);
+                if (ThemeToggleButton != null) ThemeToggleButton.Content = "☀️";
+            }
+            // ★★★ КОНЕЦ БЛОКА ★★★
 
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
@@ -1590,6 +1596,8 @@ namespace TERMINAL
             _isDarkTheme = !_isDarkTheme;
             ChangeTheme(_isDarkTheme);
             ThemeToggleButton.Content = _isDarkTheme ? "☀️" : "🌙";
+
+            SaveSettings(); // ★ ДОБАВИТЬ ЭТУ СТРОКУ
         }
 
         public void ChangeTheme(bool isDark)
