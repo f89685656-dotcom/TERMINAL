@@ -55,8 +55,18 @@ namespace TERMINAL
             {
                 if (File.Exists(SettingsFile))
                 {
-                    string json = File.ReadAllText(SettingsFile);
-                    _loadedSettings = JsonSerializer.Deserialize<Settings>(json);
+                    try
+                    {
+                        byte[] encryptedBytes = File.ReadAllBytes(SettingsFile);
+                        byte[] jsonBytes = SecurityHelper.DecryptBytes(encryptedBytes); // Расшифровываем
+                        string json = System.Text.Encoding.UTF8.GetString(jsonBytes);
+                        _loadedSettings = JsonSerializer.Deserialize<Settings>(json);
+                    }
+                    catch
+                    {
+                        // Если файл поврежден или зашифрован на другом ПК — создаем новые настройки
+                        _loadedSettings = new Settings();
+                    }
                 }
 
                 if (_loadedSettings == null)
@@ -92,7 +102,7 @@ namespace TERMINAL
                 _emailHost = _loadedSettings.EmailHost ?? "";
                 _emailPort = _loadedSettings.EmailPort;
                 _emailUser = _loadedSettings.EmailUser ?? "";
-                _emailPass = _loadedSettings.EmailPass ?? "";
+                _emailPass = SecurityHelper.DecryptString(_loadedSettings.EmailPass);
                 _emailTo = _loadedSettings.EmailTo ?? "";
 
                 // ★ НОВЫЕ СТРОКИ:
@@ -113,12 +123,12 @@ namespace TERMINAL
                 _emailCustomUser = _loadedSettings.EmailCustomUser ?? "";
                 _emailCustomPass = _loadedSettings.EmailCustomPass ?? "";
                 _emailCustomTo = _loadedSettings.EmailCustomTo ?? "";
-                _vkToken = _loadedSettings.VkToken ?? "";
+                _vkToken = SecurityHelper.DecryptString(_loadedSettings.VkToken);
                 _vkPeerId = _loadedSettings.VkPeerId;
-                _maxToken = _loadedSettings.MaxToken ?? "";
+                _maxToken = SecurityHelper.DecryptString(_loadedSettings.MaxToken);
                 _maxChatId = _loadedSettings.MaxChatId ?? "";
                 _smsLogin = _loadedSettings.SmsLogin ?? "";
-                _smsPass = _loadedSettings.SmsPass ?? "";
+                _smsPass = SecurityHelper.DecryptString(_loadedSettings.SmsPass);
                 _smsPhone = _loadedSettings.SmsPhone ?? "";
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
@@ -205,13 +215,14 @@ namespace TERMINAL
             _emailHost = _loadedSettings.EmailHost ?? "";
             _emailPort = _loadedSettings.EmailPort;
             _emailUser = _loadedSettings.EmailUser ?? "";
-            _emailPass = _loadedSettings.EmailPass ?? "";
+            _emailPass = SecurityHelper.DecryptString(_loadedSettings.EmailPass);
             _emailTo = _loadedSettings.EmailTo ?? "";
             _emailProviderIndex = _loadedSettings.EmailProviderIndex;
-            _vkToken = _loadedSettings.VkToken ?? "";
+            _vkToken = SecurityHelper.DecryptString(_loadedSettings.VkToken);
             _vkPeerId = _loadedSettings.VkPeerId;
+            _maxToken = SecurityHelper.DecryptString(_loadedSettings.MaxToken);
             _smsLogin = _loadedSettings.SmsLogin ?? "";
-            _smsPass = _loadedSettings.SmsPass ?? "";
+            _smsPass = SecurityHelper.DecryptString(_loadedSettings.SmsPass);
             _smsPhone = _loadedSettings.SmsPhone ?? "";
 
             RefreshDeviceCardsVisibility();
@@ -356,7 +367,7 @@ namespace TERMINAL
                     EmailHost = _emailHost,
                     EmailPort = _emailPort,
                     EmailUser = _emailUser,
-                    EmailPass = _emailPass,
+                    EmailPass = SecurityHelper.EncryptString(_emailPass),
                     EmailTo = _emailTo,
 
                     // ★ НОВЫЕ СТРОКИ:
@@ -378,12 +389,12 @@ namespace TERMINAL
                     EmailCustomPass = _emailCustomPass,
                     EmailCustomTo = _emailCustomTo,
 
-                    VkToken = _vkToken,
+                    VkToken = SecurityHelper.EncryptString(_vkToken),
                     VkPeerId = _vkPeerId,
-                    MaxToken = _maxToken,
+                    MaxToken = SecurityHelper.EncryptString(_maxToken),
                     MaxChatId = _maxChatId,
                     SmsLogin = _smsLogin,
-                    SmsPass = _smsPass,
+                    SmsPass = SecurityHelper.EncryptString(_smsPass),
                     SmsPhone = _smsPhone,
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
@@ -391,10 +402,10 @@ namespace TERMINAL
                     WindowHeight = _loadedSettings?.WindowHeight ?? double.NaN
                 };
 
-                string json = JsonSerializer.Serialize(s,
-                    new JsonSerializerOptions { WriteIndented = true });
-
-                File.WriteAllText(SettingsFile, json);
+                string json = JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true });
+                byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
+                byte[] encryptedBytes = SecurityHelper.EncryptBytes(jsonBytes); // Шифруем
+                File.WriteAllBytes(SettingsFile, encryptedBytes); // Пишем бинарник
             }
             catch { }
         }
