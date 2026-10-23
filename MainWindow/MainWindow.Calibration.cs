@@ -193,7 +193,7 @@ namespace TERMINAL
             try
             {
                 // ★★★ ОТПРАВЛЯЕМ СТАРТ ГРАДУИРОВКИ (ПРОГРЕСС-БАР) ★★★
-                await _batchProgress.UpdateProgressAsync($"🔄 Градуировка: подготовка к шагу {startStep}/{steps.Length}...");
+                //await _batchProgress.UpdateProgressAsync($"🔄 Градуировка: подготовка к шагу {startStep}/{steps.Length}...");
 
                 await RunSequenceAsync(steps, longTimers, startStep - 1);
                 programCompleted = true;

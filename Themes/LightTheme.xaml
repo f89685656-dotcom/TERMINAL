@@ -21,4 +21,7 @@
         <Setter Property="Foreground" Value="Black"/>
         <Setter Property="BorderBrush" Value="#CCCCCC"/>
     </Style>
+    
+    <SolidColorBrush x:Key="ArrowBrush" Color="Black"/>
+    
 </ResourceDictionary>

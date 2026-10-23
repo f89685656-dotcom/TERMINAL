@@ -111,7 +111,7 @@
                         <TextBlock Text="{Binding ValueUnits}" Style="{StaticResource TableCellTextStyle}"/>
                     </Border>
                     <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
-                        <TextBlock Text="{Binding ArrowText}" Style="{StaticResource TableCellTextStyle}" Foreground="Black" HorizontalAlignment="Left"/>
+                        <TextBlock Text="{Binding ArrowText}" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}" HorizontalAlignment="Left"/>
                     </Border>
                     <Border Grid.Column="4" Style="{StaticResource TableCellBorderStyle}">
                         <TextBlock Text="{Binding KosaCounterText}" Style="{StaticResource TableCellTextStyle}" Foreground="#FF5050A0" HorizontalAlignment="Center"/>
@@ -147,7 +147,7 @@
                         <TextBlock Text="{Binding ValueUnits}" Style="{StaticResource TableCellTextStyle}"/>
                     </Border>
                     <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
-                        <TextBlock Text="{Binding ArrowText}" Style="{StaticResource TableCellTextStyle}" Foreground="Black" HorizontalAlignment="Left"/>
+                        <TextBlock Text="{Binding ArrowText}" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}" HorizontalAlignment="Left"/>
                     </Border>
                     <Border Grid.Column="4" Style="{StaticResource TableCellBorderStyle}">
                         <TextBlock Text="{Binding KosaCounterText}" Style="{StaticResource TableCellTextStyle}" Foreground="#FF5050A0" HorizontalAlignment="Center"/>
@@ -458,7 +458,7 @@
                                     <ColumnDefinition Width="62"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MaxArrow" Text="  " Style="{StaticResource TableCellTextStyle}" Foreground="Black" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="MaxArrow" Text="  " Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}" HorizontalAlignment="Left"/>
                                 </Border>
                                 <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
                                     <TextBlock Text="Максимум:" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}"/>
@@ -482,7 +482,7 @@
                                     <ColumnDefinition Width="62"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MinArrow" Text="  " Style="{StaticResource TableCellTextStyle}" Foreground="Black" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="MinArrow" Text="  " Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}" HorizontalAlignment="Left"/>
                                 </Border>
                                 <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
                                     <TextBlock Text="Минимум:" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}"/>

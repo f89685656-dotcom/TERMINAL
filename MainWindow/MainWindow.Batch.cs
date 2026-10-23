@@ -30,8 +30,11 @@ namespace TERMINAL
                 StartStepText = "1",
                 CaseText = "1",
                 IsEnabled = true,
-                IsCalibrationMode = true
+                IsCalibrationMode = true,
+                StatusText = "ожидает",
+                StatusColor = Brushes.LightGray
             };
+
             _batchJobs.Add(job);
             RenumberBatchJobs();
             SaveSettings();
@@ -124,7 +127,7 @@ namespace TERMINAL
             foreach (var job in _batchJobs)
             {
                 job.StatusText = "ожидает";
-                job.StatusColor = Brushes.Gray;
+                job.StatusColor = Brushes.LightGray;
             }
 
             // Валидация (без изменений)
@@ -224,7 +227,7 @@ namespace TERMINAL
                     }
 
                     var job = _batchJobs[i];
-                    if (!job.IsEnabled) { job.StatusText = "пропущено"; job.StatusColor = Brushes.Gray; continue; }
+                    if (!job.IsEnabled) { job.StatusText = "пропущено"; job.StatusColor = Brushes.LightGray; continue; }
 
                     completedCount++;
                     _currentBatchSetPointForSave = job.SetPoint;
@@ -236,14 +239,14 @@ namespace TERMINAL
 
                     // --- Запись уставки ---
                     job.StatusText = "запись уставки";
-                    job.StatusColor = Brushes.Orange;
+                    job.StatusColor = Brushes.Gold;
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запись уставки {stepSetPointText} °C...");
 
                     bool writeOk = await WriteFurnaceSetPointAsync(job.SetPoint, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
                     if (!writeOk)
                     {
                         job.StatusText = "ошибка записи";
-                        job.StatusColor = Brushes.Red;
+                        job.StatusColor = Brushes.OrangeRed;
                         SetStatusError($"[Пакет {completedCount}] не удалось записать уставку");
                         string errMsg = $"❌ Ошибка записи уставки на задании {completedCount}. Пакет прерван.";
                         await _batchProgress.SendStatusAsync(errMsg);
@@ -260,7 +263,7 @@ namespace TERMINAL
                     if (job.StabilizationMinutes > 0)
                     {
                         job.StatusText = $"стабилизация {job.StabilizationMinutes} мин";
-                        job.StatusColor = Brushes.Orange;
+                        job.StatusColor = Brushes.Gold;
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации {job.StabilizationMinutes} мин...", false);
 
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
@@ -270,7 +273,7 @@ namespace TERMINAL
                         if (!stable)
                         {
                             job.StatusText = "стабилизация прервана";
-                            job.StatusColor = Brushes.Red;
+                            job.StatusColor = Brushes.OrangeRed;
                             SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
                             string errMsg = $"❌ Стабилизация прервана на задании {completedCount}.";
                             await _batchProgress.SendStatusAsync(errMsg);
@@ -281,7 +284,7 @@ namespace TERMINAL
                     else
                     {
                         job.StatusText = "проверка допуска";
-                        job.StatusColor = Brushes.Orange;
+                        job.StatusColor = Brushes.Gold;
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] проверка допуска...");
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
                         _ = NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
@@ -290,7 +293,7 @@ namespace TERMINAL
                         if (!inTolerance)
                         {
                             job.StatusText = "проверка прервана";
-                            job.StatusColor = Brushes.Red;
+                            job.StatusColor = Brushes.OrangeRed;
                             SetStatusWarning($"[Пакет {completedCount}] проверка допуска прервана");
                             string errMsg = $"❌ Проверка допуска прервана на задании {completedCount}.";
                             await _batchProgress.SendStatusAsync(errMsg);
@@ -301,7 +304,7 @@ namespace TERMINAL
 
                     // --- Запуск режима ---
                     job.StatusText = job.IsCalibrationMode ? "Идёт съём данных" : "Идёт бароциклирование";
-                    job.StatusColor = Brushes.Blue;
+                    job.StatusColor = Brushes.DeepSkyBlue;
                     string modeName = job.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» на {stepSetPointText} °C");
 
@@ -344,7 +347,7 @@ namespace TERMINAL
                     if (!taskCompleted)
                     {
                         job.StatusText = "прервано (см. журнал)";
-                        job.StatusColor = Brushes.Red;
+                        job.StatusColor = Brushes.OrangeRed;
                         SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано");
                         string errMsg = $"❌ Задание {completedCount} прервано. Пакет остановлен.";
                         await _batchProgress.SendStatusAsync(errMsg);

@@ -50,20 +50,27 @@ namespace TERMINAL.Notifications
 
             try
             {
-                // Ищем Telegram-сервис среди всех активных
                 var tgService = NotificationManager.GetServices()
                     .OfType<TelegramNotificationService>()
                     .FirstOrDefault();
 
-                if (tgService == null) return; // Если Telegram не выбран — ничего не шлем
+                if (tgService == null) return;
 
                 if (id.HasValue)
                 {
+                    // Пытаемся отредактировать. Если не вышло — просто выходим (не спамим).
                     bool ok = await tgService.EditMessageAsync(id.Value, text);
-                    if (ok) { lock (_lock) { _lastTableText = text; } return; }
+                    if (ok)
+                    {
+                        lock (_lock) { _lastTableText = text; }
+                        return;
+                    }
+                    // Если не удалось отредактировать (например, таймаут), 
+                    // просто выходим. При следующем тике попробуем снова.
+                    return;
                 }
 
-                // Если ID нет или редактирование не удалось — шлем новое
+                // Если ID нет — отправляем новое и сохраняем ID
                 int? newId = await tgService.SendMessageAsync(text);
                 lock (_lock) { _tableMsgId = newId; _lastTableText = text; }
             }
