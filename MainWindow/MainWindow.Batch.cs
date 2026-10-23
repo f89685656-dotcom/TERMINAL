@@ -422,25 +422,32 @@ namespace TERMINAL
             }
         }
 
-        private async Task UpdatePressureTableInTelegram()
+        private void UpdatePressureTableInTelegram()
         {
             if (!_batchRunning || _selectedTargetPressure == null) return;
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
 
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"📊 *Процесс: {_selectedTargetPressure}*");
+
+            sb.AppendLine($"📊 {_selectedTargetPressure}");
             sb.AppendLine("```");
-            sb.AppendLine("Шаг  | Давл.  | Таймер | Статус");
-            sb.AppendLine("-----|--------|--------|------------------");
+
+            // Заголовки
+            sb.AppendLine("Шаг | Давл. | Таймер | Статус");
+            sb.AppendLine("-----|-------|--------|----------");
 
             for (int i = 0; i < steps.Length; i++)
             {
-                // Определяем иконку: ▶️ (текущий), ✅ (выполнен), ⏳ (ожидает)
+                // 1. Эмодзи
                 string mark = (i == _currentStepIndexForNotify) ? "▶️" : (i < _completedSteps ? "✅" : "⏳");
 
-                // Форматируем давление (добавляем пробелы для ровности)
-                string pressure = $"{steps[i],-5} МПа";
+                // 2. Номер шага (5 символов: " 1/16", "10/16")
+                string stepNum = $"{i + 1,2}/{steps.Length}".PadLeft(5);
 
+                // 3. Давление (выравнивание по правому краю до 5 символов)
+                string pressure = steps[i].ToString("0.##", CultureInfo.InvariantCulture).PadLeft(5);
+
+                // 4. Таймер и статус
                 string timerText = "-";
                 string status = "ожидание";
 
@@ -452,21 +459,22 @@ namespace TERMINAL
                 else if (i < _completedSteps)
                 {
                     timerText = "0";
-                    status = "завершён";
+                    var stepItem = i < _stepItems.Count ? _stepItems[i] : null;
+                    if (stepItem?.CompletedAt != null)
+                        status = $"завершён ({stepItem.CompletedAt:HH:mm})";
+                    else
+                        status = "завершён";
                 }
 
-                // Формируем строку
-                sb.AppendLine($"{mark} {i + 1,2}/{steps.Length} | {pressure} | {timerText,6} | {status}");
+                // 5. Таймер (выравнивание по правому краю до 6 символов)
+                string timerStr = timerText.PadLeft(6);
+
+                // Формируем строку. 4 пробела после эмодзи (чтобы компенсировать его ширину)
+                sb.AppendLine($"{mark}    {stepNum} | {pressure} | {timerStr} | {status}");
             }
             sb.AppendLine("```");
 
-            string newText = sb.ToString();
-
-            // Если текст не изменился, не дергаем Telegram API
-            if (newText == _lastSentTable) return;
-            _lastSentTable = newText;
-
-            await _batchProgress.UpdateTableAsync(newText);
+            _ = _batchProgress.UpdateTableAsync(sb.ToString());
         }
 
         private async Task RunPumpForBatchAsync(int cycles)

@@ -5,82 +5,80 @@ namespace TERMINAL.Notifications
 {
     public class BatchProgressNotifier
     {
+        private int? _statusMsgId;
         private int? _progressMsgId;
         private string? _lastProgressText;
+        private int? _tableMsgId;
+        private string? _lastTableText;
         private readonly object _lock = new object();
 
-        // Для отправки новых сообщений (старт/конец задания, ошибки)
         public async Task SendStatusAsync(string text)
         {
-            if (string.IsNullOrEmpty(text)) return;
-            try { await NotificationManager.SendMessageAsync(text); } catch { }
+            try { await NotificationManager.NotifyAsync(text); } catch { }
         }
 
-        // Для редактирования одного сообщения (Шаг 1/16, Цикл 1/10)
         public async Task UpdateProgressAsync(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
-
             int? id;
             string? last;
             lock (_lock) { id = _progressMsgId; last = _lastProgressText; }
-
-            if (text == last) return; // Не дёргаем API, если текст не изменился
+            if (text == last) return;
 
             try
             {
                 if (id.HasValue)
                 {
                     bool ok = await NotificationManager.EditMessageAsync(id.Value, text);
-                    if (ok)
-                    {
-                        lock (_lock) { _lastProgressText = text; }
-                        return;
-                    }
+                    if (ok) { lock (_lock) { _lastProgressText = text; } return; }
                 }
-                // Если ID нет или редактирование не удалось — шлём новое
                 int? newId = await NotificationManager.SendMessageAsync(text);
                 lock (_lock) { _progressMsgId = newId; _lastProgressText = text; }
             }
             catch { }
         }
 
-        // Сброс состояния после завершения пакета
-        public async Task ResetAsync()
-        {
-            await UpdateProgressAsync("✅ Все шаги завершены.");
-            lock (_lock)
-            {
-                _progressMsgId = null;
-                _lastProgressText = null;
-            }
-        }
-
-        private int? _tableMsgId; // ★ Храним ID сообщения с таблицей
-
+        // ★ ИСПРАВЛЕННЫЙ МЕТОД: Работает ТОЛЬКО с Telegram
         public async Task UpdateTableAsync(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
 
+            int? id;
+            string? last;
+            lock (_lock) { id = _tableMsgId; last = _lastTableText; }
+            if (text == last) return;
+
             try
             {
-                if (_tableMsgId.HasValue)
+                // Ищем Telegram-сервис среди всех активных
+                var tgService = NotificationManager.GetServices()
+                    .OfType<TelegramNotificationService>()
+                    .FirstOrDefault();
+
+                if (tgService == null) return; // Если Telegram не выбран — ничего не шлем
+
+                if (id.HasValue)
                 {
-                    bool ok = await NotificationManager.EditMessageAsync(_tableMsgId.Value, text);
-                    if (ok) return;
+                    bool ok = await tgService.EditMessageAsync(id.Value, text);
+                    if (ok) { lock (_lock) { _lastTableText = text; } return; }
                 }
 
-                // Если ID нет, шлем новое и ЗАПОМИНАЕМ его
-                int? newId = await NotificationManager.SendMessageAsync(text);
-                _tableMsgId = newId;
+                // Если ID нет или редактирование не удалось — шлем новое
+                int? newId = await tgService.SendMessageAsync(text);
+                lock (_lock) { _tableMsgId = newId; _lastTableText = text; }
             }
             catch { }
         }
 
-        // Сброс ID таблицы (вызывать при завершении пакета)
+        public async Task ResetAsync()
+        {
+            await UpdateProgressAsync("✅ Все шаги завершены.");
+            lock (_lock) { _progressMsgId = null; _lastProgressText = null; }
+        }
+
         public void ResetTable()
         {
-            _tableMsgId = null;
+            lock (_lock) { _tableMsgId = null; _lastTableText = null; }
         }
     }
 }

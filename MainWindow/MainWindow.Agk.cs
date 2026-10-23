@@ -274,7 +274,7 @@ namespace TERMINAL
             }
             if (_batchRunning)
             {
-                _ = UpdatePressureTableInTelegram();
+                UpdatePressureTableInTelegram();
             }
 
         }

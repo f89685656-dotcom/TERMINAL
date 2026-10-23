@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace TERMINAL.Notifications
 {
@@ -69,12 +70,15 @@ namespace TERMINAL.Notifications
         public async Task<bool> EditMessageAsync(int messageId, string newText)
         {
             string url = $"https://api.telegram.org/bot{_token}/editMessageText";
+
             var payload = new
             {
                 chat_id = _chatId,
-                message_id = messageId,
-                text = newText ?? ""
+                message_id = messageId, // ★ Важно: передаем ID сообщения, которое редактируем
+                text = newText ?? "",   // ★ Исправлено: используем newText
+                parse_mode = "HTML"     // ★ Включаем HTML-разметку
             };
+
             string json = JsonSerializer.Serialize(payload);
 
             using var content = new StringContent(json, Encoding.UTF8, "application/json");

@@ -171,6 +171,7 @@ namespace TERMINAL
                 if (i < startStep - 1)
                 {
                     _stepItems[i].StatusMark = "☑";
+                    _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                     _stepItems[i].TimerText = "0";
                     _stepItems[i].ArrowText = "  ";
                     _stepItems[i].KosaCounterText = _batchKosaEnabled ? "3/3" : "1/1";
@@ -288,7 +289,7 @@ namespace TERMINAL
                 if (!await WaitIfPausedAsync()) { SetStatus("Остановлено оператором"); return; }
 
                 _currentStepIndex = i;
-                _ = UpdatePressureTableInTelegram(); // Обновляем таблицу в Telegram
+                UpdatePressureTableInTelegram(); // Обновляем таблицу в Telegram
 
                 for (int k = 0; k < _stepItems.Count; k++)
                     _stepItems[k].ArrowText = "  ";
@@ -333,6 +334,7 @@ namespace TERMINAL
                     if (i < _stepItems.Count)
                     {
                         _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                         _stepItems[i].ArrowText = "  ";
                     }
                     _completedSteps = i + 1;
@@ -390,6 +392,7 @@ namespace TERMINAL
                     if (i < _stepItems.Count)
                     {
                         _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                         _stepItems[i].ArrowText = "  ";
                     }
                     _completedSteps = 1;
@@ -445,6 +448,7 @@ namespace TERMINAL
                     if (i < _stepItems.Count)
                     {
                         _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                         _stepItems[i].ArrowText = "  ";
                     }
                     _completedSteps = i + 1;
@@ -484,6 +488,7 @@ namespace TERMINAL
                 if (i < _stepItems.Count)
                 {
                     _stepItems[i].StatusMark = "☑";
+                    _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                     _stepItems[i].ArrowText = "  ";
                 }
                 _completedSteps = i + 1;

@@ -1,45 +1,66 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace TERMINAL.Notifications
 {
     public static class NotificationManager
     {
         private static readonly List<INotificationService> _services = new();
+        private static readonly object _lock = new object(); // ★ Блокировка
 
         public static void SetService(INotificationService service)
         {
-            _services.Clear();
-            if (service != null) _services.Add(service);
+            lock (_lock)
+            {
+                _services.Clear();
+                if (service != null) _services.Add(service);
+            }
         }
 
-        public static void ClearServices() => _services.Clear();
+        public static void ClearServices()
+        {
+            lock (_lock) { _services.Clear(); }
+        }
 
         public static void AddService(INotificationService service)
         {
-            if (service != null) _services.Add(service);
+            lock (_lock)
+            {
+                if (service != null) _services.Add(service);
+            }
         }
 
-        // ★ НОВЫЙ МЕТОД: получить список сервисов (нужен для фильтрации)
-        public static List<INotificationService> GetServices() => _services;
+        public static List<INotificationService> GetServices()
+        {
+            lock (_lock)
+            {
+                // Возвращаем копию, чтобы внешний код не мог изменить оригинал
+                return new List<INotificationService>(_services);
+            }
+        }
 
-        // Отправляет во ВСЕ каналы (для критических ошибок)
         public static async Task NotifyAsync(string text)
         {
-            foreach (var svc in _services)
+            // Делаем копию списка под блокировкой, а перебираем уже копию
+            List<INotificationService> servicesCopy;
+            lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
+
+            foreach (var svc in servicesCopy)
             {
                 try { await svc.SendAsync(text); }
                 catch { }
             }
         }
 
-        // ★ НОВЫЙ МЕТОД: Отправляет во все каналы, КРОМЕ Telegram
-        // (чтобы события не дублировались в чате с живой таблицей)
         public static async Task NotifyOthersAsync(string text)
         {
-            foreach (var svc in _services)
+            List<INotificationService> servicesCopy;
+            lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
+
+            foreach (var svc in servicesCopy)
             {
-                if (svc is not TelegramNotificationService) // Исключаем Telegram
+                if (svc is not TelegramNotificationService)
                 {
                     try { await svc.SendAsync(text); }
                     catch { }
@@ -49,7 +70,10 @@ namespace TERMINAL.Notifications
 
         public static async Task<int?> SendMessageAsync(string text)
         {
-            foreach (var svc in _services)
+            List<INotificationService> servicesCopy;
+            lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
+
+            foreach (var svc in servicesCopy)
             {
                 try
                 {
@@ -63,7 +87,10 @@ namespace TERMINAL.Notifications
 
         public static async Task<bool> EditMessageAsync(int messageId, string text)
         {
-            foreach (var svc in _services)
+            List<INotificationService> servicesCopy;
+            lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
+
+            foreach (var svc in servicesCopy)
             {
                 try { if (await svc.EditMessageAsync(messageId, text)) return true; }
                 catch { }
