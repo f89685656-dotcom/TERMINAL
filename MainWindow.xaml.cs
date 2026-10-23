@@ -1494,7 +1494,53 @@ namespace TERMINAL
             _notifyVkEnabled = vkEnabled;
             _notifyMaxEnabled = maxEnabled;
 
-            // ... (сохраняем токены и пароли, как раньше)
+            // ★ СОХРАНЯЕМ ОБЩИЕ ДАННЫЕ
+            _telegramToken = tgToken ?? "";
+            _telegramChatId = tgChatId ?? "";
+
+            _emailHost = emailHost ?? "";
+            _emailPort = emailPort;
+            _emailUser = emailUser ?? "";
+            _emailPass = emailPass ?? "";
+            _emailTo = emailTo ?? "";
+            _emailProviderIndex = emailProviderIndex;
+
+            // ★ СОХРАНЯЕМ ПО ПРОВАЙДЕРАМ (тот самый switch)
+            switch (emailProviderIndex)
+            {
+                case 0: // Яндекс
+                    _emailYandexUser = emailUser ?? "";
+                    _emailYandexPass = emailPass ?? "";
+                    _emailYandexTo = emailTo ?? "";
+                    break;
+                case 1: // Mail.ru
+                    _emailMailUser = emailUser ?? "";
+                    _emailMailPass = emailPass ?? "";
+                    _emailMailTo = emailTo ?? "";
+                    break;
+                case 2: // Gmail
+                    _emailGmailUser = emailUser ?? "";
+                    _emailGmailPass = emailPass ?? "";
+                    _emailGmailTo = emailTo ?? "";
+                    break;
+                case 3: // Другой
+                    _emailCustomHost = emailHost ?? "";
+                    _emailCustomPort = emailPort;
+                    _emailCustomUser = emailUser ?? "";
+                    _emailCustomPass = emailPass ?? "";
+                    _emailCustomTo = emailTo ?? "";
+                    break;
+            }
+
+            _vkToken = vkToken ?? "";
+            _vkPeerId = vkPeerId;
+
+            _maxToken = maxToken ?? "";
+            _maxChatId = maxChatId ?? "";
+
+            _smsLogin = smsLogin ?? "";
+            _smsPass = smsPass ?? "";
+            _smsPhone = smsPhone ?? "";
 
             NotificationManager.ClearServices();
 
@@ -1614,6 +1660,20 @@ namespace TERMINAL
             {
                 // Логируем ошибку (например, если нет интернета), но не мешаем работе программы
                 System.Diagnostics.Debug.WriteLine($"Ошибка проверки обновлений: {ex.Message}");
+            }
+        }
+
+        // Отправляет событие во все каналы, КРОМЕ Telegram (чтобы не дублировать живую таблицу)
+        private void NotifyEvents(string text)
+        {
+            // Временно отключаем Telegram, чтобы событие не ушло туда
+            var services = NotificationManager.GetServices(); // Нам понадобится метод GetServices
+            foreach (var svc in services)
+            {
+                if (svc is not TelegramNotificationService)
+                {
+                    _ = svc.SendAsync(text);
+                }
             }
         }
 

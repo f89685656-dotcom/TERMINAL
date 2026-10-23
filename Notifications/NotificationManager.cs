@@ -7,7 +7,6 @@ namespace TERMINAL.Notifications
     {
         private static readonly List<INotificationService> _services = new();
 
-        // ★ Оставляем для совместимости со старым кодом
         public static void SetService(INotificationService service)
         {
             _services.Clear();
@@ -21,12 +20,30 @@ namespace TERMINAL.Notifications
             if (service != null) _services.Add(service);
         }
 
+        // ★ НОВЫЙ МЕТОД: получить список сервисов (нужен для фильтрации)
+        public static List<INotificationService> GetServices() => _services;
+
+        // Отправляет во ВСЕ каналы (для критических ошибок)
         public static async Task NotifyAsync(string text)
         {
             foreach (var svc in _services)
             {
                 try { await svc.SendAsync(text); }
-                catch { /* Не блокируем остальные каналы */ }
+                catch { }
+            }
+        }
+
+        // ★ НОВЫЙ МЕТОД: Отправляет во все каналы, КРОМЕ Telegram
+        // (чтобы события не дублировались в чате с живой таблицей)
+        public static async Task NotifyOthersAsync(string text)
+        {
+            foreach (var svc in _services)
+            {
+                if (svc is not TelegramNotificationService) // Исключаем Telegram
+                {
+                    try { await svc.SendAsync(text); }
+                    catch { }
+                }
             }
         }
 

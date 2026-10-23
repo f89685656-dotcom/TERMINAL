@@ -116,18 +116,13 @@ namespace TERMINAL.Windows
             PlatinumSourceCombo_SelectionChanged(null, null);
 
             // ═══════════════════════════════════════════════════════════════════
-            // Уведомления
+            // УВЕДОМЛЕНИЯ
             // ═══════════════════════════════════════════════════════════════════
             NotificationsEnabledCheck.IsChecked = mw.NotificationsEnabled;
-
-            // Выбор метода (0-Telegram, 1-Email, 2-VK, 3-SMS)
             NotificationMethodCombo.SelectedIndex = mw.NotificationMethodIndex;
-
-            // Принудительно обновляем видимость панелей, так как событие SelectionChanged 
-            // могло не сработать при программной установке SelectedIndex
             NotificationMethodCombo_SelectionChanged(null, null);
 
-            // ★ ЗАГРУЖАЕМ НОВЫЕ ОБЩИЕ ГАЛОЧКИ
+            // ★ ЗАГРУЖАЕМ ОБЩИЕ ГАЛОЧКИ
             ChkSendToTelegram.IsChecked = mw.NotifyTgEnabled;
             ChkSendToYandex.IsChecked = mw.NotifyYandexEnabled;
             ChkSendToMail.IsChecked = mw.NotifyMailEnabled;
@@ -136,17 +131,16 @@ namespace TERMINAL.Windows
             ChkSendToVk.IsChecked = mw.NotifyVkEnabled;
             ChkSendToMax.IsChecked = mw.NotifyMaxEnabled;
 
-            // Заполнение полей для всех каналов
+            // Telegram
             TelegramTokenBox.Text = mw.TelegramToken;
             TelegramChatIdBox.Text = mw.TelegramChatId;
 
             // ─── Уведомления: Email ───
-            // 1. Включаем защиту от срабатывания события SelectionChanged
             _isLoadingData = true;
             EmailProviderCombo.SelectedIndex = mw.EmailProviderIndex;
             _isLoadingData = false;
 
-            // 2. Вручную выставляем сервер и порт в зависимости от провайдера
+            // Сервер и порт строго по провайдеру
             switch (mw.EmailProviderIndex)
             {
                 case 0: // Яндекс
@@ -155,7 +149,7 @@ namespace TERMINAL.Windows
                     break;
                 case 1: // Mail.ru
                     EmailHostBox.Text = "smtp.mail.ru";
-                    EmailPortBox.Text = "465";
+                    EmailPortBox.Text = "587";
                     break;
                 case 2: // Gmail
                     EmailHostBox.Text = "smtp.gmail.com";
@@ -167,12 +161,40 @@ namespace TERMINAL.Windows
                     break;
             }
 
-            // 3. Загружаем сохраненные логин/пароль/получателя для этого провайдера
-            LoadEmailFields(mw.EmailProviderIndex);
+            // Логин/пароль/получатель для выбранного провайдера
+            switch (mw.EmailProviderIndex)
+            {
+                case 0:
+                    EmailUserBox.Text = mw.EmailYandexUser;
+                    EmailPassBox.Password = mw.EmailYandexPass;
+                    EmailToBox.Text = mw.EmailYandexTo;
+                    break;
+                case 1:
+                    EmailUserBox.Text = mw.EmailMailUser;
+                    EmailPassBox.Password = mw.EmailMailPass;
+                    EmailToBox.Text = mw.EmailMailTo;
+                    break;
+                case 2:
+                    EmailUserBox.Text = mw.EmailGmailUser;
+                    EmailPassBox.Password = mw.EmailGmailPass;
+                    EmailToBox.Text = mw.EmailGmailTo;
+                    break;
+                case 3:
+                    EmailUserBox.Text = mw.EmailCustomUser;
+                    EmailPassBox.Password = mw.EmailCustomPass;
+                    EmailToBox.Text = mw.EmailCustomTo;
+                    break;
+            }
 
+            // VK
             VkTokenBox.Text = mw.VkToken;
             VkPeerIdBox.Text = mw.VkPeerId.ToString();
 
+            // MAX
+            MaxTokenBox.Text = mw.MaxToken;
+            MaxChatIdBox.Text = mw.MaxChatId;
+
+            // SMS
             SmsLoginBox.Text = mw.SmsLogin;
             SmsPassBox.Password = mw.SmsPass;
             SmsPhoneBox.Text = mw.SmsPhone;
@@ -422,84 +444,119 @@ namespace TERMINAL.Windows
                 return;
             }
 
-            int method = NotificationMethodCombo.SelectedIndex;
+            // ★ ДОБАВЛЯЕМ ЭТУ СТРОКУ
+            var mw = MainWindow.Current;
+            if (mw == null) return;
+
+            string testMessage = "🔔 Тестовое уведомление из T.E.R.M.I.N.A.L. Всё работает!";
+            bool sentAtLeastOne = false;
+            var errors = new List<string>();
 
             try
             {
-                switch (method)
+                // 1. Telegram
+                if (ChkSendToTelegram.IsChecked == true)
                 {
-                    case 0: // Telegram
-                        string tgToken = TelegramTokenBox.Text.Trim();
-                        string tgChatId = TelegramChatIdBox.Text.Trim();
-                        if (string.IsNullOrEmpty(tgToken) || string.IsNullOrEmpty(tgChatId))
-                        {
-                            MessageBox.Show(this, "Заполните Token и Chat ID для Telegram.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
-                        if (!long.TryParse(tgChatId, out long chatIdLong))
-                        {
-                            MessageBox.Show(this, "Chat ID должен быть числом.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
-                        var tgService = new TelegramNotificationService(tgToken, chatIdLong);
-                        await tgService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (Telegram)");
-                        break;
+                    string tgToken = TelegramTokenBox.Text.Trim();
+                    string tgChatId = TelegramChatIdBox.Text.Trim();
 
-                    case 1: // Email
-                        string emailHost = EmailHostBox.Text.Trim();
-                        string emailUser = EmailUserBox.Text.Trim();
-                        string emailPass = EmailPassBox.Password;
-                        string emailTo = EmailToBox.Text.Trim();
-                        int emailPort = int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587;
-
-                        if (string.IsNullOrEmpty(emailHost) || string.IsNullOrEmpty(emailUser) || string.IsNullOrEmpty(emailPass))
-                        {
-                            MessageBox.Show(this, "Заполните SMTP сервер, логин и пароль.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
-                        var emailService = new EmailNotificationService(emailHost, emailPort, emailUser, emailPass, emailTo);
-                        await emailService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (Email)");
-                        break;
-
-                    case 2: // VK
-                        string vkToken = VkTokenBox.Text.Trim();
-                        string vkPeerIdStr = VkPeerIdBox.Text.Trim();
-                        if (string.IsNullOrEmpty(vkToken) || !long.TryParse(vkPeerIdStr, out long vkPeerId))
-                        {
-                            MessageBox.Show(this, "Заполните Access Token и числовой ID для VK.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
-                        var vkService = new VkNotificationService(vkToken, vkPeerId);
-                        await vkService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (VK)");
-                        break;
-
-                    case 3: // MAX
-                        string maxToken = MaxTokenBox.Text.Trim();
-                        string maxChatId = MaxChatIdBox.Text.Trim();
-                        if (string.IsNullOrEmpty(maxToken) || !long.TryParse(maxChatId, out long maxId))
-                        {
-                            MessageBox.Show(this, "Заполните Token и числовой Chat ID для MAX.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
-                        var maxService = new MaxNotificationService(maxToken, maxId);
-                        await maxService.SendAsync("🔔 Тестовое уведомление из T.E.R.M.I.N.A.L (MAX)");
-                        break;
-
-                    case 4: // SMS (было 3)
-                        string smsLogin = SmsLoginBox.Text.Trim();
-                        string smsPass = SmsPassBox.Password;
-                        string smsPhone = SmsPhoneBox.Text.Trim();
-                        if (string.IsNullOrEmpty(smsLogin) || string.IsNullOrEmpty(smsPass) || string.IsNullOrEmpty(smsPhone))
-                        {
-                            MessageBox.Show(this, "Заполните логин, пароль и номер телефона для SMS.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
-                        var smsService = new SmsNotificationService(smsLogin, smsPass, smsPhone);
-                        await smsService.SendAsync("Тест SMS из TERMINAL");
-                        break;
+                    if (!string.IsNullOrEmpty(tgToken) && long.TryParse(tgChatId, out long chatIdLong))
+                    {
+                        await new TelegramNotificationService(tgToken, chatIdLong).SendAsync(testMessage + " (Telegram)");
+                        sentAtLeastOne = true;
+                    }
+                    else
+                    {
+                        errors.Add("Telegram: неверный Token или Chat ID.");
+                    }
                 }
 
-                MessageBox.Show(this, "Сообщение отправлено! Проверьте выбранный канал.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                // 2. Email (проверяем каждую галочку отдельно)
+                int emailPort = int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587;
+
+                if (ChkSendToYandex.IsChecked == true)
+                {
+                    if (!string.IsNullOrEmpty(mw.EmailYandexUser))
+                        await new EmailNotificationService("smtp.yandex.ru", 587, mw.EmailYandexUser, mw.EmailYandexPass, mw.EmailYandexTo).SendAsync(testMessage + " (Яндекс)");
+                    else
+                        errors.Add("Яндекс: данные не заполнены.");
+                    sentAtLeastOne = true;
+                }
+
+                if (ChkSendToMail.IsChecked == true)
+                {
+                    if (!string.IsNullOrEmpty(mw.EmailMailUser))
+                        await new EmailNotificationService("smtp.mail.ru", 587, mw.EmailMailUser, mw.EmailMailPass, mw.EmailMailTo).SendAsync(testMessage + " (Mail.ru)");
+                    else
+                        errors.Add("Mail.ru: данные не заполнены.");
+                    sentAtLeastOne = true;
+                }
+
+                if (ChkSendToGmail.IsChecked == true)
+                {
+                    if (!string.IsNullOrEmpty(mw.EmailGmailUser))
+                        await new EmailNotificationService("smtp.gmail.com", 587, mw.EmailGmailUser, mw.EmailGmailPass, mw.EmailGmailTo).SendAsync(testMessage + " (Gmail)");
+                    else
+                        errors.Add("Gmail: данные не заполнены.");
+                    sentAtLeastOne = true;
+                }
+
+                if (ChkSendToCustomEmail.IsChecked == true)
+                {
+                    if (!string.IsNullOrEmpty(mw.EmailCustomHost))
+                        await new EmailNotificationService(mw.EmailCustomHost, mw.EmailCustomPort, mw.EmailCustomUser, mw.EmailCustomPass, mw.EmailCustomTo).SendAsync(testMessage + " (Другой Email)");
+                    else
+                        errors.Add("Другой Email: данные не заполнены.");
+                    sentAtLeastOne = true;
+                }
+
+                // 3. VK
+                if (ChkSendToVk.IsChecked == true)
+                {
+                    string vkToken = VkTokenBox.Text.Trim();
+                    if (!string.IsNullOrEmpty(vkToken) && long.TryParse(VkPeerIdBox.Text.Trim(), out long vkPeerId))
+                    {
+                        await new VkNotificationService(vkToken, vkPeerId).SendAsync(testMessage + " (VK)");
+                        sentAtLeastOne = true;
+                    }
+                    else
+                    {
+                        errors.Add("VK: неверный Token или ID.");
+                    }
+                }
+
+                // 4. MAX
+                if (ChkSendToMax.IsChecked == true)
+                {
+                    string maxToken = MaxTokenBox.Text.Trim();
+                    if (!string.IsNullOrEmpty(maxToken) && long.TryParse(MaxChatIdBox.Text.Trim(), out long maxChatId))
+                    {
+                        await new MaxNotificationService(maxToken, maxChatId).SendAsync(testMessage + " (MAX)");
+                        sentAtLeastOne = true;
+                    }
+                    else
+                    {
+                        errors.Add("MAX: неверный Token или Chat ID.");
+                    }
+                }
+
+                // Итог
+                if (sentAtLeastOne && errors.Count == 0)
+                {
+                    MessageBox.Show(this, "Тестовые сообщения успешно отправлены во все выбранные каналы!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else if (sentAtLeastOne && errors.Count > 0)
+                {
+                    MessageBox.Show(this, "Частично отправлено. Ошибки:\n" + string.Join("\n", errors), "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                else if (!sentAtLeastOne && errors.Count > 0)
+                {
+                    MessageBox.Show(this, "Не удалось отправить. Ошибки:\n" + string.Join("\n", errors), "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                else
+                {
+                    MessageBox.Show(this, "Не выбран ни один канал для отправки (поставьте галочки в списке).", "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
             }
             catch (Exception ex)
             {
@@ -640,45 +697,41 @@ namespace TERMINAL.Windows
         private void EmailProviderCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (EmailHostBox == null || EmailPortBox == null) return;
-
-            // ★ Защита от срабатывания во время загрузки данных
             if (_isLoadingData) return;
 
-            // ★ Берем данные того провайдера, с которого мы УХОДИМ.
-            // Если список только инициализируется, e.RemovedItems может быть пустым.
-            if (e.RemovedItems.Count > 0)
-            {
-                var oldItem = e.RemovedItems[0] as ComboBoxItem;
-                if (oldItem != null)
-                {
-                    int oldIndex = EmailProviderCombo.Items.IndexOf(oldItem);
-                    SaveCurrentEmailFields(oldIndex);
-                }
-            }
-
-            // 2. Меняем сервер и порт для НОВОГО провайдера
             int newIndex = EmailProviderCombo.SelectedIndex;
+
             switch (newIndex)
             {
                 case 0: // Яндекс
                     EmailHostBox.Text = "smtp.yandex.ru";
                     EmailPortBox.Text = "587";
+                    EmailUserBox.Text = MainWindow.Current?.EmailYandexUser;
+                    EmailPassBox.Password = MainWindow.Current?.EmailYandexPass;
+                    EmailToBox.Text = MainWindow.Current?.EmailYandexTo;
                     break;
                 case 1: // Mail.ru
                     EmailHostBox.Text = "smtp.mail.ru";
                     EmailPortBox.Text = "587";
+                    EmailUserBox.Text = MainWindow.Current?.EmailMailUser;
+                    EmailPassBox.Password = MainWindow.Current?.EmailMailPass;
+                    EmailToBox.Text = MainWindow.Current?.EmailMailTo;
                     break;
                 case 2: // Gmail
                     EmailHostBox.Text = "smtp.gmail.com";
                     EmailPortBox.Text = "587";
+                    EmailUserBox.Text = MainWindow.Current?.EmailGmailUser;
+                    EmailPassBox.Password = MainWindow.Current?.EmailGmailPass;
+                    EmailToBox.Text = MainWindow.Current?.EmailGmailTo;
                     break;
                 case 3: // Другой
-                        // Для "Другого" поля сервера и порта не трогаем, чтобы можно было ввести свои
+                    EmailHostBox.Text = MainWindow.Current?.EmailCustomHost;
+                    EmailPortBox.Text = MainWindow.Current?.EmailCustomPort.ToString();
+                    EmailUserBox.Text = MainWindow.Current?.EmailCustomUser;
+                    EmailPassBox.Password = MainWindow.Current?.EmailCustomPass;
+                    EmailToBox.Text = MainWindow.Current?.EmailCustomTo;
                     break;
             }
-
-            // 3. Загружаем данные для НОВОГО провайдера
-            LoadEmailFields(newIndex);
         }
 
         private void SaveCurrentEmailFields(int providerIndex)
