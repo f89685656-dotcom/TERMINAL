@@ -272,7 +272,7 @@ namespace TERMINAL
                     }
                 }
             }
-            if (_batchRunning)
+            if (_batchRunning && _currentStepIndexForNotify >= 0)
             {
                 UpdatePressureTableInTelegram();
             }
