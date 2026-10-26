@@ -136,8 +136,10 @@ namespace TERMINAL.Windows
             TelegramChatIdBox.Text = mw.TelegramChatId;
 
             // ─── Уведомления: Email ───
+            // В LoadCurrent, там где читается EmailProviderCombo.SelectedIndex:
             _isLoadingData = true;
             EmailProviderCombo.SelectedIndex = mw.EmailProviderIndex;
+            _lastSelectedProvider = mw.EmailProviderIndex; // ★ добавить
             _isLoadingData = false;
 
             // Сервер и порт строго по провайдеру
@@ -248,7 +250,7 @@ namespace TERMINAL.Windows
             try
             {
                 // ═══════════════════════════════════════════════════════════════
-                // 1. Читаем и валидируем значения из полей ST-351
+                // 1. ST-351
                 // ═══════════════════════════════════════════════════════════════
 
                 string furnaceIp = FurnaceIpBox.Text.Trim();
@@ -271,7 +273,6 @@ namespace TERMINAL.Windows
                 if (!ushort.TryParse(FurnaceModeRegBox.Text, out furnaceModeReg))
                     furnaceModeReg = 200;
 
-                // ★ НОВОЕ: парсинг допуска
                 double furnaceStabilizationTolerance = 0.1;
                 if (!double.TryParse(FurnaceStabilizationToleranceBox.Text.Replace(',', '.'),
                     NumberStyles.Float, CultureInfo.InvariantCulture, out furnaceStabilizationTolerance)
@@ -284,7 +285,7 @@ namespace TERMINAL.Windows
                 bool showFurnaceCard = ShowFurnaceCardCheck.IsChecked == true;
 
                 // ═══════════════════════════════════════════════════════════════
-                // 2. Читаем и валидируем значения из полей АГК
+                // 2. АГК
                 // ═══════════════════════════════════════════════════════════════
 
                 string agkIp = AgkIpBox.Text.Trim();
@@ -303,7 +304,7 @@ namespace TERMINAL.Windows
                 bool showAgkCard = ShowAgkCardCheck.IsChecked == true;
 
                 // ═══════════════════════════════════════════════════════════════
-                // 3. Читаем значения СКТБ ЭлПА
+                // 3. СКТБ ЭлПА
                 // ═══════════════════════════════════════════════════════════════
 
                 string sktbFilterScript = "Filter_for_KOSA_GUI";
@@ -333,7 +334,7 @@ namespace TERMINAL.Windows
                     platinumMtkCommand = "pass2 meas2? 2";
 
                 // ═══════════════════════════════════════════════════════════════
-                // 4. Читаем и валидируем общие настройки
+                // 4. Общие настройки
                 // ═══════════════════════════════════════════════════════════════
 
                 bool q2viewEnabled = GeneralQ2ViewCheck.IsChecked == true;
@@ -348,7 +349,7 @@ namespace TERMINAL.Windows
                 bool logSlowTicksEnabled = GeneralLogSlowTicksCheck.IsChecked == true;
 
                 // ═══════════════════════════════════════════════════════════════
-                // 5. Применяем настройки приборов к MainWindow
+                // 5. Применяем настройки приборов
                 // ═══════════════════════════════════════════════════════════════
 
                 mw.ApplyDeviceSettings(
@@ -364,7 +365,7 @@ namespace TERMINAL.Windows
                     furnaceStabilizationTolerance);
 
                 // ═══════════════════════════════════════════════════════════════
-                // 6. Применяем общие настройки к MainWindow
+                // 6. Общие настройки
                 // ═══════════════════════════════════════════════════════════════
 
                 mw.ApplyGeneralSettings(
@@ -376,53 +377,46 @@ namespace TERMINAL.Windows
                     logSlowTicksEnabled);
 
                 // ═══════════════════════════════════════════════════════════════
-                // 6.5. Применяем настройки уведомлений
+                // 6.5. Уведомления
                 // ═══════════════════════════════════════════════════════════════
-                int emailPort = int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587;
+
+                // ★ КЛЮЧЕВОЕ: сохраняем данные ТЕКУЩЕГО провайдера в MainWindow
+                SaveCurrentEmailFields(EmailProviderCombo.SelectedIndex);
+
                 long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
 
                 mw.ApplyNotificationSettings(
-    enabled: NotificationsEnabledCheck.IsChecked == true,
+                    enabled: NotificationsEnabledCheck.IsChecked == true,
 
-    // ★ ПЕРЕДАЕМ НОВЫЕ ОБЩИЕ ГАЛОЧКИ
-    tgEnabled: ChkSendToTelegram.IsChecked == true,
-    yandexEnabled: ChkSendToYandex.IsChecked == true,
-    mailEnabled: ChkSendToMail.IsChecked == true,
-    gmailEnabled: ChkSendToGmail.IsChecked == true,
-    customEnabled: ChkSendToCustomEmail.IsChecked == true,
-    vkEnabled: ChkSendToVk.IsChecked == true,
-    maxEnabled: ChkSendToMax.IsChecked == true,
+                    tgEnabled: ChkSendToTelegram.IsChecked == true,
+                    yandexEnabled: ChkSendToYandex.IsChecked == true,
+                    mailEnabled: ChkSendToMail.IsChecked == true,
+                    gmailEnabled: ChkSendToGmail.IsChecked == true,
+                    customEnabled: ChkSendToCustomEmail.IsChecked == true,
+                    vkEnabled: ChkSendToVk.IsChecked == true,
+                    maxEnabled: ChkSendToMax.IsChecked == true,
 
-    methodIndex: NotificationMethodCombo.SelectedIndex,
+                    methodIndex: NotificationMethodCombo.SelectedIndex,
 
-    tgToken: TelegramTokenBox.Text.Trim(),
-    tgChatId: TelegramChatIdBox.Text.Trim(),
+                    tgToken: TelegramTokenBox.Text.Trim(),
+                    tgChatId: TelegramChatIdBox.Text.Trim(),
 
-    emailHost: EmailHostBox.Text.Trim(),
-    emailPort: emailPort,
-    emailUser: EmailUserBox.Text.Trim(),
-    emailPass: EmailPassBox.Password,
-    emailTo: EmailToBox.Text.Trim(),
-    emailProviderIndex: EmailProviderCombo.SelectedIndex,
+                    vkToken: VkTokenBox.Text.Trim(),
+                    vkPeerId: vkId,
 
-    vkToken: VkTokenBox.Text.Trim(),
-    vkPeerId: vkId,
+                    maxToken: MaxTokenBox.Text.Trim(),
+                    maxChatId: MaxChatIdBox.Text.Trim(),
 
-    maxToken: MaxTokenBox.Text.Trim(),
-    maxChatId: MaxChatIdBox.Text.Trim(),
+                    smsLogin: SmsLoginBox.Text.Trim(),
+                    smsPass: SmsPassBox.Password,
+                    smsPhone: SmsPhoneBox.Text.Trim()
+                );
 
-    smsLogin: SmsLoginBox.Text.Trim(),
-    smsPass: SmsPassBox.Password,
-    smsPhone: SmsPhoneBox.Text.Trim()
-);
-
-                // ★ ЗАКРЫВАЕМ ОКНО ТОЛЬКО ЕСЛИ ВСЁ ПРОШЛО УСПЕШНО
                 DialogResult = true;
                 Close();
             }
             catch (Exception ex)
             {
-                // Показываем ошибку, если что-то пошло не так
                 MessageBox.Show(this,
                     $"Ошибка при сохранении настроек:\n{ex.Message}\n\n{ex.StackTrace}",
                     "Ошибка",
@@ -701,35 +695,34 @@ namespace TERMINAL.Windows
 
             int newIndex = EmailProviderCombo.SelectedIndex;
 
+            // ★ Сохраняем данные СТАРОГО провайдера перед переключением
+            if (_lastSelectedProvider != newIndex)
+            {
+                SaveCurrentEmailFields(_lastSelectedProvider);
+                _lastSelectedProvider = newIndex;
+            }
+
+            // Загружаем данные НОВОГО провайдера
+            LoadEmailFields(newIndex);
+
+            // Заполняем хост и порт
             switch (newIndex)
             {
                 case 0: // Яндекс
                     EmailHostBox.Text = "smtp.yandex.ru";
                     EmailPortBox.Text = "587";
-                    EmailUserBox.Text = MainWindow.Current?.EmailYandexUser;
-                    EmailPassBox.Password = MainWindow.Current?.EmailYandexPass;
-                    EmailToBox.Text = MainWindow.Current?.EmailYandexTo;
                     break;
                 case 1: // Mail.ru
                     EmailHostBox.Text = "smtp.mail.ru";
                     EmailPortBox.Text = "587";
-                    EmailUserBox.Text = MainWindow.Current?.EmailMailUser;
-                    EmailPassBox.Password = MainWindow.Current?.EmailMailPass;
-                    EmailToBox.Text = MainWindow.Current?.EmailMailTo;
                     break;
                 case 2: // Gmail
                     EmailHostBox.Text = "smtp.gmail.com";
                     EmailPortBox.Text = "587";
-                    EmailUserBox.Text = MainWindow.Current?.EmailGmailUser;
-                    EmailPassBox.Password = MainWindow.Current?.EmailGmailPass;
-                    EmailToBox.Text = MainWindow.Current?.EmailGmailTo;
                     break;
                 case 3: // Другой
-                    EmailHostBox.Text = MainWindow.Current?.EmailCustomHost;
-                    EmailPortBox.Text = MainWindow.Current?.EmailCustomPort.ToString();
-                    EmailUserBox.Text = MainWindow.Current?.EmailCustomUser;
-                    EmailPassBox.Password = MainWindow.Current?.EmailCustomPass;
-                    EmailToBox.Text = MainWindow.Current?.EmailCustomTo;
+                    EmailHostBox.Text = MainWindow.Current?.EmailCustomHost ?? "";
+                    EmailPortBox.Text = (MainWindow.Current?.EmailCustomPort ?? 587).ToString();
                     break;
             }
         }

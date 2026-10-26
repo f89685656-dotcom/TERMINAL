@@ -1505,10 +1505,10 @@ namespace TERMINAL
         // ═══════════════════════════════════════════════════════════════════
         public void ApplyNotificationSettings(
     bool enabled,
-    bool tgEnabled, bool yandexEnabled, bool mailEnabled, bool gmailEnabled, bool customEnabled, bool vkEnabled, bool maxEnabled,
+    bool tgEnabled, bool yandexEnabled, bool mailEnabled, bool gmailEnabled,
+    bool customEnabled, bool vkEnabled, bool maxEnabled,
     int methodIndex,
     string tgToken, string tgChatId,
-    string emailHost, int emailPort, string emailUser, string emailPass, string emailTo, int emailProviderIndex,
     string vkToken, long vkPeerId,
     string maxToken, string maxChatId,
     string smsLogin, string smsPass, string smsPhone)
@@ -1524,43 +1524,8 @@ namespace TERMINAL
             _notifyVkEnabled = vkEnabled;
             _notifyMaxEnabled = maxEnabled;
 
-            // ★ СОХРАНЯЕМ ОБЩИЕ ДАННЫЕ
             _telegramToken = tgToken ?? "";
             _telegramChatId = tgChatId ?? "";
-
-            _emailHost = emailHost ?? "";
-            _emailPort = emailPort;
-            _emailUser = emailUser ?? "";
-            _emailPass = emailPass ?? "";
-            _emailTo = emailTo ?? "";
-            _emailProviderIndex = emailProviderIndex;
-
-            // ★ СОХРАНЯЕМ ПО ПРОВАЙДЕРАМ (тот самый switch)
-            switch (emailProviderIndex)
-            {
-                case 0: // Яндекс
-                    _emailYandexUser = emailUser ?? "";
-                    _emailYandexPass = emailPass ?? "";
-                    _emailYandexTo = emailTo ?? "";
-                    break;
-                case 1: // Mail.ru
-                    _emailMailUser = emailUser ?? "";
-                    _emailMailPass = emailPass ?? "";
-                    _emailMailTo = emailTo ?? "";
-                    break;
-                case 2: // Gmail
-                    _emailGmailUser = emailUser ?? "";
-                    _emailGmailPass = emailPass ?? "";
-                    _emailGmailTo = emailTo ?? "";
-                    break;
-                case 3: // Другой
-                    _emailCustomHost = emailHost ?? "";
-                    _emailCustomPort = emailPort;
-                    _emailCustomUser = emailUser ?? "";
-                    _emailCustomPass = emailPass ?? "";
-                    _emailCustomTo = emailTo ?? "";
-                    break;
-            }
 
             _vkToken = vkToken ?? "";
             _vkPeerId = vkPeerId;
@@ -1572,6 +1537,9 @@ namespace TERMINAL
             _smsPass = smsPass ?? "";
             _smsPhone = smsPhone ?? "";
 
+            // ★ Email-данные каждого провайдера уже сохранены в полях MainWindow
+            //   (через SaveCurrentEmailFields в окне настроек)
+
             NotificationManager.ClearServices();
 
             if (enabled)
@@ -1579,18 +1547,26 @@ namespace TERMINAL
                 if (_notifyTgEnabled && !string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long chatIdLong))
                     NotificationManager.AddService(new TelegramNotificationService(_telegramToken, chatIdLong));
 
-                // ★ РАССЫЛКА ПО ВСЕМ ВЫБРАННЫМ ПОЧТАМ
+                // ★ Каждая почта — со своими данными
                 if (_notifyYandexEnabled && !string.IsNullOrEmpty(_emailYandexUser))
-                    NotificationManager.AddService(new EmailNotificationService("smtp.yandex.ru", 587, _emailYandexUser, _emailYandexPass, _emailYandexTo));
+                    NotificationManager.AddService(new EmailNotificationService(
+                        "smtp.yandex.ru", 587,
+                        _emailYandexUser, _emailYandexPass, _emailYandexTo));
 
                 if (_notifyMailEnabled && !string.IsNullOrEmpty(_emailMailUser))
-                    NotificationManager.AddService(new EmailNotificationService("smtp.mail.ru", 587, _emailMailUser, _emailMailPass, _emailMailTo));
+                    NotificationManager.AddService(new EmailNotificationService(
+                        "smtp.mail.ru", 587,
+                        _emailMailUser, _emailMailPass, _emailMailTo));
 
                 if (_notifyGmailEnabled && !string.IsNullOrEmpty(_emailGmailUser))
-                    NotificationManager.AddService(new EmailNotificationService("smtp.gmail.com", 587, _emailGmailUser, _emailGmailPass, _emailGmailTo));
+                    NotificationManager.AddService(new EmailNotificationService(
+                        "smtp.gmail.com", 587,
+                        _emailGmailUser, _emailGmailPass, _emailGmailTo));
 
                 if (_notifyCustomEnabled && !string.IsNullOrEmpty(_emailCustomHost))
-                    NotificationManager.AddService(new EmailNotificationService(_emailCustomHost, _emailCustomPort, _emailCustomUser, _emailCustomPass, _emailCustomTo));
+                    NotificationManager.AddService(new EmailNotificationService(
+                        _emailCustomHost, _emailCustomPort,
+                        _emailCustomUser, _emailCustomPass, _emailCustomTo));
 
                 if (_notifyVkEnabled && !string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
                     NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
@@ -1599,9 +1575,7 @@ namespace TERMINAL
                     NotificationManager.AddService(new MaxNotificationService(_maxToken, maxId));
             }
 
-            // ★ ОБНОВЛЯЕМ ИНДИКАТОР НА ГЛАВНОМ ЭКРАНЕ
             UpdateNotificationStatus(_notificationsEnabled);
-
             SaveSettings();
         }
 

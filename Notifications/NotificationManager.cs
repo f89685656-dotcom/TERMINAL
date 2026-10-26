@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -8,8 +10,6 @@ namespace TERMINAL.Notifications
     {
         private static readonly List<INotificationService> _services = new();
         private static readonly object _lock = new object();
-
-        // ★ Очередь: гарантирует, что уведомления уходят в порядке вызова
         private static readonly SemaphoreSlim _notifyLock = new SemaphoreSlim(1, 1);
 
         public static void SetService(INotificationService service)
@@ -44,7 +44,6 @@ namespace TERMINAL.Notifications
 
         public static async Task NotifyAsync(string text)
         {
-            // ★ Ждём, пока предыдущее уведомление не отправится во все каналы
             await _notifyLock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -54,7 +53,11 @@ namespace TERMINAL.Notifications
                 foreach (var svc in servicesCopy)
                 {
                     try { await svc.SendAsync(text).ConfigureAwait(false); }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[NotifyAsync] {svc.GetType().Name}: {ex.Message}");
+                    }
                 }
             }
             finally
@@ -76,7 +79,11 @@ namespace TERMINAL.Notifications
                     if (svc is not TelegramNotificationService)
                     {
                         try { await svc.SendAsync(text).ConfigureAwait(false); }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine(
+                                $"[NotifyOthersAsync] {svc.GetType().Name}: {ex.Message}");
+                        }
                     }
                 }
             }
@@ -101,7 +108,11 @@ namespace TERMINAL.Notifications
                         var id = await svc.SendMessageAsync(text).ConfigureAwait(false);
                         if (id.HasValue) return id;
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[SendMessageAsync] {svc.GetType().Name}: {ex.Message}");
+                    }
                 }
                 return null;
             }
@@ -121,8 +132,16 @@ namespace TERMINAL.Notifications
 
                 foreach (var svc in servicesCopy)
                 {
-                    try { if (await svc.EditMessageAsync(messageId, text).ConfigureAwait(false)) return true; }
-                    catch { }
+                    try
+                    {
+                        if (await svc.EditMessageAsync(messageId, text).ConfigureAwait(false))
+                            return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[EditMessageAsync] {svc.GetType().Name}: {ex.Message}");
+                    }
                 }
                 return false;
             }
