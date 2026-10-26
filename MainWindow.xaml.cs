@@ -466,7 +466,7 @@ namespace TERMINAL
             if (_isDarkTheme)
             {
                 ChangeTheme(true);
-                if (ThemeToggleButton != null) ThemeToggleButton.Content = "☀️";
+                if (ThemeToggleButton != null) ThemeToggleButton.Content = "🌞";
             }
             // ★★★ КОНЕЦ БЛОКА ★★★
 
@@ -1593,7 +1593,7 @@ namespace TERMINAL
         {
             _isDarkTheme = !_isDarkTheme;
             ChangeTheme(_isDarkTheme);
-            ThemeToggleButton.Content = _isDarkTheme ? "☀️" : "🌙";
+            ThemeToggleButton.Content = _isDarkTheme ? "🌞" : "🌙";
 
             SaveSettings(); // ★ ДОБАВИТЬ ЭТУ СТРОКУ
         }

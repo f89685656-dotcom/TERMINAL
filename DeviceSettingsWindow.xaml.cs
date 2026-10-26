@@ -29,11 +29,22 @@ namespace TERMINAL.Windows
             InitializeComponent();
 
             // Предотвращаем закрытие выпадающего списка при клике на галочку
+            // В конструкторе DeviceSettingsWindow
             NotifyChannelsCombo.AddHandler(ComboBox.MouseDownEvent, new System.Windows.Input.MouseButtonEventHandler((s, e) =>
             {
-                // Если клик был внутри открытого выпадающего списка, не закрываем его
-                if (NotifyChannelsCombo.IsDropDownOpen && e.OriginalSource is CheckBox)
+                if (!NotifyChannelsCombo.IsDropDownOpen) return;
+
+                // Поднимаемся по визуальному дереву от e.OriginalSource
+                // и проверяем, не находимся ли мы внутри CheckBox
+                DependencyObject? current = e.OriginalSource as DependencyObject;
+                while (current != null && current is not CheckBox)
                 {
+                    current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+                }
+
+                if (current is CheckBox)
+                {
+                    // Клик был по чекбоксу (или его содержимому) — не закрываем выпадающий список
                     e.Handled = true;
                 }
             }), true);
@@ -936,6 +947,16 @@ namespace TERMINAL.Windows
 
             helpWindow.Content = grid;
             helpWindow.ShowDialog();
+        }
+
+        private void NotifyCheckBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Клик по чекбоксу — не даём ComboBoxItem его обработать
+            e.Handled = true;
+
+            // Но сам чекбокс должен переключиться
+            if (sender is CheckBox cb)
+                cb.IsChecked = !(cb.IsChecked == true);
         }
     }
 }

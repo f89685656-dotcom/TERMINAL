@@ -200,30 +200,31 @@
                             <Grid Grid.Column="1" Margin="0,0,5,0">
                                 <!-- Ширина 110, чтобы ужать по максимуму -->
                                 <ComboBox x:Name="NotifyChannelsCombo" 
-              Width="110" Height="26" 
-              HorizontalAlignment="Left"
-              VerticalAlignment="Center"
-              Padding="2,0">
-                                    <ComboBoxItem Padding="0">
-                                        <CheckBox x:Name="ChkSendToTelegram" Content="Telegram" Margin="0,1"/>
+          Width="110" Height="26" 
+          HorizontalAlignment="Left"
+          VerticalAlignment="Center"
+          Padding="2,0"
+          IsTextSearchEnabled="False">
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToTelegram" Content="Telegram" Margin="0,1" HorizontalAlignment="Stretch"/>
                                     </ComboBoxItem>
-                                    <ComboBoxItem Padding="0">
-                                        <CheckBox x:Name="ChkSendToYandex" Content="Яндекс" Margin="0,1"/>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToYandex" Content="Яндекс" Margin="0,1" HorizontalAlignment="Stretch"/>
                                     </ComboBoxItem>
-                                    <ComboBoxItem Padding="0">
-                                        <CheckBox x:Name="ChkSendToMail" Content="Mail.ru" Margin="0,1"/>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToMail" Content="Mail.ru" Margin="0,1" HorizontalAlignment="Stretch"/>
                                     </ComboBoxItem>
-                                    <ComboBoxItem Padding="0">
-                                        <CheckBox x:Name="ChkSendToGmail" Content="Gmail" Margin="0,1"/>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToGmail" Content="Gmail" Margin="0,1" HorizontalAlignment="Stretch"/>
                                     </ComboBoxItem>
-                                    <ComboBoxItem Padding="0">
-                                        <CheckBox x:Name="ChkSendToCustomEmail" Content="Другой" Margin="0,1"/>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToCustomEmail" Content="Другой" Margin="0,1" HorizontalAlignment="Stretch"/>
                                     </ComboBoxItem>
-                                    <ComboBoxItem Padding="0">
-                                        <CheckBox x:Name="ChkSendToVk" Content="VK" Margin="0,1"/>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToVk" Content="VK" Margin="0,1" HorizontalAlignment="Stretch"/>
                                     </ComboBoxItem>
-                                    <ComboBoxItem Padding="0">
-                                        <CheckBox x:Name="ChkSendToMax" Content="MAX" Margin="0,1"/>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToMax" Content="MAX" Margin="0,1" HorizontalAlignment="Stretch"/>
                                     </ComboBoxItem>
                                 </ComboBox>
 
