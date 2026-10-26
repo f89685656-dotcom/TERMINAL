@@ -305,7 +305,7 @@ namespace TERMINAL
                 string units = _selectedTargetPressure?.Contains("МПа") == true ? "МПа" : "кгс/см²";
 
                 // ★ Уведомляем о старте шага в Email/VK/MAX
-                _ = NotificationManager.NotifyOthersAsync($"▶️ Шаг {human}/{steps.Length} (давление {v} {units}) — начат");
+                await NotificationManager.NotifyOthersAsync($"▶️ Шаг {human}/{steps.Length} (давление {v} {units}) — начат");
 
                 if (IsTestPressureRange())
                 {
@@ -340,7 +340,7 @@ namespace TERMINAL
                     _completedSteps = i + 1;
                     UpdateStepCounter();
 
-                    _ = NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
+                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
@@ -398,7 +398,7 @@ namespace TERMINAL
                     _completedSteps = 1;
                     UpdateStepCounter();
 
-                    _ = NotificationManager.NotifyOthersAsync($"✅ Шаг 1/{steps.Length} (давление {v} {units}) — завершён");
+                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
@@ -454,7 +454,7 @@ namespace TERMINAL
                     _completedSteps = i + 1;
                     UpdateStepCounter();
 
-                    _ = NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
+                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
@@ -494,7 +494,7 @@ namespace TERMINAL
                 _completedSteps = i + 1;
                 UpdateStepCounter();
 
-                _ = NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
+                await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
             }
 
             // Финальный сброс

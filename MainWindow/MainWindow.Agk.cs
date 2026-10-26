@@ -632,6 +632,9 @@ namespace TERMINAL
         /// </summary>
         private async Task RefreshAgkStateAsync()
         {
+            // ★ Запускаем секундомер перед опросом
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
             NetworkStream? stream;
             lock (_streamLock) stream = _stream;
 
@@ -641,6 +644,9 @@ namespace TERMINAL
             {
                 snap.Connected = false;
                 lock (_agkStateLock) _agkState = snap;
+
+                sw.Stop();
+                AddTickTiming("agk-poll", sw.ElapsedMilliseconds);
                 return;
             }
 
@@ -649,15 +655,13 @@ namespace TERMINAL
                 AgkSnapshot prev;
                 lock (_agkStateLock) prev = _agkState;
 
-                // ★ Убрали проверку if (_agkInVentMode), теперь читаем ВСЕГДА
-
                 // 1. Давление
                 var pressureResp = await SendCommandAsync("get_press;");
                 snap.Pressure = pressureResp != null
                     ? ParseDoubleOrNull(pressureResp)
                     : prev.Pressure;
 
-                // 2. Статус в точке (критично для стабилизации)
+                // 2. Статус в точке
                 var stateResp = await SendCommandAsync("get_state_in_point;");
                 if (stateResp != null)
                 {
@@ -674,10 +678,6 @@ namespace TERMINAL
 
                 // 3. Уставка
                 var pointResp = await SendCommandAsync("get_point;");
-                if (pointResp != prev.SetPoint?.ToString())
-                {
-                    //AppendLog($"[АГК] Уставка: {pointResp ?? "NULL"}", Brushes.Gray);
-                }
                 snap.SetPoint = pointResp != null ? ParseDoubleOrNull(pointResp) : prev.SetPoint;
 
                 // 4. Режим
@@ -690,7 +690,7 @@ namespace TERMINAL
                 var unitsResp = await SendCommandAsync("get_units;");
                 snap.Units = unitsResp ?? prev.Units;
 
-                // 6. Общий статус (для справки)
+                // 6. Общий статус
                 var statusResp = await SendCommandAsync("get_status;");
                 snap.Status = statusResp ?? prev.Status;
 
@@ -700,6 +700,12 @@ namespace TERMINAL
             {
                 snap.Connected = false;
                 AppendLog($"ОШИБКА ОПРОСА АГК: {ex.Message}", Brushes.Red);
+            }
+            finally
+            {
+                // ★ Останавливаем секундомер и записываем результат
+                sw.Stop();
+                AddTickTiming("agk-poll", sw.ElapsedMilliseconds);
             }
 
             lock (_agkStateLock) _agkState = snap;
@@ -711,14 +717,14 @@ namespace TERMINAL
         /// 
         private async Task RefreshFurnaceStateAsync()
         {
-            var start = DateTime.Now;
-
             var snap = new FurnaceSnapshot { UpdatedAt = DateTime.Now };
+            long elapsedMs = 0; // ★ Переменная для замера
 
             try
             {
-                var (temp, setPoint) = await Task.Run(() =>
+                var (temp, setPoint, ms) = await Task.Run(() =>
                 {
+                    var sw = System.Diagnostics.Stopwatch.StartNew(); // ★ Запускаем внутри потока
                     Socket? sock = null;
                     try
                     {
@@ -730,21 +736,27 @@ namespace TERMINAL
                         var endpoint = new IPEndPoint(IPAddress.Parse(FurnaceIp), FurnacePort);
                         var ar = sock.BeginConnect(endpoint, null, null);
                         if (!ar.AsyncWaitHandle.WaitOne(3000))
-                            return ((float?)null, (float?)null);
+                            return ((float?)null, (float?)null, sw.ElapsedMilliseconds);
                         sock.EndConnect(ar);
 
-                        float? t = ReadModbusFloat(sock, 0x00CD, 0x04);   // температура — функция 0x04
-                        float? s = ReadModbusFloat(sock, 0x00C9, 0x03);   // 201 = 0x00C9
+                        float? t = ReadModbusFloat(sock, 0x00CD, 0x04);   // температура
+                        float? s = ReadModbusFloat(sock, 0x00C9, 0x03);   // уставка
 
-                        return (t, s);
+                        sw.Stop();
+                        return (t, s, sw.ElapsedMilliseconds);
                     }
-                    catch { return ((float?)null, (float?)null); }
+                    catch
+                    {
+                        sw.Stop();
+                        return ((float?)null, (float?)null, sw.ElapsedMilliseconds);
+                    }
                     finally { try { sock?.Close(); } catch { } }
                 });
 
                 snap.CurrentTemp = temp;
                 snap.SetPoint = setPoint;
                 snap.Connected = temp.HasValue || setPoint.HasValue;
+                elapsedMs = ms; // ★ Сохраняем замер
             }
             catch
             {
@@ -753,8 +765,8 @@ namespace TERMINAL
 
             lock (_furnaceStateLock) _furnaceState = snap;
 
-            long ms = (long)(DateTime.Now - start).TotalMilliseconds;
-            AddTickTiming("furnace", ms);
+            // ★ Записываем время
+            AddTickTiming("furnace", elapsedMs);
         }
 
         /// <summary>

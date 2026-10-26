@@ -12,39 +12,19 @@
     <SolidColorBrush x:Key="ButtonPause" Color="#B0A050"/>
     <SolidColorBrush x:Key="ButtonSettings" Color="#607090"/>
 
-    <!-- ★ ПОЛНЫЙ ШАБЛОН ДЛЯ TEXTBOX (для поля "Точка") ★ -->
+    <SolidColorBrush x:Key="ArrowBrush" Color="White"/>
+
+    <!-- Текстовое поле: только цвета, стандартный шаблон -->
     <Style TargetType="TextBox">
         <Setter Property="Background" Value="#3F3F46"/>
         <Setter Property="Foreground" Value="White"/>
         <Setter Property="BorderBrush" Value="#555555"/>
         <Setter Property="CaretBrush" Value="White"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="TextBox">
-                    <Border x:Name="border" 
-                            Background="{TemplateBinding Background}" 
-                            BorderBrush="{TemplateBinding BorderBrush}" 
-                            BorderThickness="{TemplateBinding BorderThickness}" 
-                            CornerRadius="2">
-                        <ScrollViewer x:Name="PART_ContentHost" Margin="0" 
-                                      VerticalAlignment="Center" 
-                                      HorizontalAlignment="Left" 
-                                      Focusable="False"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="border" Property="Background" Value="#2D2D30"/>
-                            <Setter Property="Foreground" Value="Gray"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+        <Setter Property="SelectionBrush" Value="#2E8B8B"/>
     </Style>
 
-    <!-- ★ ПОЛНЫЙ ШАБЛОН ДЛЯ COMBOBOX (для режима и диапазонов) ★ -->
+    <!-- Комбобокс: перекрашиваем стрелку, остальное оставляем стандартным -->
     <Style TargetType="ComboBox">
-        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Background" Value="#3F3F46"/>
         <Setter Property="Foreground" Value="White"/>
         <Setter Property="BorderBrush" Value="#555555"/>
@@ -59,12 +39,7 @@
                                       IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
-                                    <!-- ★ ЗДЕСЬ ЖЕСТКО ЗАДАЕМ ТЕМНЫЙ ФОН КНОПКИ ★ -->
-                                    <Border x:Name="Border" 
-                                            Background="#3F3F46" 
-                                            BorderBrush="#555555" 
-                                            BorderThickness="1" 
-                                            CornerRadius="2">
+                                    <Border Background="Transparent" BorderThickness="0">
                                         <Path x:Name="Arrow" 
                                               HorizontalAlignment="Right" 
                                               VerticalAlignment="Center" 
@@ -72,25 +47,15 @@
                                               Data="M 0 0 L 4 4 L 8 0 Z" 
                                               Fill="White"/>
                                     </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Border" Property="Background" Value="#505050"/>
-                                        </Trigger>
-                                        <Trigger Property="IsChecked" Value="True">
-                                            <Setter TargetName="Border" Property="Background" Value="#2D2D30"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </ToggleButton.Template>
                         </ToggleButton>
 
-                        <!-- Текст, который виден в свернутом состоянии -->
                         <ContentPresenter x:Name="ContentSite"
                                           IsHitTestVisible="False" 
                                           Content="{TemplateBinding SelectionBoxItem}"
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-                                          Margin="4,3,23,3"
+                                          Margin="6,2,20,2" 
                                           VerticalAlignment="Center"
                                           HorizontalAlignment="Left"
                                           TextBlock.Foreground="White" />
@@ -109,60 +74,27 @@
                                         Background="#2D2D30"
                                         BorderThickness="1"
                                         BorderBrush="#555555"/>
-                                <ScrollViewer Margin="4,6,4,6" SnapsToDevicePixels="True">
+                                <ScrollViewer Margin="2">
                                     <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
                                 </ScrollViewer>
                             </Grid>
                         </Popup>
                     </Grid>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="HasItems" Value="False">
-                            <Setter TargetName="DropDownBorder" Property="MinHeight" Value="95"/>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Foreground" Value="Gray"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
 
-    <!-- ★ СТИЛЬ ДЛЯ ЭЛЕМЕНТОВ СПИСКА COMBOBOXITEM ★ -->
+    <!-- Элемент выпадающего списка: только цвета -->
     <Style TargetType="ComboBoxItem">
         <Setter Property="Background" Value="#2D2D30"/>
         <Setter Property="Foreground" Value="White"/>
-        <Setter Property="Padding" Value="4,2"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ComboBoxItem">
-                    <Border x:Name="Bd" 
-                            Background="{TemplateBinding Background}" 
-                            Padding="{TemplateBinding Padding}" 
-                            SnapsToDevicePixels="true">
-                        <ContentPresenter HorizontalAlignment="Left" 
-                                          VerticalAlignment="Center" 
-                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#505050"/>
-                        </Trigger>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#2E8B8B"/>
-                            <Setter Property="Foreground" Value="White"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+        <!-- Шаблон не переопределяем, чтобы отступы были как в светлой теме -->
     </Style>
 
-    <!-- Галочки (CheckBox) -->
+    <!-- Чекбоксы: только цвет текста -->
     <Style TargetType="CheckBox">
         <Setter Property="Foreground" Value="White"/>
     </Style>
-    
-    <SolidColorBrush x:Key="ArrowBrush" Color="White"/>
-    
+
 </ResourceDictionary>

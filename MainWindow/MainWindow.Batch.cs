@@ -130,7 +130,7 @@ namespace TERMINAL
                 job.StatusColor = Brushes.LightGray;
             }
 
-            // Валидация (без изменений)
+            // Валидация
             for (int i = 0; i < _batchJobs.Count; i++)
             {
                 var job = _batchJobs[i];
@@ -209,9 +209,8 @@ namespace TERMINAL
 
                 string startMsg = $"🚀 Пакетный режим запущен.\nЗаданий: {enabledCount} (диапазон: {_selectedTargetPressure}, температуры: {tempsString}).\n{clientInfo}";
 
-                // ★ Старт пакета шлем во все каналы (в Telegram тоже полезно)
                 await _batchProgress.SendStatusAsync(startMsg);
-                _ = NotificationManager.NotifyOthersAsync(startMsg);
+                await NotificationManager.NotifyOthersAsync(startMsg);
 
                 int completedCount = 0;
 
@@ -222,7 +221,7 @@ namespace TERMINAL
                         SetStatusWarning("Пакетный режим остановлен оператором");
                         string stopMsg = $"⏹ Пакетный режим остановлен оператором. Выполнено: {completedCount}/{enabledCount}";
                         await _batchProgress.SendStatusAsync(stopMsg);
-                        _ = NotificationManager.NotifyOthersAsync(stopMsg);
+                        await NotificationManager.NotifyOthersAsync(stopMsg);
                         return;
                     }
 
@@ -233,9 +232,8 @@ namespace TERMINAL
                     _currentBatchSetPointForSave = job.SetPoint;
                     string stepSetPointText = job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture);
 
-                    // ★ Начало задания (шлем только в Email/VK/MAX, чтобы не засорять Telegram)
                     string jobStartMsg = $"▶️ Задание {completedCount}/{enabledCount} (уставка {stepSetPointText} °C) — начато";
-                    _ = NotificationManager.NotifyOthersAsync(jobStartMsg);
+                    await NotificationManager.NotifyOthersAsync(jobStartMsg);
 
                     // --- Запись уставки ---
                     job.StatusText = "запись уставки";
@@ -250,7 +248,7 @@ namespace TERMINAL
                         SetStatusError($"[Пакет {completedCount}] не удалось записать уставку");
                         string errMsg = $"❌ Ошибка записи уставки на задании {completedCount}. Пакет прерван.";
                         await _batchProgress.SendStatusAsync(errMsg);
-                        _ = NotificationManager.NotifyOthersAsync(errMsg);
+                        await NotificationManager.NotifyOthersAsync(errMsg);
                         return;
                     }
 
@@ -267,7 +265,7 @@ namespace TERMINAL
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации {job.StabilizationMinutes} мин...", false);
 
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
-                        _ = NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
+                        await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
 
                         bool stable = await WaitForBatchStabilizationAsync(job.StabilizationMinutes, completedCount, enabledCount);
                         if (!stable)
@@ -277,7 +275,7 @@ namespace TERMINAL
                             SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
                             string errMsg = $"❌ Стабилизация прервана на задании {completedCount}.";
                             await _batchProgress.SendStatusAsync(errMsg);
-                            _ = NotificationManager.NotifyOthersAsync(errMsg);
+                            await NotificationManager.NotifyOthersAsync(errMsg);
                             return;
                         }
                     }
@@ -287,7 +285,7 @@ namespace TERMINAL
                         job.StatusColor = Brushes.Gold;
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] проверка допуска...");
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
-                        _ = NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
+                        await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
 
                         bool inTolerance = await WaitForBatchTemperatureInToleranceAsync(completedCount, enabledCount);
                         if (!inTolerance)
@@ -297,7 +295,7 @@ namespace TERMINAL
                             SetStatusWarning($"[Пакет {completedCount}] проверка допуска прервана");
                             string errMsg = $"❌ Проверка допуска прервана на задании {completedCount}.";
                             await _batchProgress.SendStatusAsync(errMsg);
-                            _ = NotificationManager.NotifyOthersAsync(errMsg);
+                            await NotificationManager.NotifyOthersAsync(errMsg);
                             return;
                         }
                     }
@@ -340,7 +338,7 @@ namespace TERMINAL
                         SetStatusWarning("Пакетный режим остановлен оператором");
                         string stopMsg = $"⏹ Пакетный режим остановлен на задании {completedCount}.";
                         await _batchProgress.SendStatusAsync(stopMsg);
-                        _ = NotificationManager.NotifyOthersAsync(stopMsg);
+                        await NotificationManager.NotifyOthersAsync(stopMsg);
                         return;
                     }
 
@@ -351,7 +349,7 @@ namespace TERMINAL
                         SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано");
                         string errMsg = $"❌ Задание {completedCount} прервано. Пакет остановлен.";
                         await _batchProgress.SendStatusAsync(errMsg);
-                        _ = NotificationManager.NotifyOthersAsync(errMsg);
+                        await NotificationManager.NotifyOthersAsync(errMsg);
                         return;
                     }
 
@@ -359,17 +357,15 @@ namespace TERMINAL
                     job.StatusColor = Brushes.Green;
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] завершён");
 
-                    // ★ Конец задания
                     string jobEndMsg = $"✅ Задание {completedCount}/{enabledCount} (уставка {stepSetPointText} °C) — успешно завершено.";
-                    _ = NotificationManager.NotifyOthersAsync(jobEndMsg);
+                    await NotificationManager.NotifyOthersAsync(jobEndMsg);
                 }
 
                 SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
 
-                // ★ Конец пакета
                 string endMsg = $"🏁 Пакетный режим завершён успешно. Обработано: {completedCount}/{enabledCount}";
                 await _batchProgress.SendStatusAsync(endMsg);
-                _ = NotificationManager.NotifyOthersAsync(endMsg);
+                await NotificationManager.NotifyOthersAsync(endMsg);
                 await _batchProgress.ResetAsync();
 
                 if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
@@ -396,7 +392,7 @@ namespace TERMINAL
                 SetStatusError($"Пакет: необработанная ошибка — {ex.Message}");
                 string errMsg = $"❌ Пакетный режим завершён с ошибкой: {ex.Message}";
                 await _batchProgress.SendStatusAsync(errMsg);
-                _ = NotificationManager.NotifyOthersAsync(errMsg);
+                await NotificationManager.NotifyOthersAsync(errMsg);
                 await _batchProgress.ResetAsync();
             }
             finally

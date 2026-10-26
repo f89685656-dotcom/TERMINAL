@@ -1189,7 +1189,7 @@ namespace TERMINAL
                     throw;
                 }
 
-                WaitForExcelIdle(xl, timeoutMs: 60000);
+                WaitForExcelIdle(xl, timeoutMs: 120000);
                 System.Threading.Thread.Sleep(500);
 
                 // ─── Закрываем CSV-книгу ───

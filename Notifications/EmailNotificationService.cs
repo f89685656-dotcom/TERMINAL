@@ -20,6 +20,7 @@ namespace TERMINAL.Notifications
             {
                 Credentials = new NetworkCredential(_user, _pass),
                 EnableSsl = true
+                Timeout = 10000
             };
             var msg = new MailMessage(_user, _to, "TERMINAL Уведомление", text);
             await client.SendMailAsync(msg);

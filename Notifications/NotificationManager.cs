@@ -1,13 +1,16 @@
 ﻿using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Linq;
 
 namespace TERMINAL.Notifications
 {
     public static class NotificationManager
     {
         private static readonly List<INotificationService> _services = new();
-        private static readonly object _lock = new object(); // ★ Блокировка
+        private static readonly object _lock = new object();
+
+        // ★ Очередь: гарантирует, что уведомления уходят в порядке вызова
+        private static readonly SemaphoreSlim _notifyLock = new SemaphoreSlim(1, 1);
 
         public static void SetService(INotificationService service)
         {
@@ -35,67 +38,98 @@ namespace TERMINAL.Notifications
         {
             lock (_lock)
             {
-                // Возвращаем копию, чтобы внешний код не мог изменить оригинал
                 return new List<INotificationService>(_services);
             }
         }
 
         public static async Task NotifyAsync(string text)
         {
-            // Делаем копию списка под блокировкой, а перебираем уже копию
-            List<INotificationService> servicesCopy;
-            lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
-
-            foreach (var svc in servicesCopy)
+            // ★ Ждём, пока предыдущее уведомление не отправится во все каналы
+            await _notifyLock.WaitAsync().ConfigureAwait(false);
+            try
             {
-                try { await svc.SendAsync(text); }
-                catch { }
+                List<INotificationService> servicesCopy;
+                lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
+
+                foreach (var svc in servicesCopy)
+                {
+                    try { await svc.SendAsync(text).ConfigureAwait(false); }
+                    catch { }
+                }
+            }
+            finally
+            {
+                _notifyLock.Release();
             }
         }
 
         public static async Task NotifyOthersAsync(string text)
         {
-            List<INotificationService> servicesCopy;
-            lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
-
-            foreach (var svc in servicesCopy)
+            await _notifyLock.WaitAsync().ConfigureAwait(false);
+            try
             {
-                if (svc is not TelegramNotificationService)
+                List<INotificationService> servicesCopy;
+                lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
+
+                foreach (var svc in servicesCopy)
                 {
-                    try { await svc.SendAsync(text); }
-                    catch { }
+                    if (svc is not TelegramNotificationService)
+                    {
+                        try { await svc.SendAsync(text).ConfigureAwait(false); }
+                        catch { }
+                    }
                 }
+            }
+            finally
+            {
+                _notifyLock.Release();
             }
         }
 
         public static async Task<int?> SendMessageAsync(string text)
         {
-            List<INotificationService> servicesCopy;
-            lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
-
-            foreach (var svc in servicesCopy)
+            await _notifyLock.WaitAsync().ConfigureAwait(false);
+            try
             {
-                try
+                List<INotificationService> servicesCopy;
+                lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
+
+                foreach (var svc in servicesCopy)
                 {
-                    var id = await svc.SendMessageAsync(text);
-                    if (id.HasValue) return id;
+                    try
+                    {
+                        var id = await svc.SendMessageAsync(text).ConfigureAwait(false);
+                        if (id.HasValue) return id;
+                    }
+                    catch { }
                 }
-                catch { }
+                return null;
             }
-            return null;
+            finally
+            {
+                _notifyLock.Release();
+            }
         }
 
         public static async Task<bool> EditMessageAsync(int messageId, string text)
         {
-            List<INotificationService> servicesCopy;
-            lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
-
-            foreach (var svc in servicesCopy)
+            await _notifyLock.WaitAsync().ConfigureAwait(false);
+            try
             {
-                try { if (await svc.EditMessageAsync(messageId, text)) return true; }
-                catch { }
+                List<INotificationService> servicesCopy;
+                lock (_lock) { servicesCopy = new List<INotificationService>(_services); }
+
+                foreach (var svc in servicesCopy)
+                {
+                    try { if (await svc.EditMessageAsync(messageId, text).ConfigureAwait(false)) return true; }
+                    catch { }
+                }
+                return false;
             }
-            return false;
+            finally
+            {
+                _notifyLock.Release();
+            }
         }
     }
 }

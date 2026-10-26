@@ -688,7 +688,7 @@
             </Grid.RowDefinitions>
             <StackPanel Grid.Row="0" Margin="0,0,0,5">
                 <TextBlock Text="Путь сохранения:" FontSize="13" VerticalAlignment="Center" Margin="0,0,0,3" Foreground="{DynamicResource TextForeground}"/>
-                <TextBox x:Name="SavePathBox" Height="26" FontSize="12" Padding="6,3" HorizontalAlignment="Stretch" VerticalContentAlignment="Center" TextChanged="SavePathBox_TextChanged"/>
+                <TextBox x:Name="SavePathBox" Height="26" FontSize="12" Padding="4,2" HorizontalAlignment="Stretch" VerticalContentAlignment="Center" TextChanged="SavePathBox_TextChanged"/>
             </StackPanel>
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
                 <Button x:Name="TakePointBroadcastButton" Content="Снять данные" Style="{StaticResource ActionButtonStyle}" Height="28" Width="120" FontSize="12" Padding="4,3" Background="#FF80B080" Click="TakePointBroadcast_Click"/>
