@@ -925,14 +925,28 @@ namespace TERMINAL
             }
 
             // ─── CASE для второго макроса ───
-            int caseForCopy = GetCurrentBatchCase();
+            // Если пакет запущен — берем текущее задание. 
+            // Если нет (ручной тест) — берем первое выбранное задание из списка или 1.
+            int caseForCopy = 0;
+
+            if (_batchRunning)
+            {
+                caseForCopy = GetCurrentBatchCase();
+            }
+
+            // Если пакет не запущен или не удалось определить CASE, ищем в списке заданий
             if (caseForCopy == 0)
             {
-                string msg = "Не удалось определить номер текущего задания пакета.\n" +
-                             "Убедитесь, что пакетный режим запущен.";
-                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
+                // Ищем первое активное (включенное) задание
+                var activeJob = _batchJobs.FirstOrDefault(j => j.IsEnabled);
+                if (activeJob != null && !string.IsNullOrEmpty(activeJob.CaseText) && int.TryParse(activeJob.CaseText, out int parsedCase))
+                {
+                    caseForCopy = parsedCase;
+                }
+
+                // Если задания нет, берем 1 (или можно поставить 0, если хотите, чтобы макрос упал)
+                if (caseForCopy == 0)
+                    caseForCopy = 1;
             }
 
             // ─── Родительская папка ───
@@ -954,15 +968,11 @@ namespace TERMINAL
                       $"(Case={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
 
             // ═══════════════════════════════════════════════════════════════
-            // 2. Работа с Excel — в фоне, UI не блокируется
+            // 2. Работа с Excel — асинхронно, UI не блокируется
             // ═══════════════════════════════════════════════════════════════
 
-            await Task.Run(() =>
-            {
-                RunExcelPipeline(csvPath, sensorCount, caseForCopy, parentFolder, addinPath, silent);
-            });
+            await RunExcelPipeline(csvPath, sensorCount, caseForCopy, parentFolder, addinPath, silent);
         }
-
         private string GetCurrentBatchSetPoint()
         {
             if (!_batchRunning) return "";
@@ -995,13 +1005,13 @@ namespace TERMINAL
         /// Синхронная часть работы с Excel. Вызывается из Task.Run — фон.
         /// Внутри — только COM-вызовы и AppendLog/SetStatus (уже потокобезопасные).
         /// </summary>
-        private void RunExcelPipeline(
-            string csvPath,
-            int sensorCount,
-            int caseForCopy,
-            string parentFolder,
-            string addinPath,
-            bool silent)
+        private async Task RunExcelPipeline(
+    string csvPath,
+    int sensorCount,
+    int caseForCopy,
+    string parentFolder,
+    string addinPath,
+    bool silent)
         {
             object? xlApp = null;
             object? csvBook = null;
@@ -1025,9 +1035,9 @@ namespace TERMINAL
                 xl.ScreenUpdating = false;
                 xl.EnableEvents = false;
 
-                // ─── Временная книга, чтобы Calculation можно было менять ───
+                // ─── Временная книга ───
                 dynamic tempBook = xl.Workbooks.Add();
-                xl.Calculation = -4135;   // xlCalculationManual
+                xl.Calculation = -4135;
                 tempBook.Close(false);
 
                 // ─── Загрузка надстройки IvanoFF ───
@@ -1072,13 +1082,13 @@ namespace TERMINAL
                 sheet.Range("Z3").Value = parentFolder;
 
                 // ═══════════════════════════════════════════════════════
-                // ★ МАКРОС 1: выбор фильтра по _sktbFilterScript
+                // ★ МАКРОС 1: выбор фильтра
                 // ═══════════════════════════════════════════════════════
                 string filterMacro = _sktbFilterScript switch
                 {
                     "Фильтр_данных_ПДС" => "Фильтр_данных_ПДС",
                     "Фильтр_данных_БИДТ" => "Фильтр_данных_БИДТ",
-                    "Фильтр_РЧ" => "Фильтр_РЧ",
+                    "Фильтр_РЧ" => "Run_Filter_RcH",
                     "Filter_for_KOSA_GUI" => "Filter_KOSA_GUI_Auto",
                     _ => "Filter_KOSA_GUI_Auto"
                 };
@@ -1088,8 +1098,29 @@ namespace TERMINAL
                 try
                 {
                     AppendLog($"Excel: запуск макроса «{filterMacro}»", Brushes.Blue);
-                    xl.Run(filterMacro);
+
+                    // ★ Включаем авто-режим
+                    xl.Run("SetAutoMode", true);
+
+                    // ★ ЗАПУСК С ТАЙМАУТОМ (2 минуты)
+                    var runTask1 = Task.Run(() => xl.Run(filterMacro));
+                    if (await Task.WhenAny(runTask1, Task.Delay(10000)) != runTask1)
+                    {
+                        throw new TimeoutException($"Макрос «{filterMacro}» не завершился за 2 минуты. Возможно, он завис.");
+                    }
+                    await runTask1; // пробрасываем исключение, если оно было
+
+                    // ★ Выключаем авто-режим
+                    xl.Run("SetAutoMode", false);
+
                     AppendLog($"Excel: макрос «{filterMacro}» выполнен", Brushes.Green);
+                }
+                catch (TimeoutException tex)
+                {
+                    AppendLog($"Excel: {tex.Message}", Brushes.Red);
+                    if (!silent)
+                        UI(() => MessageBox.Show(tex.Message, "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
+                    throw;
                 }
                 catch (System.Runtime.InteropServices.COMException comEx)
                 {
@@ -1101,8 +1132,7 @@ namespace TERMINAL
                                           "Проверьте, что в настройках СКТБ ЭлПа выбран существующий скрипт.";
                         AppendLog($"Excel: {friendly}", Brushes.Red);
                         if (!silent)
-                            UI(() => MessageBox.Show(friendly, "Excel",
-                                MessageBoxButton.OK, MessageBoxImage.Error));
+                            UI(() => MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
                         throw;
                     }
 
@@ -1114,7 +1144,7 @@ namespace TERMINAL
                 WaitForExcelIdle(xl, timeoutMs: 30000);
                 System.Threading.Thread.Sleep(800);
 
-                // ─── Перезаписываем Z1/Z2/Z3 в новой книге ───
+                // ─── Перезаписываем Z1/Z2/Z3 ───
                 try
                 {
                     dynamic activeBook = xl.ActiveWorkbook;
@@ -1130,13 +1160,28 @@ namespace TERMINAL
                 }
 
                 // ═══════════════════════════════════════════════════════
-                // ★ МАКРОС 2: Universal_Insert_FULL_Auto
+                // ★ МАКРОС 2: Universal_Insert_FULL_Auto (с таймаутом)
                 // ═══════════════════════════════════════════════════════
                 try
                 {
                     AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
-                    xl.Run("Universal_Insert_FULL_Auto");
+
+                    // ★ ЗАПУСК С ТАЙМАУТОМ (3 минуты)
+                    var runTask2 = Task.Run(() => xl.Run("Universal_Insert_FULL_Auto"));
+                    if (await Task.WhenAny(runTask2, Task.Delay(180000)) != runTask2)
+                    {
+                        throw new TimeoutException("Макрос «Universal Insert» не завершился за 3 минуты. Возможно, он завис.");
+                    }
+                    await runTask2;
+
                     AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
+                }
+                catch (TimeoutException tex)
+                {
+                    AppendLog($"Excel: {tex.Message}", Brushes.Red);
+                    if (!silent)
+                        UI(() => MessageBox.Show(tex.Message, "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -1154,32 +1199,11 @@ namespace TERMINAL
                 AppendLog($"Excel: обработка завершена — {Path.GetFileName(csvPath)}", Brushes.Green);
                 SetStatus($"Excel: обработка завершена — {Path.GetFileName(csvPath)}");
             }
-            catch (System.Runtime.InteropServices.COMException comEx)
-            {
-                string msg = comEx.Message;
-                string friendly;
-
-                if (msg.Contains("Cannot run the macro"))
-                    friendly = "Макрос не найден в надстройке IvanoFF.xlam";
-                else if (msg.Contains("Unable to get the Add property"))
-                    friendly = "Не удалось загрузить надстройку IvanoFF.xlam";
-                else if (msg.Contains("method 'Run'"))
-                    friendly = "Ошибка вызова макроса (проверьте VBA)";
-                else
-                    friendly = $"Excel COM: {msg}";
-
-                AppendLog($"Excel: {friendly}", Brushes.OrangeRed);
-                if (!silent)
-                    UI(() => MessageBox.Show(friendly, "Excel",
-                        MessageBoxButton.OK, MessageBoxImage.Error));
-                SetStatusError("Excel: ошибка — см. журнал");
-            }
             catch (Exception ex)
             {
                 AppendLog($"Excel: {ex.GetType().Name} — {ex.Message}", Brushes.OrangeRed);
                 if (!silent)
-                    UI(() => MessageBox.Show($"Ошибка: {ex.Message}", "Excel",
-                        MessageBoxButton.OK, MessageBoxImage.Error));
+                    UI(() => MessageBox.Show($"Ошибка Excel: {ex.Message}", "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
                 SetStatusError("Excel: ошибка — см. журнал");
             }
             finally
