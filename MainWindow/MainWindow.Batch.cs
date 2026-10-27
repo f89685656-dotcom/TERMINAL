@@ -126,8 +126,16 @@ namespace TERMINAL
 
             foreach (var job in _batchJobs)
             {
-                job.StatusText = "ожидает";
-                job.StatusColor = Brushes.LightGray;
+                if (job.IsEnabled)
+                {
+                    job.StatusText = "ожидает";
+                    job.StatusColor = Brushes.LightGray;
+                }
+                else
+                {
+                    job.StatusText = "пропущено";
+                    job.StatusColor = Brushes.LightGray; // или Brushes.DimGray, если хотите сделать неактивные более тусклыми
+                }
             }
 
             // Валидация
