@@ -11,7 +11,7 @@
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Themes/LightTheme.xaml"/>
+                <ResourceDictionary Source="/TERMINAL;component/Themes/LightTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Window.Resources>
@@ -22,11 +22,52 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TabControl x:Name="DeviceTabs" Grid.Row="0" Background="{DynamicResource WindowBackground}">
+        <TabControl x:Name="DeviceTabs" Grid.Row="0" 
+                    Background="{DynamicResource WindowBackground}"
+                    BorderBrush="{DynamicResource PanelBorder}">
+            <TabControl.Resources>
+                <Style TargetType="TabItem">
+                    <Setter Property="Background" Value="#2D2D30"/>
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="TabItem">
+                                <Border x:Name="Bd"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{DynamicResource PanelBorder}"
+                        BorderThickness="1,1,1,0"
+                        CornerRadius="2,2,0,0"
+                        Padding="6,2">
+                                    <ContentPresenter ContentSource="Header"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <!-- Активная вкладка -->
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#3F3F46"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                    <!-- Наведение -->
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#505050"/>
+                                    </Trigger>
+                                    <!-- Отключена -->
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Foreground" Value="Gray"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </TabControl.Resources>
 
             <!-- ═══ Общие ═══ -->
             <TabItem Header="Общие">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
@@ -58,7 +99,8 @@
 
             <!-- ═══ ST-351 ═══ -->
             <TabItem Header="ST-351">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
                         <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
                         <TextBox x:Name="FurnaceIpBox" Height="24" Padding="4,2"/>
@@ -92,7 +134,8 @@
 
             <!-- ═══ АГК ═══ -->
             <TabItem Header="АГК">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
                         <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
                         <TextBox x:Name="AgkIpBox" Height="24" Padding="4,2"/>
@@ -114,7 +157,8 @@
 
             <!-- ═══ СКТБ ЭлПА ═══ -->
             <TabItem Header="СКТБ ЭлПА">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
                         <TextBlock Text="Скрипт фильтрации:" FontWeight="Bold"/>
                         <ComboBox x:Name="SktbFilterScriptCombo" Height="24">
@@ -174,37 +218,32 @@
 
             <!-- ═══ Уведомления ═══ -->
             <TabItem Header="Уведомления">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
 
                         <!-- Блок с галочкой, списком и инструкцией -->
                         <Grid Margin="0,0,0,15">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
-                                <!-- Галочка -->
                                 <ColumnDefinition Width="*"/>
-                                <!-- Список (растягиваем) -->
                                 <ColumnDefinition Width="Auto"/>
-                                <!-- Кнопка -->
                             </Grid.ColumnDefinitions>
 
-                            <!-- 1. Галочка "Включить уведомления" -->
                             <CheckBox x:Name="NotificationsEnabledCheck"
-              Grid.Column="0"
-              Content="Включить уведомления"
-              FontWeight="Bold"
-              VerticalAlignment="Center"
-              Margin="0,0,15,0"/>
+                                      Grid.Column="0"
+                                      Content="Включить уведомления"
+                                      FontWeight="Bold"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,15,0"/>
 
-                            <!-- 2. Выпадающий список с подписью внутри -->
                             <Grid Grid.Column="1" Margin="0,0,5,0">
-                                <!-- Ширина 110, чтобы ужать по максимуму -->
                                 <ComboBox x:Name="NotifyChannelsCombo" 
-          Width="110" Height="26" 
-          HorizontalAlignment="Left"
-          VerticalAlignment="Center"
-          Padding="2,0"
-          IsTextSearchEnabled="False">
+                                          Width="110" Height="26" 
+                                          HorizontalAlignment="Left"
+                                          VerticalAlignment="Center"
+                                          Padding="2,0"
+                                          IsTextSearchEnabled="False">
                                     <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
                                         <CheckBox x:Name="ChkSendToTelegram" Content="Telegram" Margin="0,1" HorizontalAlignment="Stretch"/>
                                     </ComboBoxItem>
@@ -228,13 +267,12 @@
                                     </ComboBoxItem>
                                 </ComboBox>
 
-                                <!-- Подпись внутри списка -->
                                 <TextBlock x:Name="NotifyPlaceholderText" 
-               Text="Выбрать..." 
-               Foreground="Gray" 
-               VerticalAlignment="Center" 
-               Margin="5,0,0,0"
-               IsHitTestVisible="False">
+                                           Text="Выбрать..." 
+                                           Foreground="Gray" 
+                                           VerticalAlignment="Center" 
+                                           Margin="5,0,0,0"
+                                           IsHitTestVisible="False">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Visibility" Value="Visible"/>
@@ -248,13 +286,12 @@
                                 </TextBlock>
                             </Grid>
 
-                            <!-- 3. Кнопка "Инструкция" -->
                             <Button x:Name="NotificationHelpButton"
-            Grid.Column="2"
-            Content="❓ Инструкция"
-            Padding="10,2"
-            VerticalAlignment="Center"
-            Click="NotificationHelpButton_Click"/>
+                                    Grid.Column="2"
+                                    Content="❓ Инструкция"
+                                    Padding="10,2"
+                                    VerticalAlignment="Center"
+                                    Click="NotificationHelpButton_Click"/>
                         </Grid>
 
                         <TextBlock Text="Способ отправки:" FontWeight="Bold" Margin="0,0,0,5"/>
@@ -332,10 +369,10 @@
                         </StackPanel>
 
                         <Button x:Name="TestNotificationButton" 
-                    Content="Отправить тестовое сообщение" 
-                    Width="220" Height="30" Margin="0,20,0,0"
-                    HorizontalAlignment="Left"
-                    Click="TestNotificationButton_Click"/>
+                                Content="Отправить тестовое сообщение" 
+                                Width="220" Height="30" Margin="0,20,0,0"
+                                HorizontalAlignment="Left"
+                                Click="TestNotificationButton_Click"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

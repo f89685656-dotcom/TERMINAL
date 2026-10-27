@@ -1,11 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
-using System.Net;
 using System.IO.Ports;
+using System.Net;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Threading.Tasks;
+using System.Windows.Controls.Primitives;
 using TERMINAL.Notifications;
+using Windows.Devices.Enumeration;
 
 namespace TERMINAL.Windows
 {
@@ -13,6 +16,7 @@ namespace TERMINAL.Windows
     {
         private int _lastSelectedProvider = 0;
         private bool _isLoadingData = false;
+
         public DeviceSettingsWindow(int initialTab = 0,
                                      bool q2viewEnabled = false,
                                      bool timerEnabled = true,
@@ -28,14 +32,10 @@ namespace TERMINAL.Windows
         {
             InitializeComponent();
 
-            // Предотвращаем закрытие выпадающего списка при клике на галочку
-            // В конструкторе DeviceSettingsWindow
             NotifyChannelsCombo.AddHandler(ComboBox.MouseDownEvent, new System.Windows.Input.MouseButtonEventHandler((s, e) =>
             {
                 if (!NotifyChannelsCombo.IsDropDownOpen) return;
 
-                // Поднимаемся по визуальному дереву от e.OriginalSource
-                // и проверяем, не находимся ли мы внутри CheckBox
                 DependencyObject? current = e.OriginalSource as DependencyObject;
                 while (current != null && current is not CheckBox)
                 {
@@ -44,12 +44,10 @@ namespace TERMINAL.Windows
 
                 if (current is CheckBox)
                 {
-                    // Клик был по чекбоксу (или его содержимому) — не закрываем выпадающий список
                     e.Handled = true;
                 }
             }), true);
 
-            // ─── Общие настройки ───
             GeneralQ2ViewCheck.IsChecked = q2viewEnabled;
             GeneralTimerBox.Text = timerSeconds.ToString(CultureInfo.InvariantCulture);
             GeneralTimerBox.IsEnabled = q2viewEnabled;
@@ -67,18 +65,57 @@ namespace TERMINAL.Windows
                     if (!char.IsDigit(c)) { e.Handled = true; return; }
             };
 
-            // ─── Вкладка по умолчанию ───
             if (initialTab < 0 || initialTab >= DeviceTabs.Items.Count)
                 initialTab = 0;
             DeviceTabs.SelectedIndex = initialTab;
 
-            // ★ Применяем переданные значения платины ДО LoadCurrent,
-            //   чтобы LoadCurrent мог их перезаписать из MainWindow.Current (актуальнее).
-            //   Если MainWindow.Current == null — останутся переданные.
             PlatinumMtkCommandBox.Text = platinumMtkCommand;
 
-
             LoadCurrent();
+
+            ApplyThemeFromMainWindow();
+
+            Loaded += (s, e) =>
+            {
+                if (MainWindow.Current != null)
+                    MainWindow.Current.ThemeChanged += OnMainThemeChanged;
+            };
+        }
+
+        private void OnMainThemeChanged(bool isDark)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => ApplyTheme(isDark));
+                return;
+            }
+            ApplyTheme(isDark);
+        }
+
+        private void ApplyThemeFromMainWindow()
+        {
+            bool isDark = MainWindow.Current?.IsDarkTheme ?? false;
+            ApplyTheme(isDark);
+        }
+
+        public void ApplyTheme(bool isDark)
+        {
+            var themeUri = new Uri(
+                isDark ? "/TERMINAL;component/Themes/DarkTheme.xaml" : "/TERMINAL;component/Themes/LightTheme.xaml",
+                UriKind.Relative);
+            var themeDict = new ResourceDictionary { Source = themeUri };
+
+            if (Resources.MergedDictionaries.Count > 0)
+                Resources.MergedDictionaries[0] = themeDict;
+            else
+                Resources.MergedDictionaries.Add(themeDict);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            if (MainWindow.Current != null)
+                MainWindow.Current.ThemeChanged -= OnMainThemeChanged;
+            base.OnClosed(e);
         }
 
         private void LoadCurrent()
@@ -86,7 +123,6 @@ namespace TERMINAL.Windows
             var mw = MainWindow.Current;
             if (mw == null) return;
 
-            // ST-351
             FurnaceIpBox.Text = mw.FurnaceIp;
             FurnacePortBox.Text = mw.FurnacePort.ToString();
             FurnaceSetPointRegBox.Text = mw.FurnaceSetPointRegister.ToString();
@@ -97,13 +133,11 @@ namespace TERMINAL.Windows
             AutoStopFurnaceCheck.IsChecked = mw.AutoStopFurnace;
             ShowFurnaceCardCheck.IsChecked = mw.ShowFurnaceCard;
 
-            // АГК
             AgkIpBox.Text = mw.DeviceIp;
             AgkPortBox.Text = mw.DevicePort.ToString();
             AgkPressureTimeoutBox.Text = mw.AgkPressureTimeoutMinutes.ToString();
             ShowAgkCardCheck.IsChecked = mw.ShowAgkCard;
 
-            // СКТБ
             SktbFilterScriptCombo.SelectedIndex = mw.SktbFilterScript switch
             {
                 "Фильтр_данных_ПДС" => 0,
@@ -114,7 +148,6 @@ namespace TERMINAL.Windows
             };
             ShowSktbCardCheck.IsChecked = mw.ShowSktbCard;
 
-            // Платина
             PlatinumSourceCombo.SelectedIndex = mw.PlatinumSource switch
             {
                 "mit_803" => 1,
@@ -126,14 +159,10 @@ namespace TERMINAL.Windows
             PlatinumMtkCommandBox.Text = mw.PlatinumMtkCommand;
             PlatinumSourceCombo_SelectionChanged(null, null);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // УВЕДОМЛЕНИЯ
-            // ═══════════════════════════════════════════════════════════════════
             NotificationsEnabledCheck.IsChecked = mw.NotificationsEnabled;
             NotificationMethodCombo.SelectedIndex = mw.NotificationMethodIndex;
             NotificationMethodCombo_SelectionChanged(null, null);
 
-            // ★ ЗАГРУЖАЕМ ОБЩИЕ ГАЛОЧКИ
             ChkSendToTelegram.IsChecked = mw.NotifyTgEnabled;
             ChkSendToYandex.IsChecked = mw.NotifyYandexEnabled;
             ChkSendToMail.IsChecked = mw.NotifyMailEnabled;
@@ -142,39 +171,34 @@ namespace TERMINAL.Windows
             ChkSendToVk.IsChecked = mw.NotifyVkEnabled;
             ChkSendToMax.IsChecked = mw.NotifyMaxEnabled;
 
-            // Telegram
             TelegramTokenBox.Text = mw.TelegramToken;
             TelegramChatIdBox.Text = mw.TelegramChatId;
 
-            // ─── Уведомления: Email ───
-            // В LoadCurrent, там где читается EmailProviderCombo.SelectedIndex:
             _isLoadingData = true;
             EmailProviderCombo.SelectedIndex = mw.EmailProviderIndex;
-            _lastSelectedProvider = mw.EmailProviderIndex; // ★ добавить
+            _lastSelectedProvider = mw.EmailProviderIndex;
             _isLoadingData = false;
 
-            // Сервер и порт строго по провайдеру
             switch (mw.EmailProviderIndex)
             {
-                case 0: // Яндекс
+                case 0:
                     EmailHostBox.Text = "smtp.yandex.ru";
                     EmailPortBox.Text = "587";
                     break;
-                case 1: // Mail.ru
+                case 1:
                     EmailHostBox.Text = "smtp.mail.ru";
                     EmailPortBox.Text = "587";
                     break;
-                case 2: // Gmail
+                case 2:
                     EmailHostBox.Text = "smtp.gmail.com";
                     EmailPortBox.Text = "587";
                     break;
-                case 3: // Другой
+                case 3:
                     EmailHostBox.Text = mw.EmailCustomHost;
                     EmailPortBox.Text = mw.EmailCustomPort.ToString();
                     break;
             }
 
-            // Логин/пароль/получатель для выбранного провайдера
             switch (mw.EmailProviderIndex)
             {
                 case 0:
@@ -199,15 +223,12 @@ namespace TERMINAL.Windows
                     break;
             }
 
-            // VK
             VkTokenBox.Text = mw.VkToken;
             VkPeerIdBox.Text = mw.VkPeerId.ToString();
 
-            // MAX
             MaxTokenBox.Text = mw.MaxToken;
             MaxChatIdBox.Text = mw.MaxChatId;
 
-            // SMS
             SmsLoginBox.Text = mw.SmsLogin;
             SmsPassBox.Password = mw.SmsPass;
             SmsPhoneBox.Text = mw.SmsPhone;
@@ -224,7 +245,6 @@ namespace TERMINAL.Windows
             AutoStopFurnaceCheck.IsChecked = false;
             ShowFurnaceCardCheck.IsChecked = true;
 
-
             AgkIpBox.Text = "192.168.0.159";
             AgkPortBox.Text = "8888";
             AgkPressureTimeoutBox.Text = "5";
@@ -235,17 +255,15 @@ namespace TERMINAL.Windows
 
             GeneralQ2ViewCheck.IsChecked = false;
             GeneralTimerBox.Text = "25";
-            GeneralTimerBox.IsEnabled = false;   // таймер неактивен, пока q2view выключен
+            GeneralTimerBox.IsEnabled = false;
             GeneralAutoExcelCheck.IsChecked = true;
             GeneralTickTimingCheck.IsChecked = true;
             GeneralLogSlowTicksCheck.IsChecked = true;
 
-            // ─── Уведомления ───
             NotificationsEnabledCheck.IsChecked = false;
             TelegramTokenBox.Text = "";
             TelegramChatIdBox.Text = "";
             NotificationMethodCombo.SelectedIndex = 0;
-
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -260,10 +278,6 @@ namespace TERMINAL.Windows
 
             try
             {
-                // ═══════════════════════════════════════════════════════════════
-                // 1. ST-351
-                // ═══════════════════════════════════════════════════════════════
-
                 string furnaceIp = FurnaceIpBox.Text.Trim();
                 if (string.IsNullOrWhiteSpace(furnaceIp))
                     furnaceIp = "192.168.0.167";
@@ -295,10 +309,6 @@ namespace TERMINAL.Windows
                 bool autoStopFurnace = AutoStopFurnaceCheck.IsChecked == true;
                 bool showFurnaceCard = ShowFurnaceCardCheck.IsChecked == true;
 
-                // ═══════════════════════════════════════════════════════════════
-                // 2. АГК
-                // ═══════════════════════════════════════════════════════════════
-
                 string agkIp = AgkIpBox.Text.Trim();
                 if (string.IsNullOrWhiteSpace(agkIp))
                     agkIp = "192.168.0.159";
@@ -313,10 +323,6 @@ namespace TERMINAL.Windows
                     agkPressureTimeoutMinutes = 5;
 
                 bool showAgkCard = ShowAgkCardCheck.IsChecked == true;
-
-                // ═══════════════════════════════════════════════════════════════
-                // 3. СКТБ ЭлПА
-                // ═══════════════════════════════════════════════════════════════
 
                 string sktbFilterScript = "Filter_for_KOSA_GUI";
                 switch (SktbFilterScriptCombo.SelectedIndex)
@@ -344,10 +350,6 @@ namespace TERMINAL.Windows
                 if (string.IsNullOrEmpty(platinumMtkCommand))
                     platinumMtkCommand = "pass2 meas2? 2";
 
-                // ═══════════════════════════════════════════════════════════════
-                // 4. Общие настройки
-                // ═══════════════════════════════════════════════════════════════
-
                 bool q2viewEnabled = GeneralQ2ViewCheck.IsChecked == true;
                 bool timerEnabled = q2viewEnabled;
 
@@ -358,10 +360,6 @@ namespace TERMINAL.Windows
                 bool autoExcelEnabled = GeneralAutoExcelCheck.IsChecked == true;
                 bool tickTimingEnabled = GeneralTickTimingCheck.IsChecked == true;
                 bool logSlowTicksEnabled = GeneralLogSlowTicksCheck.IsChecked == true;
-
-                // ═══════════════════════════════════════════════════════════════
-                // 5. Применяем настройки приборов
-                // ═══════════════════════════════════════════════════════════════
 
                 mw.ApplyDeviceSettings(
                     furnaceIp, furnacePort,
@@ -375,10 +373,6 @@ namespace TERMINAL.Windows
                     platinumMtkCommand,
                     furnaceStabilizationTolerance);
 
-                // ═══════════════════════════════════════════════════════════════
-                // 6. Общие настройки
-                // ═══════════════════════════════════════════════════════════════
-
                 mw.ApplyGeneralSettings(
                     q2viewEnabled,
                     timerEnabled,
@@ -387,11 +381,6 @@ namespace TERMINAL.Windows
                     tickTimingEnabled,
                     logSlowTicksEnabled);
 
-                // ═══════════════════════════════════════════════════════════════
-                // 6.5. Уведомления
-                // ═══════════════════════════════════════════════════════════════
-
-                // ★ КЛЮЧЕВОЕ: сохраняем данные ТЕКУЩЕГО провайдера в MainWindow
                 SaveCurrentEmailFields(EmailProviderCombo.SelectedIndex);
 
                 long vkId = long.TryParse(VkPeerIdBox.Text, out long vid) ? vid : 0;
@@ -449,7 +438,6 @@ namespace TERMINAL.Windows
                 return;
             }
 
-            // ★ ДОБАВЛЯЕМ ЭТУ СТРОКУ
             var mw = MainWindow.Current;
             if (mw == null) return;
 
@@ -459,7 +447,6 @@ namespace TERMINAL.Windows
 
             try
             {
-                // 1. Telegram
                 if (ChkSendToTelegram.IsChecked == true)
                 {
                     string tgToken = TelegramTokenBox.Text.Trim();
@@ -476,7 +463,6 @@ namespace TERMINAL.Windows
                     }
                 }
 
-                // 2. Email (проверяем каждую галочку отдельно)
                 int emailPort = int.TryParse(EmailPortBox.Text, out int ep) ? ep : 587;
 
                 if (ChkSendToYandex.IsChecked == true)
@@ -515,7 +501,6 @@ namespace TERMINAL.Windows
                     sentAtLeastOne = true;
                 }
 
-                // 3. VK
                 if (ChkSendToVk.IsChecked == true)
                 {
                     string vkToken = VkTokenBox.Text.Trim();
@@ -530,7 +515,6 @@ namespace TERMINAL.Windows
                     }
                 }
 
-                // 4. MAX
                 if (ChkSendToMax.IsChecked == true)
                 {
                     string maxToken = MaxTokenBox.Text.Trim();
@@ -545,7 +529,6 @@ namespace TERMINAL.Windows
                     }
                 }
 
-                // Итог
                 if (sentAtLeastOne && errors.Count == 0)
                 {
                     MessageBox.Show(this, "Тестовые сообщения успешно отправлены во все выбранные каналы!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -615,18 +598,15 @@ namespace TERMINAL.Windows
         {
             PlatinumComPortCombo.Items.Clear();
 
-            // ★ Получаем реальные COM-порты, доступные в системе
             string[] ports = System.IO.Ports.SerialPort.GetPortNames();
 
             if (ports.Length == 0)
             {
-                // Если портов нет вообще, можно добавить заглушку или оставить пустым
                 PlatinumComPortCombo.Items.Add("Нет доступных портов");
                 PlatinumComPortCombo.SelectedIndex = 0;
                 return;
             }
 
-            // Сортируем порты по алфавиту (COM1, COM2, COM10 и т.д.)
             Array.Sort(ports, (x, y) =>
             {
                 int nx = int.TryParse(x.Replace("COM", ""), out int a) ? a : 0;
@@ -637,13 +617,10 @@ namespace TERMINAL.Windows
             foreach (var port in ports)
                 PlatinumComPortCombo.Items.Add(port);
 
-            // Пытаемся выбрать текущий порт. Если его нет в списке (например, отключен), выбираем первый доступный.
             PlatinumComPortCombo.SelectedItem = current;
 
             if (PlatinumComPortCombo.SelectedItem == null && PlatinumComPortCombo.Items.Count > 0)
             {
-                // Если сохраненного порта нет, но есть другие — выбираем первый
-                // Проверяем, что первый элемент не "Нет доступных портов"
                 if (PlatinumComPortCombo.Items[0].ToString() != "Нет доступных портов")
                     PlatinumComPortCombo.SelectedIndex = 0;
             }
@@ -671,29 +648,27 @@ namespace TERMINAL.Windows
             if (TelegramPanel == null || EmailPanel == null || VkPanel == null || MaxPanel == null || SmsPanel == null)
                 return;
 
-            // 1. Скрываем ВСЕ панели
             TelegramPanel.Visibility = Visibility.Collapsed;
             EmailPanel.Visibility = Visibility.Collapsed;
             VkPanel.Visibility = Visibility.Collapsed;
             MaxPanel.Visibility = Visibility.Collapsed;
             SmsPanel.Visibility = Visibility.Collapsed;
 
-            // 2. Показываем нужную
             switch (NotificationMethodCombo.SelectedIndex)
             {
-                case 0: // Telegram
+                case 0:
                     TelegramPanel.Visibility = Visibility.Visible;
                     break;
-                case 1: // Email
+                case 1:
                     EmailPanel.Visibility = Visibility.Visible;
                     break;
-                case 2: // VK
+                case 2:
                     VkPanel.Visibility = Visibility.Visible;
                     break;
-                case 3: // MAX
+                case 3:
                     MaxPanel.Visibility = Visibility.Visible;
                     break;
-                case 4: // SMS
+                case 4:
                     SmsPanel.Visibility = Visibility.Visible;
                     break;
             }
@@ -706,32 +681,29 @@ namespace TERMINAL.Windows
 
             int newIndex = EmailProviderCombo.SelectedIndex;
 
-            // ★ Сохраняем данные СТАРОГО провайдера перед переключением
             if (_lastSelectedProvider != newIndex)
             {
                 SaveCurrentEmailFields(_lastSelectedProvider);
                 _lastSelectedProvider = newIndex;
             }
 
-            // Загружаем данные НОВОГО провайдера
             LoadEmailFields(newIndex);
 
-            // Заполняем хост и порт
             switch (newIndex)
             {
-                case 0: // Яндекс
+                case 0:
                     EmailHostBox.Text = "smtp.yandex.ru";
                     EmailPortBox.Text = "587";
                     break;
-                case 1: // Mail.ru
+                case 1:
                     EmailHostBox.Text = "smtp.mail.ru";
                     EmailPortBox.Text = "587";
                     break;
-                case 2: // Gmail
+                case 2:
                     EmailHostBox.Text = "smtp.gmail.com";
                     EmailPortBox.Text = "587";
                     break;
-                case 3: // Другой
+                case 3:
                     EmailHostBox.Text = MainWindow.Current?.EmailCustomHost ?? "";
                     EmailPortBox.Text = (MainWindow.Current?.EmailCustomPort ?? 587).ToString();
                     break;
@@ -809,7 +781,7 @@ namespace TERMINAL.Windows
 
             switch (selectedIndex)
             {
-                case 0: // Telegram
+                case 0:
                     instruction =
         @"🤖 ИНСТРУКЦИЯ ДЛЯ TELEGRAM:
 
@@ -830,7 +802,7 @@ namespace TERMINAL.Windows
 ⚠️ ВАЖНО: Если вы в России, Telegram API может быть заблокирован. Для корректной работы включите VPN (в программе Happ лучше использовать режим TUN или Системный прокси) перед отправкой сообщений.";
                     break;
 
-                case 1: // Email (SMTP)
+                case 1:
                     instruction =
         @"📧 ИНСТРУКЦИЯ ДЛЯ EMAIL:
 
@@ -846,7 +818,7 @@ namespace TERMINAL.Windows
    • Введите адрес почты, на который должны приходить уведомления.";
                     break;
 
-                case 2: // VK
+                case 2:
                     instruction =
         @"💬 ИНСТРУКЦИЯ ДЛЯ ВКОНТАКТЕ:
 
@@ -862,7 +834,7 @@ namespace TERMINAL.Windows
 8. ОБЯЗАТЕЛЬНО: Напишите любое сообщение в эту группу от своего личного профиля. Бот создаст диалог с вами (выглядит как беседа с ID, начинающимся на 2000000000). После этого он сможет отвечать вам.";
                     break;
 
-                case 3: // MAX
+                case 3:
                     instruction =
         @"🤖 ИНСТРУКЦИЯ ДЛЯ МАКС (max.ru):
 
@@ -873,7 +845,7 @@ namespace TERMINAL.Windows
 3. Вставьте токен в поле 'Токен бота MAX', укажите Chat ID и нажмите 'Тест'.";
                     break;
 
-                case 4: // SMS
+                case 4:
                     instruction =
         @"📱 ИНСТРУКЦИЯ ДЛЯ SMS (SMSC.ru):
 
@@ -887,7 +859,6 @@ namespace TERMINAL.Windows
                     break;
             }
 
-            // Создаем кастомное окно для инструкции
             var helpWindow = new Window
             {
                 Title = "Инструкция по настройке уведомлений",
@@ -951,10 +922,8 @@ namespace TERMINAL.Windows
 
         private void NotifyCheckBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            // Клик по чекбоксу — не даём ComboBoxItem его обработать
             e.Handled = true;
 
-            // Но сам чекбокс должен переключиться
             if (sender is CheckBox cb)
                 cb.IsChecked = !(cb.IsChecked == true);
         }

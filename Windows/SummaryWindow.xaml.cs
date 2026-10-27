@@ -43,6 +43,55 @@ namespace TERMINAL.Windows
                 FontStyle = FontStyles.Italic,
                 Foreground = Brushes.Gray
             };
+
+            // ★ Применяем текущую тему из MainWindow
+            ApplyThemeFromMainWindow();
+
+            // ★ Подписываемся на смену темы в MainWindow
+            Loaded += (s, e) =>
+            {
+                if (MainWindow.Current != null)
+                    MainWindow.Current.ThemeChanged += OnMainThemeChanged;
+            };
+        }
+
+        // ═══════════════════════════════════════════════════
+        // Тема
+        // ═══════════════════════════════════════════════════
+
+        private void OnMainThemeChanged(bool isDark)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => ApplyTheme(isDark));
+                return;
+            }
+            ApplyTheme(isDark);
+        }
+
+        private void ApplyThemeFromMainWindow()
+        {
+            bool isDark = MainWindow.Current?.IsDarkTheme ?? false;
+            ApplyTheme(isDark);
+        }
+
+        public void ApplyTheme(bool isDark)
+        {
+            var themeUri = new Uri(
+            isDark ? "/TERMINAL;component/Themes/DarkTheme.xaml" : "/TERMINAL;component/Themes/LightTheme.xaml", UriKind.Relative);
+            var themeDict = new ResourceDictionary { Source = themeUri };
+
+            if (Resources.MergedDictionaries.Count > 0)
+                Resources.MergedDictionaries[0] = themeDict;
+            else
+                Resources.MergedDictionaries.Add(themeDict);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            if (MainWindow.Current != null)
+                MainWindow.Current.ThemeChanged -= OnMainThemeChanged;
+            base.OnClosed(e);
         }
 
         // ═══════════════════════════════════════════════════
@@ -56,7 +105,6 @@ namespace TERMINAL.Windows
             }
             catch (Exception ex)
             {
-                // ✅ ИСПРАВЛЕНО: не глотаем исключение молча
                 Debug.WriteLine($"[SummaryWindow] LogToMainWindow: {ex.Message}");
             }
         }
@@ -64,7 +112,6 @@ namespace TERMINAL.Windows
         // ═══════════════════════════════════════════════════
         // Обновить (перечитать .xlsm)
         // ═══════════════════════════════════════════════════
-        // ✅ ИСПРАВЛЕНО: async Task вместо async void
         private async Task RefreshFromXlsxAsync()
         {
             if (string.IsNullOrWhiteSpace(_dataFolder) || !Directory.Exists(_dataFolder))
@@ -90,17 +137,12 @@ namespace TERMINAL.Windows
                     return;
                 }
 
-                LogToMainWindow($"Сводка: начало чтения {files.Count} файлов",
-                                Brushes.Blue);
-
-                // ═══════════════════════════════════════════════════════════════
-                // ★ Читаем все файлы ОДНИМ запуском Excel в фоне
-                // ═══════════════════════════════════════════════════════════════
+                LogToMainWindow($"Сводка: начало чтения {files.Count} файлов", Brushes.Blue);
 
                 LoadProgressBar.Visibility = Visibility.Visible;
                 LoadProgressText.Visibility = Visibility.Visible;
                 LoadProgressBar.Minimum = 0;
-                LoadProgressBar.Maximum = files.Count*2;
+                LoadProgressBar.Maximum = files.Count * 2;
                 LoadProgressBar.Value = 0;
 
                 var batch = new SummaryBatch
@@ -111,16 +153,12 @@ namespace TERMINAL.Windows
 
                 try
                 {
-                    // ★ Вызов в фоне — UI не блокируется
                     var sensors = await Task.Run(() =>
                     {
                         return SummaryService.ReadAllFiles(
                             files.ToArray(),
                             progress: (index, total, fileName, success, error) =>
                             {
-                                // ★ Двухэтапный прогресс:
-                                //   1) датчики — index 0..N-1
-                                //   2) ГСТ     — index 0..N-1, но глобально идут 0..2N-1
                                 int globalIndex = fileName.Contains("(ГСТ)")
                                     ? files.Count + index
                                     : index;
@@ -145,20 +183,16 @@ namespace TERMINAL.Windows
                             });
                     });
 
-                    // ★ ГСТ уже прочитан внутри ReadAllFiles (в том же STA-потоке).
-                    //   Здесь только собираем результаты — без COM.
                     for (int i = 0; i < sensors.Length; i++)
                     {
                         var sensor = sensors[i];
-                        if (sensor == null) continue;   // ошибка уже залогирована
-
+                        if (sensor == null) continue;
                         batch.Sensors.Add(sensor);
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogToMainWindow($"Сводка: критическая ошибка чтения — {ex.Message}",
-                                    Brushes.Red);
+                    LogToMainWindow($"Сводка: критическая ошибка чтения — {ex.Message}", Brushes.Red);
                     MessageBox.Show($"Ошибка чтения .xlsm:\n{ex.Message}",
                         "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
@@ -181,8 +215,7 @@ namespace TERMINAL.Windows
             }
             catch (Exception ex)
             {
-                LogToMainWindow($"Сводка: критическая ошибка — {ex.Message}",
-                                Brushes.Red);
+                LogToMainWindow($"Сводка: критическая ошибка — {ex.Message}", Brushes.Red);
                 MessageBox.Show($"Ошибка чтения .xlsm:\n{ex.Message}",
                     "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -247,8 +280,7 @@ namespace TERMINAL.Windows
 
                 CsvService.SaveToCsv(_currentBatch, fullPath);
 
-                LogToMainWindow($"Сводка: сохранён CSV {fileName}",
-                                Brushes.Green);
+                LogToMainWindow($"Сводка: сохранён CSV {fileName}", Brushes.Green);
 
                 MessageBox.Show($"Сохранено:\n{fullPath}",
                     "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -265,8 +297,6 @@ namespace TERMINAL.Windows
         // ═══════════════════════════════════════════════════
         // Обновить (по кнопке)
         // ═══════════════════════════════════════════════════
-        // ✅ ИСПРАВЛЕНО: async void только для обработчика события (это нормально),
-        // внутри await на async Task
         private async void Refresh_Click(object sender, RoutedEventArgs e)
         {
             if (_isLoadedFromCsv)
@@ -284,13 +314,12 @@ namespace TERMINAL.Windows
             }
             finally
             {
-                // ✅ ИСПРАВЛЕНО: возвращаем кнопку в строй
                 RefreshButton.IsEnabled = !_isLoadedFromCsv;
             }
         }
 
         // ═══════════════════════════════════════════════════
-        // Печать
+        // Печать (без изменений в цветах — печать всегда на белом фоне)
         // ═══════════════════════════════════════════════════
         private void Print_Click(object sender, RoutedEventArgs e)
         {
@@ -313,7 +342,6 @@ namespace TERMINAL.Windows
 
             try
             {
-                // ─── Принудительно альбомная ориентация ───
                 try
                 {
                     var ticket = pd.PrintTicket;
@@ -324,7 +352,6 @@ namespace TERMINAL.Windows
                 {
                     LogToMainWindow($"Сводка: не удалось установить альбомную ориентацию — {ex.Message}",
                                     Brushes.OrangeRed);
-                    // Продолжаем с тем, что есть
                 }
 
                 FixedDocument doc;
@@ -343,13 +370,11 @@ namespace TERMINAL.Windows
                     ((IDocumentPaginatorSource)doc).DocumentPaginator,
                     printAll ? "Сводка всех датчиков" : "Сводка датчика");
 
-                LogToMainWindow($"Сводка: отправлено на печать",
-                                Brushes.Green);
+                LogToMainWindow($"Сводка: отправлено на печать", Brushes.Green);
             }
             catch (Exception ex)
             {
-                LogToMainWindow($"Сводка: ошибка печати — {ex.Message}",
-                                Brushes.OrangeRed);
+                LogToMainWindow($"Сводка: ошибка печати — {ex.Message}", Brushes.OrangeRed);
                 MessageBox.Show($"Ошибка печати:\n{ex.Message}");
             }
         }
@@ -399,7 +424,7 @@ namespace TERMINAL.Windows
         }
 
         // ═══════════════════════════════════════════════════
-        // Страница для печати
+        // Страница для печати (без изменений — печать на белом фоне)
         // ═══════════════════════════════════════════════════
         private FixedPage BuildPageForSensor(SensorSummary sensor, double pageWidth, double pageHeight)
         {
@@ -408,22 +433,22 @@ namespace TERMINAL.Windows
                 Width = pageWidth - 60,
                 Margin = new Thickness(35, 35, 25, 25),
                 RowDefinitions =
-                    {
-                        new RowDefinition { Height = GridLength.Auto },   // 0: шапка
-                        new RowDefinition { Height = GridLength.Auto },   // 1: гистерезисы
-                        new RowDefinition { Height = GridLength.Auto },   // 2: ТЧХ
-                        new RowDefinition { Height = new GridLength(280) }, // 3: погрешность + ГСТ (фиксированная высота)
-                    }
+                {
+                    new RowDefinition { Height = GridLength.Auto },
+                    new RowDefinition { Height = GridLength.Auto },
+                    new RowDefinition { Height = GridLength.Auto },
+                    new RowDefinition { Height = new GridLength(280) },
+                }
             };
 
-            // ─── 0. Шапка ───
             var header = new StackPanel { Margin = new Thickness(0, 0, 0, 4) };
 
             header.Children.Add(new TextBlock
             {
                 Text = $"Партия: {_currentBatch?.BatchName ?? "—"}",
                 FontSize = 11,
-                FontWeight = FontWeights.Bold
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.Black
             });
 
             header.Children.Add(new TextBlock
@@ -439,15 +464,14 @@ namespace TERMINAL.Windows
             Grid.SetRow(header, 0);
             root.Children.Add(header);
 
-            // ─── 1. Гистерезисы (2 колонки) ───
             var hystGrid = new Grid
             {
                 ColumnDefinitions =
-        {
-            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-            new ColumnDefinition { Width = new GridLength(15) },
-            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-        },
+                {
+                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                    new ColumnDefinition { Width = new GridLength(15) },
+                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                },
                 Margin = new Thickness(0, 0, 0, 4)
             };
 
@@ -457,6 +481,7 @@ namespace TERMINAL.Windows
                 Text = "Гистерезис градуировки",
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
+                Foreground = Brushes.Black,
                 Margin = new Thickness(0, 0, 0, 2)
             });
             gradHyst.Children.Add(BuildTableGrid(sensor.GradHysteresis, forPrint: true));
@@ -469,6 +494,7 @@ namespace TERMINAL.Windows
                 Text = "Гистерезис проверки",
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
+                Foreground = Brushes.Black,
                 Margin = new Thickness(0, 0, 0, 2)
             });
             checkHyst.Children.Add(BuildTableGrid(sensor.CheckHysteresis, forPrint: true));
@@ -478,13 +504,13 @@ namespace TERMINAL.Windows
             Grid.SetRow(hystGrid, 1);
             root.Children.Add(hystGrid);
 
-            // ─── 2. ТЧХ (1-3 колонки) ───
             var tchxHost = new StackPanel { Margin = new Thickness(0, 0, 0, 4) };
             tchxHost.Children.Add(new TextBlock
             {
                 Text = $"ТЧХ — {sensor.Tchx?.ChannelCount ?? "—"}",
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
+                Foreground = Brushes.Black,
                 Margin = new Thickness(0, 0, 0, 2)
             });
 
@@ -515,6 +541,7 @@ namespace TERMINAL.Windows
                             Text = $"Термоканал {i + 1}",
                             FontSize = 9,
                             FontWeight = FontWeights.Bold,
+                            Foreground = Brushes.Black,
                             Margin = new Thickness(0, 0, 0, 1)
                         });
                     }
@@ -523,10 +550,7 @@ namespace TERMINAL.Windows
                         col.Children.Add(BuildTchxTable(sensor.Tchx.MainTables[i], "Основная", forPrint: true));
 
                     if (i < sensor.Tchx.CheckTables.Count)
-                    {
-                        // без заголовка "Проверка" — просто вторая таблица с отступом
                         col.Children.Add(BuildTchxTable(sensor.Tchx.CheckTables[i], "Проверка", forPrint: true));
-                    }
 
                     Grid.SetColumn(col, i * 2);
                     tchxGrid.Children.Add(col);
@@ -548,31 +572,29 @@ namespace TERMINAL.Windows
             Grid.SetRow(tchxHost, 2);
             root.Children.Add(tchxHost);
 
-            // ─── 3. Погрешность + ГСТ (2 колонки 50/50) ───
             var bottomGrid = new Grid
             {
                 ColumnDefinitions =
-        {
-            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-            new ColumnDefinition { Width = new GridLength(15) },
-            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-        }
+                {
+                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                    new ColumnDefinition { Width = new GridLength(15) },
+                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                }
             };
 
-            // 3.1 Погрешность
             var errHost = new StackPanel();
             errHost.Children.Add(new TextBlock
             {
                 Text = "Погрешность",
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
+                Foreground = Brushes.Black,
                 Margin = new Thickness(0, 0, 0, 2)
             });
             errHost.Children.Add(BuildTableGrid(sensor.Errors, forPrint: true));
             Grid.SetColumn(errHost, 0);
             bottomGrid.Children.Add(errHost);
 
-            // 3.2 ГСТ
             var gstHost = new StackPanel
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -587,7 +609,8 @@ namespace TERMINAL.Windows
                     Text = $"ГСТ (резонатор {sensor.Gst.ResonatorModel} - № {sensor.Gst.ResonatorNumber})",
                     FontSize = 10,
                     FontWeight = FontWeights.Bold,
-                    HorizontalAlignment = HorizontalAlignment.Center,   // ← по центру
+                    Foreground = Brushes.Black,
+                    HorizontalAlignment = HorizontalAlignment.Center,
                     Margin = new Thickness(0, 0, 0, 2)
                 });
 
@@ -612,8 +635,8 @@ namespace TERMINAL.Windows
                 {
                     Child = image,
                     Stretch = Stretch.Uniform,
-                    StretchDirection = StretchDirection.DownOnly,   // ← не растягивать больше
-                    MaxHeight = 250,                                 // ← ограничение
+                    StretchDirection = StretchDirection.DownOnly,
+                    MaxHeight = 250,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     VerticalAlignment = VerticalAlignment.Top
                 };
@@ -637,7 +660,6 @@ namespace TERMINAL.Windows
             Grid.SetRow(bottomGrid, 3);
             root.Children.Add(bottomGrid);
 
-            // ─── Сборка FixedPage ───
             var page = new FixedPage
             {
                 Width = pageWidth,
@@ -645,7 +667,6 @@ namespace TERMINAL.Windows
                 Background = Brushes.White
             };
 
-            // ─── явное выравнивание по верхнему-левому углу ───
             FixedPage.SetLeft(root, 0);
             FixedPage.SetTop(root, 0);
             FixedPage.SetRight(root, 0);
@@ -657,16 +678,13 @@ namespace TERMINAL.Windows
         }
 
         // ═══════════════════════════════════════════════════
-        // Выбор датчика
+        // Выбор датчика / переключение вкладки
         // ═══════════════════════════════════════════════════
         private void SummaryGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateDetailPanel();
         }
 
-        // ═══════════════════════════════════════════════════
-        // Переключение вкладки
-        // ═══════════════════════════════════════════════════
         private void DetailTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateDetailPanel();
@@ -703,7 +721,6 @@ namespace TERMINAL.Windows
                 SummaryGrid.SelectedIndex = 0;
         }
 
-        // ✅ ДОБАВЛЕНО: хелпер для безопасного получения проверки по индексу
         private static double? GetCheck(double?[]? arr, int index)
         {
             if (arr == null || index < 0 || index >= arr.Length)
@@ -712,7 +729,7 @@ namespace TERMINAL.Windows
         }
 
         // ═══════════════════════════════════════════════════
-        // Панель «Гистерезис» (2 таблицы)
+        // Панель «Гистерезис»
         // ═══════════════════════════════════════════════════
         private UIElement BuildHysteresisPanel(SummaryRow row)
         {
@@ -772,7 +789,6 @@ namespace TERMINAL.Windows
                 };
             }
 
-            // ─── 1. Определяем, какие колонки вообще имеют данные ───
             bool[] hasData = new bool[table.ColumnHeaders.Count];
             for (int c = 0; c < table.ColumnHeaders.Count; c++)
             {
@@ -786,7 +802,6 @@ namespace TERMINAL.Windows
                 }
             }
 
-            // ─── 2. Считаем maxPos / maxNeg по ВСЕЙ таблице (все колонки) ───
             double maxPos = 0, maxNeg = 0;
             for (int r = 0; r < table.Values.GetLength(0); r++)
             {
@@ -799,9 +814,8 @@ namespace TERMINAL.Windows
                 }
             }
 
-            // ─── 3. Ширина «температурной» колонки и позиция оси ───
-            double cellWidth = forPrint ? 55 : 70;   // столько же, сколько было в Width
-            double axisPos;                          // пикселей от левого края ячейки
+            double cellWidth = forPrint ? 55 : 70;
+            double axisPos;
 
             double total = maxPos + maxNeg;
             if (total < 1e-9)
@@ -824,7 +838,6 @@ namespace TERMINAL.Windows
             double leftHalf = axisPos;
             double rightHalf = cellWidth - axisPos;
 
-            // ─── 4. Конструируем DataGrid ───
             var grid = new DataGrid
             {
                 AutoGenerateColumns = false,
@@ -838,13 +851,21 @@ namespace TERMINAL.Windows
                 HorizontalAlignment = HorizontalAlignment.Left
             };
 
+            // ★ Тёмная тема: цвета через DynamicResource
+            grid.SetResourceReference(DataGrid.BackgroundProperty, "PanelBackground");
+            grid.SetResourceReference(DataGrid.ForegroundProperty, "TextForeground");
+            grid.SetResourceReference(DataGrid.BorderBrushProperty, "PanelBorder");
+            grid.SetResourceReference(DataGrid.HorizontalGridLinesBrushProperty, "PanelBorder");
+            grid.SetResourceReference(DataGrid.VerticalGridLinesBrushProperty, "PanelBorder");
+            grid.SetResourceReference(DataGrid.RowBackgroundProperty, "PanelBackground");
+            grid.SetResourceReference(DataGrid.AlternatingRowBackgroundProperty, "WindowBackground");
+
             var contextMenu = new ContextMenu();
             var miCopy = new MenuItem { Header = "Копировать" };
             miCopy.Click += (s, ev) => CopyTableToClipboard(grid);
             contextMenu.Items.Add(miCopy);
             grid.ContextMenu = contextMenu;
 
-            // ─── Колонка P ───
             grid.Columns.Add(new DataGridTextColumn
             {
                 Header = "P, кгс/см²",
@@ -852,7 +873,6 @@ namespace TERMINAL.Windows
                 Width = forPrint ? 80 : 110
             });
 
-            // ─── Температурные колонки ───
             for (int c = 0; c < table.ColumnHeaders.Count; c++)
             {
                 if (!hasData[c]) continue;
@@ -863,7 +883,6 @@ namespace TERMINAL.Windows
                 var template = new DataTemplate();
                 var gridFactory = new FrameworkElementFactory(typeof(Grid));
 
-                // ★★ АБСОЛЮТНЫЕ ширины — ось не поедет
                 var colLeft = new FrameworkElementFactory(typeof(ColumnDefinition));
                 colLeft.SetValue(ColumnDefinition.WidthProperty,
                     new GridLength(leftHalf, GridUnitType.Pixel));
@@ -875,7 +894,6 @@ namespace TERMINAL.Windows
                 gridFactory.AppendChild(colLeft);
                 gridFactory.AppendChild(colRight);
 
-                // Левая полоска (отрицательные), прижата к оси справа
                 var barLeftFactory = new FrameworkElementFactory(typeof(Border));
                 barLeftFactory.SetValue(Grid.ColumnProperty, 0);
                 barLeftFactory.SetValue(Border.HorizontalAlignmentProperty,
@@ -885,8 +903,8 @@ namespace TERMINAL.Windows
                     {
                         Converter = new TERMINAL.Converters.ValueToLeftBarWidthConverter
                         {
-                            MaxWidth = leftHalf,       // ★ не константа
-                            MaxAbsValue = maxNeg       // ★ общий по таблице
+                            MaxWidth = leftHalf,
+                            MaxAbsValue = maxNeg
                         }
                     });
                 barLeftFactory.SetBinding(Border.BackgroundProperty,
@@ -898,7 +916,6 @@ namespace TERMINAL.Windows
                 barLeftFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
                 gridFactory.AppendChild(barLeftFactory);
 
-                // Правая полоска (положительные), прижата к оси слева
                 var barRightFactory = new FrameworkElementFactory(typeof(Border));
                 barRightFactory.SetValue(Grid.ColumnProperty, 1);
                 barRightFactory.SetValue(Border.HorizontalAlignmentProperty,
@@ -908,8 +925,8 @@ namespace TERMINAL.Windows
                     {
                         Converter = new TERMINAL.Converters.ValueToRightBarWidthConverter
                         {
-                            MaxWidth = rightHalf,      // ★ не константа
-                            MaxAbsValue = maxPos       // ★ общий по таблице
+                            MaxWidth = rightHalf,
+                            MaxAbsValue = maxPos
                         }
                     });
                 barRightFactory.SetBinding(Border.BackgroundProperty,
@@ -921,14 +938,17 @@ namespace TERMINAL.Windows
                 barRightFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
                 gridFactory.AppendChild(barRightFactory);
 
-                // Текст поверх обеих колонок
                 var textFactory = new FrameworkElementFactory(typeof(TextBlock));
                 textFactory.SetBinding(TextBlock.TextProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
                         StringFormat = "0.000"
                     });
-                textFactory.SetValue(TextBlock.ForegroundProperty, Brushes.Black);
+
+                // ★ Тёмная тема: цвет текста через DynamicResource
+                textFactory.SetValue(TextBlock.ForegroundProperty,
+                    new DynamicResourceExtension("TextForeground"));
+
                 textFactory.SetValue(TextBlock.HorizontalAlignmentProperty,
                     HorizontalAlignment.Center);
                 textFactory.SetValue(TextBlock.VerticalAlignmentProperty,
@@ -944,14 +964,13 @@ namespace TERMINAL.Windows
                 {
                     Header = table.ColumnHeaders[c].ToString("0.##"),
                     CellTemplate = template,
-                    Width = new DataGridLength(cellWidth),   // ★ фиксированная ширина
+                    Width = new DataGridLength(cellWidth),
                     SourceColumnIndex = colIndex
                 };
 
                 grid.Columns.Add(column);
             }
 
-            // ─── Строки ───
             var rows = new List<object>();
             for (int r = 0; r < table.Values.GetLength(0); r++)
             {
@@ -1077,25 +1096,31 @@ namespace TERMINAL.Windows
             return root;
         }
 
-
+        // ═══════════════════════════════════════════════════
+        // Панель ГСТ
+        // ═══════════════════════════════════════════════════
         private UIElement BuildGstPanel(SummaryRow row)
         {
             var gst = row.Source.Gst;
 
-            // ─── Grid вместо StackPanel: картинка занимает всё доступное место ───
             var root = new Grid();
-            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // 0: шапка
-            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // 1: путь
-            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });  // 2: картинка
-            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });                       // 3: кнопка
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             if (gst == null || !gst.IsOk)
             {
-                // ... сюда вставьте код для случая ошибки как раньше ...
+                root.Children.Add(new TextBlock
+                {
+                    Text = "ГСТ отсутствует",
+                    Margin = new Thickness(10),
+                    FontStyle = FontStyles.Italic,
+                    Foreground = Brushes.Gray
+                });
                 return root;
             }
 
-            // Шапка
             var header = new TextBlock
             {
                 Text = $"Резонатор: {gst.ResonatorNumber}    Модель: {gst.ResonatorModel}",
@@ -1106,7 +1131,6 @@ namespace TERMINAL.Windows
             Grid.SetRow(header, 0);
             root.Children.Add(header);
 
-            // Путь к файлу
             var pathText = new TextBlock
             {
                 Text = gst.FilePath,
@@ -1118,7 +1142,6 @@ namespace TERMINAL.Windows
             Grid.SetRow(pathText, 1);
             root.Children.Add(pathText);
 
-            // Картинка — в Viewbox, растягивается по всей доступной высоте
             if (gst.ChartPng != null && gst.ChartPng.Length > 0)
             {
                 var bitmap = new BitmapImage();
@@ -1152,7 +1175,6 @@ namespace TERMINAL.Windows
                 root.Children.Add(viewbox);
             }
 
-            // Кнопка
             var openBtn = new Button
             {
                 Content = "Открыть источник в Excel",
@@ -1187,9 +1209,6 @@ namespace TERMINAL.Windows
         // ═══════════════════════════════════════════════════
         // Таблица ТЧХ
         // ═══════════════════════════════════════════════════
-        // ═══════════════════════════════════════════════════
-        // Таблица ТЧХ
-        // ═══════════════════════════════════════════════════
         private UIElement BuildTchxTable(TchxTable tchx, string defaultTitle, bool forPrint = false)
         {
             var stack = new StackPanel { Orientation = Orientation.Vertical };
@@ -1219,16 +1238,23 @@ namespace TERMINAL.Windows
                 HorizontalAlignment = HorizontalAlignment.Left
             };
 
+            // ★ Тёмная тема: цвета через DynamicResource
+            grid.SetResourceReference(DataGrid.BackgroundProperty, "PanelBackground");
+            grid.SetResourceReference(DataGrid.ForegroundProperty, "TextForeground");
+            grid.SetResourceReference(DataGrid.BorderBrushProperty, "PanelBorder");
+            grid.SetResourceReference(DataGrid.HorizontalGridLinesBrushProperty, "PanelBorder");
+            grid.SetResourceReference(DataGrid.VerticalGridLinesBrushProperty, "PanelBorder");
+            grid.SetResourceReference(DataGrid.RowBackgroundProperty, "PanelBackground");
+            grid.SetResourceReference(DataGrid.AlternatingRowBackgroundProperty, "WindowBackground");
+
             var contextMenu = new ContextMenu();
             var miCopy = new MenuItem { Header = "Копировать" };
             miCopy.Click += (s, ev) => CopyTchxTableToClipboard(grid, tchx);
             contextMenu.Items.Add(miCopy);
             grid.ContextMenu = contextMenu;
 
-            // ─── Ширина колонки ΔF/Δt (фиксированная!) ───
             double cellWidth = forPrint ? 90 : 130;
 
-            // ─── Считаем maxPos и maxNeg по последней колонке (ΔF / Δt) ───
             double maxPos = 0, maxNeg = 0;
             int lastCol = 3;
             for (int r = 0; r < tchx.Values.GetLength(0); r++)
@@ -1240,13 +1266,11 @@ namespace TERMINAL.Windows
                 if (v.Value < 0 && Math.Abs(v.Value) > maxNeg) maxNeg = Math.Abs(v.Value);
             }
 
-            // ─── Позиция оси внутри ячейки (в пикселях) ───
             double total = maxPos + maxNeg;
-            double axisPos; // от левого края ячейки
+            double axisPos;
 
             if (total < 1e-9)
             {
-                // все нули / пусто — ось по центру
                 axisPos = cellWidth / 2.0;
                 maxPos = maxNeg = 1.0;
             }
@@ -1254,12 +1278,10 @@ namespace TERMINAL.Windows
             {
                 axisPos = cellWidth * (maxNeg / total);
 
-                // не даём оси прилипнуть к самому краю — минимум 8px
                 const double minPad = 8.0;
                 if (axisPos < minPad) axisPos = minPad;
                 if (axisPos > cellWidth - minPad) axisPos = cellWidth - minPad;
 
-                // защита от нуля в MaxAbsValue
                 if (maxNeg < 1e-9) maxNeg = maxPos;
                 if (maxPos < 1e-9) maxPos = maxNeg;
             }
@@ -1267,7 +1289,6 @@ namespace TERMINAL.Windows
             double leftHalf = axisPos;
             double rightHalf = cellWidth - axisPos;
 
-            // ─── Колонки 0..2 — обычные ───
             for (int c = 0; c < 3; c++)
             {
                 var col = new DataGridTextColumn
@@ -1282,7 +1303,6 @@ namespace TERMINAL.Windows
                 grid.Columns.Add(col);
             }
 
-            // ─── Колонка 3 — ΔF/Δt с плавающей осью ───
             {
                 int colIndex = 3;
                 string bindingPath = $"C{colIndex}";
@@ -1290,7 +1310,6 @@ namespace TERMINAL.Windows
                 var template = new DataTemplate();
                 var gridFactory = new FrameworkElementFactory(typeof(Grid));
 
-                // 2 колонки: [axisPos] | [cellWidth - axisPos]
                 var colLeft = new FrameworkElementFactory(typeof(ColumnDefinition));
                 colLeft.SetValue(ColumnDefinition.WidthProperty,
                     new GridLength(leftHalf, GridUnitType.Pixel));
@@ -1302,17 +1321,16 @@ namespace TERMINAL.Windows
                 gridFactory.AppendChild(colLeft);
                 gridFactory.AppendChild(colRight);
 
-                // ═══ Левая полоска (отрицательные) ═══
                 var barLeftFactory = new FrameworkElementFactory(typeof(Border));
                 barLeftFactory.SetValue(Grid.ColumnProperty, 0);
                 barLeftFactory.SetValue(Border.HorizontalAlignmentProperty,
-                    HorizontalAlignment.Right);         // прижата к оси
+                    HorizontalAlignment.Right);
                 barLeftFactory.SetBinding(Border.WidthProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
                         Converter = new TERMINAL.Converters.ValueToLeftBarWidthConverter
                         {
-                            MaxWidth = leftHalf,        // вся левая половина
+                            MaxWidth = leftHalf,
                             MaxAbsValue = maxNeg
                         }
                     });
@@ -1325,17 +1343,16 @@ namespace TERMINAL.Windows
                 barLeftFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
                 gridFactory.AppendChild(barLeftFactory);
 
-                // ═══ Правая полоска (положительные) ═══
                 var barRightFactory = new FrameworkElementFactory(typeof(Border));
                 barRightFactory.SetValue(Grid.ColumnProperty, 1);
                 barRightFactory.SetValue(Border.HorizontalAlignmentProperty,
-                    HorizontalAlignment.Left);          // прижата к оси
+                    HorizontalAlignment.Left);
                 barRightFactory.SetBinding(Border.WidthProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
                         Converter = new TERMINAL.Converters.ValueToRightBarWidthConverter
                         {
-                            MaxWidth = rightHalf,       // вся правая половина
+                            MaxWidth = rightHalf,
                             MaxAbsValue = maxPos
                         }
                     });
@@ -1348,14 +1365,17 @@ namespace TERMINAL.Windows
                 barRightFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
                 gridFactory.AppendChild(barRightFactory);
 
-                // ═══ Текст поверх обеих колонок ═══
                 var textFactory = new FrameworkElementFactory(typeof(TextBlock));
                 textFactory.SetBinding(TextBlock.TextProperty,
                     new System.Windows.Data.Binding(bindingPath)
                     {
                         StringFormat = "0.000"
                     });
-                textFactory.SetValue(TextBlock.ForegroundProperty, Brushes.Black);
+
+                // ★ Тёмная тема: цвет текста через DynamicResource
+                textFactory.SetValue(TextBlock.ForegroundProperty,
+                    new DynamicResourceExtension("TextForeground"));
+
                 textFactory.SetValue(TextBlock.HorizontalAlignmentProperty,
                     HorizontalAlignment.Center);
                 textFactory.SetValue(TextBlock.VerticalAlignmentProperty,
@@ -1371,12 +1391,11 @@ namespace TERMINAL.Windows
                 {
                     Header = ShortenTchxHeader(tchx.ColumnHeaders[colIndex]),
                     CellTemplate = template,
-                    Width = new DataGridLength(cellWidth)   // ★ фиксированная ширина
+                    Width = new DataGridLength(cellWidth)
                 };
                 grid.Columns.Add(column);
             }
 
-            // ─── Строки ───
             var rows = new List<object>();
             for (int r = 0; r < tchx.Values.GetLength(0); r++)
             {
@@ -1400,30 +1419,19 @@ namespace TERMINAL.Windows
             return stack;
         }
 
-
-        /// <summary>
-        /// Сокращает длинные заголовки ТЧХ для компактного отображения.
-        /// </summary>
-        /// <summary>
-        /// Сокращает длинные заголовки таблиц ТЧХ.
-        /// Примеры:
-        ///   "Таблица 3 - Расчет ТЧХ степень полинома 2 первого термоканала. Банк № 1187"
-        ///   → "ТЧХ². Банк № 1187 - термоканал №1"
-        ///   "Таблица 8 - Расчет ТЧХ степень полинома 3 третьего термоканала. Банк № 1187"
-        ///   → "ТЧХ³. Банк № 1187 - термоканал №3"
-        /// </summary>
+        // ═══════════════════════════════════════════════════
+        // Сокращение заголовков ТЧХ
+        // ═══════════════════════════════════════════════════
         private static string ShortenTchxTitle(string original)
         {
             if (string.IsNullOrWhiteSpace(original)) return original;
 
             string s = original.Trim();
 
-            // ─── 1. Убираем префикс "Таблица N - Расчет" ───
             s = System.Text.RegularExpressions.Regex.Replace(
                 s, @"^Таблица\s+\d+\s*-\s*Расчет\s+", "");
 
-            // ─── 2. Определяем степень полинома и заменяем на значок ───
-            string power = null;
+            string? power = null;
             var m = System.Text.RegularExpressions.Regex.Match(
                 s, @"степень\s+полинома\s+(\d+)");
             if (m.Success)
@@ -1440,30 +1448,23 @@ namespace TERMINAL.Windows
                 s = s.Remove(m.Index, m.Length);
             }
 
-            // ─── 3. Убираем слово "Расчет" и "ТЧХ" (пока оставляем одно ТЧХ) ───
             s = s.Replace("Расчет ТЧХ", "").Replace("ТЧХ", "");
 
-            // ─── 4. Заменяем длинные названия термоканалов на короткие ───
             s = s.Replace("первого термоканала", "термоканал №1");
             s = s.Replace("второго термоканала", "термоканал №2");
             s = s.Replace("третьего термоканала", "термоканал №3");
             s = s.Replace("четвертого термоканала", "термоканал №4");
 
-            // ─── 5. Убираем лишние пробелы и точки-дубли ───
             s = s.Replace("  ", " ").Trim();
             s = s.Replace(". .", ".").Replace("..", ".");
             s = s.Trim('.', ' ', ',');
 
-            // ─── 6. Собираем заново в нужном порядке ───
-            // Ищем "Банк № NNN" в строке
             var bankMatch = System.Text.RegularExpressions.Regex.Match(s, @"Банк\s+№\s*(\d+)");
             string bankPart = bankMatch.Success ? $"Банк № {bankMatch.Groups[1].Value}" : "";
 
-            // Ищем "термоканал №N" в строке
             var chMatch = System.Text.RegularExpressions.Regex.Match(s, @"термоканал\s+№\s*(\d+)");
             string channelPart = chMatch.Success ? $"термоканал №{chMatch.Groups[1].Value}" : "";
 
-            // Собираем: "ТЧХ<степень>. Банк № N - термоканал №N"
             string result = $"ТЧХ{power ?? ""}";
             if (!string.IsNullOrEmpty(bankPart))
                 result += $". {bankPart}";
@@ -1473,17 +1474,12 @@ namespace TERMINAL.Windows
             return result;
         }
 
-        /// <summary>
-        /// Сокращает длинные заголовки столбцов ТЧХ
-        /// (T экспериментальная → T эксп., F расчетная → F расч.).
-        /// </summary>
         private static string ShortenTchxHeader(string original)
         {
             if (string.IsNullOrWhiteSpace(original)) return original;
 
             string s = original.Trim();
 
-            // ─── Замены длинных названий на короткие ───
             s = s.Replace("T экспериментальная", "T эксп.");
             s = s.Replace("F экспериментальная", "F эксп.");
             s = s.Replace("t экспериментальная", "t эксп.");
@@ -1493,7 +1489,6 @@ namespace TERMINAL.Windows
             s = s.Replace("Разность частот", "ΔF");
             s = s.Replace("Разность температур", "Δt");
 
-            // ─── Убираем лишние пробелы ───
             s = s.Replace(" ,", ",").Replace(",  ", ", ");
             s = s.Trim();
 
@@ -1501,7 +1496,7 @@ namespace TERMINAL.Windows
         }
 
         // ═══════════════════════════════════════════════════
-        // Копировать таблицу в буфер
+        // Копирование в буфер
         // ═══════════════════════════════════════════════════
         private void CopyTableToClipboard(DataGrid grid)
         {
@@ -1531,7 +1526,6 @@ namespace TERMINAL.Windows
                         var binding = textCol.Binding as System.Windows.Data.Binding;
                         if (binding != null)
                         {
-                            // ✅ ИСПРАВЛЕНО: для ExpandoObject через IDictionary, иначе через рефлексию
                             if (item is IDictionary<string, object> dict)
                             {
                                 if (dict.TryGetValue(binding.Path.Path, out var v))
@@ -1587,9 +1581,6 @@ namespace TERMINAL.Windows
             }
         }
 
-        // ═══════════════════════════════════════════════════
-        // Копировать ТЧХ в буфер
-        // ═══════════════════════════════════════════════════
         private void CopyTchxTableToClipboard(DataGrid grid, TchxTable table)
         {
             if (table == null) return;
@@ -1629,17 +1620,11 @@ namespace TERMINAL.Windows
         }
     }
 
-    // ═══════════════════════════════════════════════════
-    // Класс колонки с оригинальным индексом
-    // ═══════════════════════════════════════════════════
     public class TaggedTemplateColumn : DataGridTemplateColumn
     {
         public int SourceColumnIndex { get; set; }
     }
 
-    // ═══════════════════════════════════════════════════
-    // Модель строки сводки
-    // ═══════════════════════════════════════════════════
     public class SummaryRow
     {
         public int Number { get; set; }
@@ -1651,7 +1636,6 @@ namespace TERMINAL.Windows
         public double? Check5 { get; set; }
         public SensorSummary Source { get; set; } = null!;
 
-        // ★ ДОБАВЛЕНО: безопасные строковые свойства для привязки в XAML
         public string GradDescriptionText => GradDescription.HasValue && GradDescription.Value != 0
             ? GradDescription.Value.ToString("0.0000")
             : "—";

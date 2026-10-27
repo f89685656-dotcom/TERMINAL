@@ -1589,6 +1589,9 @@ namespace TERMINAL
 
         private bool _isDarkTheme = false;
 
+        public bool IsDarkTheme => _isDarkTheme;
+        public event Action<bool>? ThemeChanged;
+
         private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
         {
             _isDarkTheme = !_isDarkTheme;
@@ -1600,15 +1603,18 @@ namespace TERMINAL
 
         public void ChangeTheme(bool isDark)
         {
+            _isDarkTheme = isDark;
+
             var themeUri = new Uri(isDark ? "Themes/DarkTheme.xaml" : "Themes/LightTheme.xaml", UriKind.Relative);
             var themeDict = new ResourceDictionary { Source = themeUri };
 
-            // Ищем словарь с темой и заменяем его
             var mergedDicts = Application.Current.MainWindow.Resources.MergedDictionaries;
             if (mergedDicts.Count > 0)
             {
                 mergedDicts[0] = themeDict;
             }
+
+            ThemeChanged?.Invoke(isDark);  // ★ уведомляем подписчиков
         }
 
         public void UpdateNotificationStatus(bool isActive)
