@@ -31,22 +31,21 @@ namespace TERMINAL.Windows
         {
             InitializeComponent();
 
-            // Предотвращаем закрытие выпадающего списка при клике на галочку
-            NotifyChannelsCombo.AddHandler(ComboBox.MouseDownEvent, new System.Windows.Input.MouseButtonEventHandler((s, e) =>
+            // Подписываемся на PreviewMouseLeftButtonDown для всех чекбоксов
+            foreach (var cb in new[] { ChkSendToTelegram, ChkSendToYandex, ChkSendToMail, ChkSendToGmail, ChkSendToCustomEmail, ChkSendToVk, ChkSendToMax })
             {
-                if (!NotifyChannelsCombo.IsDropDownOpen) return;
-
-                DependencyObject? current = e.OriginalSource as DependencyObject;
-                while (current != null && current is not CheckBox)
+                cb.PreviewMouseLeftButtonDown += (s, e) =>
                 {
-                    current = System.Windows.Media.VisualTreeHelper.GetParent(current);
-                }
-
-                if (current is CheckBox)
-                {
+                    // Не даём ComboBoxItem перехватить клик и закрыть список
                     e.Handled = true;
-                }
-            }), true);
+
+                    // Переключаем галочку вручную
+                    if (s is CheckBox checkbox)
+                    {
+                        checkbox.IsChecked = !(checkbox.IsChecked == true);
+                    }
+                };
+            }
 
             // ─── Общие настройки ───
             GeneralQ2ViewCheck.IsChecked = q2viewEnabled;
