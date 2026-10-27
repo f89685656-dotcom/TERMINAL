@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {
@@ -54,8 +55,17 @@ namespace TERMINAL
             {
                 if (File.Exists(SettingsFile))
                 {
-                    string json = File.ReadAllText(SettingsFile);
-                    _loadedSettings = JsonSerializer.Deserialize<Settings>(json);
+                    try
+                    {
+                        byte[] encryptedBytes = File.ReadAllBytes(SettingsFile);
+                        byte[] jsonBytes = SecurityHelper.DecryptBytes(encryptedBytes);
+                        string json = System.Text.Encoding.UTF8.GetString(jsonBytes);
+                        _loadedSettings = JsonSerializer.Deserialize<Settings>(json);
+                    }
+                    catch
+                    {
+                        _loadedSettings = new Settings();
+                    }
                 }
 
                 if (_loadedSettings == null)
@@ -63,8 +73,7 @@ namespace TERMINAL
 
                 if (string.IsNullOrWhiteSpace(_loadedSettings.SavePath))
                 {
-                    string docs = Environment.GetFolderPath(
-                        Environment.SpecialFolder.MyDocuments);
+                    string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                     _loadedSettings.SavePath = Path.Combine(docs, "TERMINAL");
                 }
 
@@ -75,7 +84,55 @@ namespace TERMINAL
                 _autoExcelEnabled = _loadedSettings.AutoExcelEnabled;
                 _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
                 _logSlowTicks = _loadedSettings.LogSlowTicks;
+                _isDarkTheme = _loadedSettings.IsDarkTheme;
 
+                // ─── Уведомления ───
+                _notificationsEnabled = _loadedSettings.NotificationsEnabled;
+                _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
+
+                _notifyTgEnabled = _loadedSettings.NotifyTgEnabled;
+                _notifyYandexEnabled = _loadedSettings.NotifyYandexEnabled;
+                _notifyMailEnabled = _loadedSettings.NotifyMailEnabled;
+                _notifyGmailEnabled = _loadedSettings.NotifyGmailEnabled;
+                _notifyCustomEnabled = _loadedSettings.NotifyCustomEnabled;
+                _notifyVkEnabled = _loadedSettings.NotifyVkEnabled;
+                _notifyMaxEnabled = _loadedSettings.NotifyMaxEnabled;
+
+                _telegramToken = _loadedSettings.TelegramToken ?? "";
+                _telegramChatId = _loadedSettings.TelegramChatId ?? "";
+
+                _emailProviderIndex = _loadedSettings.EmailProviderIndex;
+                _emailHost = _loadedSettings.EmailHost ?? "";
+                _emailPort = _loadedSettings.EmailPort;
+                _emailUser = _loadedSettings.EmailUser ?? "";
+                _emailPass = SecurityHelper.DecryptString(_loadedSettings.EmailPass);
+                _emailTo = _loadedSettings.EmailTo ?? "";
+
+                _emailYandexUser = _loadedSettings.EmailYandexUser ?? "";
+                _emailYandexPass = SecurityHelper.DecryptString(_loadedSettings.EmailYandexPass);
+                _emailYandexTo = _loadedSettings.EmailYandexTo ?? "";
+
+                _emailMailUser = _loadedSettings.EmailMailUser ?? "";
+                _emailMailPass = SecurityHelper.DecryptString(_loadedSettings.EmailMailPass);
+                _emailMailTo = _loadedSettings.EmailMailTo ?? "";
+
+                _emailGmailUser = _loadedSettings.EmailGmailUser ?? "";
+                _emailGmailPass = SecurityHelper.DecryptString(_loadedSettings.EmailGmailPass);
+                _emailGmailTo = _loadedSettings.EmailGmailTo ?? "";
+
+                _emailCustomHost = _loadedSettings.EmailCustomHost ?? "";
+                _emailCustomPort = _loadedSettings.EmailCustomPort;
+                _emailCustomUser = _loadedSettings.EmailCustomUser ?? "";
+                _emailCustomPass = SecurityHelper.DecryptString(_loadedSettings.EmailCustomPass);
+                _emailCustomTo = _loadedSettings.EmailCustomTo ?? "";
+
+                _vkToken = SecurityHelper.DecryptString(_loadedSettings.VkToken);
+                _vkPeerId = _loadedSettings.VkPeerId;
+                _maxToken = SecurityHelper.DecryptString(_loadedSettings.MaxToken);
+                _maxChatId = _loadedSettings.MaxChatId ?? "";
+                _smsLogin = _loadedSettings.SmsLogin ?? "";
+                _smsPass = SecurityHelper.DecryptString(_loadedSettings.SmsPass);
+                _smsPhone = _loadedSettings.SmsPhone ?? "";
 
                 if (_loadedSettings.BatchJobs != null && _loadedSettings.BatchJobs.Count > 0)
                 {
@@ -107,8 +164,22 @@ namespace TERMINAL
                 _batchKosaEnabled = false;
                 _batchKosaTimerSeconds = 25;
 
-                string docs = Environment.GetFolderPath(
-                    Environment.SpecialFolder.MyDocuments);
+                // Сброс при ошибке
+                _notificationsEnabled = false;
+                _notificationMethodIndex = 0;
+                _notifyTgEnabled = false; _notifyYandexEnabled = false; _notifyMailEnabled = false;
+                _notifyGmailEnabled = false; _notifyCustomEnabled = false; _notifyVkEnabled = false; _notifyMaxEnabled = false;
+                _telegramToken = ""; _telegramChatId = "";
+                _emailHost = ""; _emailPort = 587; _emailUser = ""; _emailPass = ""; _emailTo = "";
+                _emailYandexUser = ""; _emailYandexPass = ""; _emailYandexTo = "";
+                _emailMailUser = ""; _emailMailPass = ""; _emailMailTo = "";
+                _emailGmailUser = ""; _emailGmailPass = ""; _emailGmailTo = "";
+                _emailCustomHost = ""; _emailCustomPort = 587; _emailCustomUser = ""; _emailCustomPass = ""; _emailCustomTo = "";
+                _vkToken = ""; _vkPeerId = 0;
+                _maxToken = ""; _maxChatId = "";
+                _smsLogin = ""; _smsPass = ""; _smsPhone = "";
+
+                string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                 _loadedSettings.SavePath = Path.Combine(docs, "TERMINAL");
             }
         }
@@ -125,13 +196,13 @@ namespace TERMINAL
             _showFurnaceCard = _loadedSettings.ShowFurnaceCard;
             _autoStopFurnace = _loadedSettings.AutoStopFurnace;
             _furnaceStabilizationTolerance = _loadedSettings.FurnaceStabilizationTolerance;
+            _isDarkTheme = _loadedSettings.IsDarkTheme;
 
             _deviceIp = _loadedSettings.DeviceIp;
             _devicePort = _loadedSettings.DevicePort;
             _showAgkCard = _loadedSettings.ShowAgkCard;
             _agkPressureTimeoutMinutes = _loadedSettings.AgkPressureTimeoutMinutes > 0
                 ? _loadedSettings.AgkPressureTimeoutMinutes : 5;
-
 
             _sktbFilterScript = _loadedSettings.SktbFilterScript;
             _showSktbCard = _loadedSettings.ShowSktbCard;
@@ -140,6 +211,53 @@ namespace TERMINAL
             _platinumComPort = _loadedSettings.PlatinumComPort;
             _readPlatinum = _loadedSettings.ReadPlatinum;
             _platinumMtkCommand = _loadedSettings.PlatinumMtkCommand;
+
+            _notificationsEnabled = _loadedSettings.NotificationsEnabled;
+            _notificationMethodIndex = _loadedSettings.NotificationMethodIndex;
+
+            _notifyTgEnabled = _loadedSettings.NotifyTgEnabled;
+            _notifyYandexEnabled = _loadedSettings.NotifyYandexEnabled;
+            _notifyMailEnabled = _loadedSettings.NotifyMailEnabled;
+            _notifyGmailEnabled = _loadedSettings.NotifyGmailEnabled;
+            _notifyCustomEnabled = _loadedSettings.NotifyCustomEnabled;
+            _notifyVkEnabled = _loadedSettings.NotifyVkEnabled;
+            _notifyMaxEnabled = _loadedSettings.NotifyMaxEnabled;
+
+            _telegramToken = _loadedSettings.TelegramToken ?? "";
+            _telegramChatId = _loadedSettings.TelegramChatId ?? "";
+
+            _emailHost = _loadedSettings.EmailHost ?? "";
+            _emailPort = _loadedSettings.EmailPort;
+            _emailUser = _loadedSettings.EmailUser ?? "";
+            _emailPass = SecurityHelper.DecryptString(_loadedSettings.EmailPass);
+            _emailTo = _loadedSettings.EmailTo ?? "";
+            _emailProviderIndex = _loadedSettings.EmailProviderIndex;
+
+            _emailYandexUser = _loadedSettings.EmailYandexUser ?? "";
+            _emailYandexPass = SecurityHelper.DecryptString(_loadedSettings.EmailYandexPass);
+            _emailYandexTo = _loadedSettings.EmailYandexTo ?? "";
+
+            _emailMailUser = _loadedSettings.EmailMailUser ?? "";
+            _emailMailPass = SecurityHelper.DecryptString(_loadedSettings.EmailMailPass);
+            _emailMailTo = _loadedSettings.EmailMailTo ?? "";
+
+            _emailGmailUser = _loadedSettings.EmailGmailUser ?? "";
+            _emailGmailPass = SecurityHelper.DecryptString(_loadedSettings.EmailGmailPass);
+            _emailGmailTo = _loadedSettings.EmailGmailTo ?? "";
+
+            _emailCustomHost = _loadedSettings.EmailCustomHost ?? "";
+            _emailCustomPort = _loadedSettings.EmailCustomPort;
+            _emailCustomUser = _loadedSettings.EmailCustomUser ?? "";
+            _emailCustomPass = SecurityHelper.DecryptString(_loadedSettings.EmailCustomPass);
+            _emailCustomTo = _loadedSettings.EmailCustomTo ?? "";
+
+            _vkToken = SecurityHelper.DecryptString(_loadedSettings.VkToken);
+            _vkPeerId = _loadedSettings.VkPeerId;
+            _maxToken = SecurityHelper.DecryptString(_loadedSettings.MaxToken);
+            _maxChatId = _loadedSettings.MaxChatId ?? "";
+            _smsLogin = _loadedSettings.SmsLogin ?? "";
+            _smsPass = SecurityHelper.DecryptString(_loadedSettings.SmsPass);
+            _smsPhone = _loadedSettings.SmsPhone ?? "";
 
             RefreshDeviceCardsVisibility();
 
@@ -230,7 +348,6 @@ namespace TERMINAL
                     TickTimingEnabled = _tickTimingEnabled,
                     LogSlowTicks = _logSlowTicks,
 
-
                     BatchJobs = _batchJobs.Select(j => new BatchJobDto
                     {
                         SetPoint = j.SetPointText,
@@ -263,6 +380,57 @@ namespace TERMINAL
                     ReadPlatinum = _readPlatinum,
                     PlatinumMtkCommand = _platinumMtkCommand,
 
+                    IsDarkTheme = _isDarkTheme,
+
+                    // ─── Уведомления ───
+                    NotificationsEnabled = _notificationsEnabled,
+                    NotificationMethodIndex = _notificationMethodIndex,
+
+                    // ★ ГАЛОЧКИ
+                    NotifyTgEnabled = _notifyTgEnabled,
+                    NotifyYandexEnabled = _notifyYandexEnabled,
+                    NotifyMailEnabled = _notifyMailEnabled,
+                    NotifyGmailEnabled = _notifyGmailEnabled,
+                    NotifyCustomEnabled = _notifyCustomEnabled,
+                    NotifyVkEnabled = _notifyVkEnabled,
+                    NotifyMaxEnabled = _notifyMaxEnabled,
+
+                    // ★ ДАННЫЕ КАНАЛОВ
+                    TelegramToken = _telegramToken,
+                    TelegramChatId = _telegramChatId,
+
+                    EmailProviderIndex = _emailProviderIndex,
+                    EmailHost = _emailHost,
+                    EmailPort = _emailPort,
+                    EmailUser = _emailUser,
+                    EmailPass = SecurityHelper.EncryptString(_emailPass),
+                    EmailTo = _emailTo,
+
+                    EmailYandexUser = _emailYandexUser,
+                    EmailYandexPass = SecurityHelper.EncryptString(_emailYandexPass),
+                    EmailYandexTo = _emailYandexTo,
+
+                    EmailMailUser = _emailMailUser,
+                    EmailMailPass = SecurityHelper.EncryptString(_emailMailPass),
+                    EmailMailTo = _emailMailTo,
+
+                    EmailGmailUser = _emailGmailUser,
+                    EmailGmailPass = SecurityHelper.EncryptString(_emailGmailPass),
+                    EmailGmailTo = _emailGmailTo,
+
+                    EmailCustomHost = _emailCustomHost,
+                    EmailCustomPort = _emailCustomPort,
+                    EmailCustomUser = _emailCustomUser,
+                    EmailCustomPass = SecurityHelper.EncryptString(_emailCustomPass),
+                    EmailCustomTo = _emailCustomTo,
+
+                    VkToken = SecurityHelper.EncryptString(_vkToken),
+                    VkPeerId = _vkPeerId,
+                    MaxToken = SecurityHelper.EncryptString(_maxToken),
+                    MaxChatId = _maxChatId,
+                    SmsLogin = _smsLogin,
+                    SmsPass = SecurityHelper.EncryptString(_smsPass),
+                    SmsPhone = _smsPhone,
 
                     WindowLeft = _loadedSettings?.WindowLeft ?? double.NaN,
                     WindowTop = _loadedSettings?.WindowTop ?? double.NaN,
@@ -270,10 +438,10 @@ namespace TERMINAL
                     WindowHeight = _loadedSettings?.WindowHeight ?? double.NaN
                 };
 
-                string json = JsonSerializer.Serialize(s,
-                    new JsonSerializerOptions { WriteIndented = true });
-
-                File.WriteAllText(SettingsFile, json);
+                string json = JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true });
+                byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
+                byte[] encryptedBytes = SecurityHelper.EncryptBytes(jsonBytes);
+                File.WriteAllBytes(SettingsFile, encryptedBytes);
             }
             catch { }
         }
@@ -409,6 +577,7 @@ namespace TERMINAL
             public List<BatchPreset> BatchPresets { get; set; } = new();
             public int LastUsedPresetIndex { get; set; } = -1;
             public bool AutoExcelEnabled { get; set; } = true;
+            public bool IsDarkTheme { get; set; } = false;
 
             public bool TickTimingEnabled { get; set; } = true;
 
@@ -439,6 +608,68 @@ namespace TERMINAL
             public bool ReadPlatinum { get; set; } = true;               // читать ли платину сейчас
 
             public string PlatinumMtkCommand { get; set; } = "pass2 meas2? 2";
+
+            // ─── Уведомления ───
+            public bool NotificationsEnabled { get; set; } = false;
+            public int NotificationMethodIndex { get; set; } = 0;
+
+            // ★ ГАЛОЧКИ КАНАЛОВ
+            public bool NotifyTgEnabled { get; set; } = false;
+            public bool NotifyYandexEnabled { get; set; } = false;
+            public bool NotifyMailEnabled { get; set; } = false;
+            public bool NotifyGmailEnabled { get; set; } = false;
+            public bool NotifyCustomEnabled { get; set; } = false;
+            public bool NotifyVkEnabled { get; set; } = false;
+            public bool NotifyMaxEnabled { get; set; } = false;
+
+            // Telegram
+            public string TelegramToken { get; set; } = "";
+            public string TelegramChatId { get; set; } = "";
+
+            // Email
+            public string EmailHost { get; set; } = "";
+            public int EmailPort { get; set; } = 587;
+            public string EmailUser { get; set; } = "";
+            public string EmailPass { get; set; } = "";
+            public string EmailTo { get; set; } = "";
+
+            // ─── Уведомления: Email ───
+            public int EmailProviderIndex { get; set; } = 0;
+
+            // Яндекс
+            public string EmailYandexUser { get; set; } = "";
+            public string EmailYandexPass { get; set; } = "";
+            public string EmailYandexTo { get; set; } = "";
+
+            // Mail.ru
+            public string EmailMailUser { get; set; } = "";
+            public string EmailMailPass { get; set; } = "";
+            public string EmailMailTo { get; set; } = "";
+
+            // Gmail
+            public string EmailGmailUser { get; set; } = "";
+            public string EmailGmailPass { get; set; } = "";
+            public string EmailGmailTo { get; set; } = "";
+
+            // Другой
+            public string EmailCustomHost { get; set; } = "";
+            public int EmailCustomPort { get; set; } = 587;
+            public string EmailCustomUser { get; set; } = "";
+            public string EmailCustomPass { get; set; } = "";
+            public string EmailCustomTo { get; set; } = "";
+
+            // VK
+            public string VkToken { get; set; } = "";
+            public long VkPeerId { get; set; } = 0;
+
+            // МАКС
+            public string MaxToken { get; set; } = "";
+            public string MaxChatId { get; set; } = "";
+
+            // SMS
+            public string SmsLogin { get; set; } = "";
+            public string SmsPass { get; set; } = "";
+            public string SmsPhone { get; set; } = "";
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");

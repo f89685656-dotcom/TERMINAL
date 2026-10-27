@@ -2,9 +2,19 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Настройки приборов"
-        Width="500" Height="520"
+        Width="500" Height="650" 
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource TextForeground}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TERMINAL;component/Themes/LightTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
 
     <Grid Margin="15">
         <Grid.RowDefinitions>
@@ -12,101 +22,111 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TabControl x:Name="DeviceTabs" Grid.Row="0">
+        <TabControl x:Name="DeviceTabs" Grid.Row="0" 
+                    Background="{DynamicResource WindowBackground}"
+                    BorderBrush="{DynamicResource PanelBorder}">
+            <TabControl.Resources>
+                <Style TargetType="TabItem">
+                    <Setter Property="Background" Value="#2D2D30"/>
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="TabItem">
+                                <Border x:Name="Bd"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{DynamicResource PanelBorder}"
+                                        BorderThickness="1,1,1,0"
+                                        CornerRadius="2,2,0,0"
+                                        Padding="6,2">
+                                    <ContentPresenter ContentSource="Header"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#3F3F46"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#505050"/>
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Foreground" Value="Gray"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </TabControl.Resources>
 
             <!-- ═══ Общие ═══ -->
             <TabItem Header="Общие">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
-
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <CheckBox x:Name="GeneralQ2ViewCheck"
-                                      Content="q2view"
-                                      VerticalAlignment="Center"/>
-                            <TextBox x:Name="GeneralTimerBox"
-                                     Width="50" Height="24" FontSize="12"
+                            <CheckBox x:Name="GeneralQ2ViewCheck" Content="q2view" VerticalAlignment="Center"/>
+                            <TextBox x:Name="GeneralTimerBox" Width="50" Height="24" FontSize="12"
                                      Text="5" Padding="3,1" Margin="10,0,0,0"
-                                     HorizontalContentAlignment="Center"
-                                     VerticalContentAlignment="Center"/>
-                            <TextBlock Text="сек" FontSize="12"
-                                       VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                            <TextBlock Text="сек" FontSize="12" VerticalAlignment="Center" Margin="5,0,0,0"/>
                         </StackPanel>
-
-                        <CheckBox x:Name="GeneralAutoExcelCheck"
-                                  Content="Автозаполнение макросами Excel"/>
-                        <CheckBox x:Name="GeneralTickTimingCheck"
-                                  Content="Тактирование"
-                                  Margin="0,10,0,0"
-                                  ToolTip="Показывать плашку с временем такта в главном окне"/>
-                        <CheckBox x:Name="GeneralLogSlowTicksCheck"
-                                  Content="Логировать медленные такты"
-                                  Margin="0,6,0,0"
-                                  ToolTip="Писать в журнал предупреждения о медленных тактах (> 500 мс)"/>
+                        <CheckBox x:Name="GeneralAutoExcelCheck" Content="Автозаполнение макросами Excel"/>
+                        <CheckBox x:Name="GeneralTickTimingCheck" Content="Тактирование"
+                                  Margin="0,10,0,0" ToolTip="Показывать плашку с временем такта в главном окне"/>
+                        <CheckBox x:Name="GeneralLogSlowTicksCheck" Content="Логировать медленные такты"
+                                  Margin="0,6,0,0" ToolTip="Писать в журнал предупреждения о медленных тактах (> 500 мс)"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- ═══ ST-351 ═══ -->
             <TabItem Header="ST-351">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
                         <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
                         <TextBox x:Name="FurnaceIpBox" Height="24" Padding="4,2"/>
-
                         <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
                         <TextBox x:Name="FurnacePortBox" Height="24" Padding="4,2"/>
-
                         <TextBlock Text="Регистр уставки:" FontWeight="Bold" Margin="0,10,0,0"/>
                         <TextBox x:Name="FurnaceSetPointRegBox" Height="24" Padding="4,2"/>
-
                         <TextBlock Text="Регистр текущей температуры:" FontWeight="Bold" Margin="0,10,0,0"/>
                         <TextBox x:Name="FurnaceCurrentTempRegBox" Height="24" Padding="4,2"/>
-
                         <TextBlock Text="Регистр режима:" FontWeight="Bold" Margin="0,10,0,0"/>
                         <TextBox x:Name="FurnaceModeRegBox" Height="24" Padding="4,2"/>
-
-                        <!-- ★ НОВОЕ ПОЛЕ: Допуск стабилизации -->
                         <TextBlock Text="Допуск стабилизации, °C:" FontWeight="Bold" Margin="0,10,0,0"/>
                         <TextBox x:Name="FurnaceStabilizationToleranceBox" Height="24" Padding="4,2"/>
-
-                        <!-- ★ ПЕРЕИМЕНОВАННЫЙ ЧЕКБОКС (текст сокращен, описание в ToolTip) -->
-                        <CheckBox x:Name="AutoStopFurnaceCheck"
-                                  Content="Автовыключение после пакета"
-                                  Margin="0,15,0,0"
-                                  ToolTip="Автовыключение печки (имитация кнопки «Стоп») после завершения всех заданий пакетного режима"/>
-
-                        <CheckBox x:Name="ShowFurnaceCardCheck"
-                                  Content="Показывать карточку"
-                                  Margin="0,15,0,0"/>
+                        <CheckBox x:Name="AutoStopFurnaceCheck" Content="Автовыключение после пакета"
+                                  Margin="0,15,0,0" ToolTip="Автовыключение печки (имитация кнопки «Стоп») после завершения всех заданий пакетного режима"/>
+                        <CheckBox x:Name="ShowFurnaceCardCheck" Content="Показывать карточку" Margin="0,15,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- ═══ АГК ═══ -->
             <TabItem Header="АГК">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
                         <TextBlock Text="IP-адрес:" FontWeight="Bold"/>
                         <TextBox x:Name="AgkIpBox" Height="24" Padding="4,2"/>
-
                         <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,0"/>
                         <TextBox x:Name="AgkPortBox" Height="24" Padding="4,2"/>
-
-                        <TextBlock Text="Таймаут ожидания давления, мин:"
-                                   FontWeight="Bold" Margin="0,10,0,0"
+                        <TextBlock Text="Таймаут ожидания давления, мин:" FontWeight="Bold" Margin="0,10,0,0"
                                    ToolTip="Если давление не набралось или не сбросилось за это время — задание прерывается"/>
                         <TextBox x:Name="AgkPressureTimeoutBox" Height="24" Padding="4,2"/>
-
-                        <CheckBox x:Name="ShowAgkCardCheck"
-                                  Content="Показывать карточку"
-                                  Margin="0,15,0,0"/>
+                        <CheckBox x:Name="ShowAgkCardCheck" Content="Показывать карточку" Margin="0,15,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- ═══ СКТБ ЭлПА ═══ -->
             <TabItem Header="СКТБ ЭлПА">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
                     <StackPanel Margin="15">
                         <TextBlock Text="Скрипт фильтрации:" FontWeight="Bold"/>
                         <ComboBox x:Name="SktbFilterScriptCombo" Height="24">
@@ -115,69 +135,212 @@
                             <ComboBoxItem Content="Фильтр_РЧ"/>
                             <ComboBoxItem Content="Filter_for_KOSA_GUI"/>
                         </ComboBox>
-
                         <TextBlock Text="Источник платины:" FontWeight="Bold" Margin="0,12,0,0"/>
-                        <ComboBox x:Name="PlatinumSourceCombo"
-                                  Height="24"
-                                  SelectionChanged="PlatinumSourceCombo_SelectionChanged">
+                        <ComboBox x:Name="PlatinumSourceCombo" Height="24" SelectionChanged="PlatinumSourceCombo_SelectionChanged">
                             <ComboBoxItem Content="МтК @ TERMEX"/>
                             <ComboBoxItem Content="МИТ 8.03 rev.2 (RS-232)"/>
                             <ComboBoxItem Content="TERCON"/>
                         </ComboBox>
-
-                        <!-- Панель COM-порта: показывается только для МИТ 8.03 -->
-                        <StackPanel x:Name="PlatinumComPanel"
-                                    Orientation="Horizontal"
-                                    Margin="0,10,0,0"
-                                    Visibility="Collapsed">
-                            <TextBlock Text="COM-порт:"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,8,0"/>
-                            <ComboBox x:Name="PlatinumComPortCombo"
-                                      Width="100" Height="24"/>
+                        <StackPanel x:Name="PlatinumComPanel" Orientation="Horizontal" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="COM-порт:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox x:Name="PlatinumComPortCombo" Width="100" Height="24"/>
                         </StackPanel>
-
                         <StackPanel x:Name="PlatinumMtkCommandPanel" Margin="0,10,0,0">
                             <TextBlock Text="Команда МтК @ TERMEX:" FontWeight="Bold"/>
-
-                            <!-- Поле ввода: текст по левому краю, но по центру по вертикали -->
-                            <TextBox x:Name="PlatinumMtkCommandBox"
-                                     Height="24" Margin="0,4,0,0"
-                                     HorizontalContentAlignment="Left"
-                                     VerticalContentAlignment="Center"
-                                     Padding="4,0"
+                            <TextBox x:Name="PlatinumMtkCommandBox" Height="24" Margin="0,4,0,0"
+                                     HorizontalContentAlignment="Left" VerticalContentAlignment="Center" Padding="4,0"
                                      ToolTip="Например: pass2 meas2? 2  (символы \n\0 добавляются автоматически)"/>
-
-                            <!-- Подсказка под полем -->
                             <TextBlock Text="Символы \n\0 добавляются автоматически при отправке"
-                                       FontSize="11" Foreground="Gray" 
-                                       Margin="4,2,0,0"
-                                       HorizontalAlignment="Left"/>
+                                       FontSize="11" Foreground="Gray" Margin="4,2,0,0" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ReadPlatinumCheck" Content="Читать платину сейчас"
+                                  Margin="0,12,0,0" ToolTip="Если снято — программа не будет обращаться к Платине"/>
+                        <CheckBox x:Name="ShowSktbCardCheck" Content="Показывать карточку" Margin="0,12,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ Уведомления ═══ -->
+            <TabItem Header="Уведомления">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              Background="{DynamicResource WindowBackground}">
+                    <StackPanel Margin="15">
+
+                        <Grid Margin="0,0,0,15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <CheckBox x:Name="NotificationsEnabledCheck" Grid.Column="0" Content="Включить уведомления"
+                                      FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                            <!-- ★ ИСПРАВЛЕННЫЙ ВЫПАДАЮЩИЙ СПИСОК С ГАЛОЧКАМИ -->
+                            <Grid Grid.Column="1" Margin="0,0,5,0">
+                                <ComboBox x:Name="NotifyChannelsCombo" 
+                                          Width="110" Height="26" 
+                                          HorizontalAlignment="Left"
+                                          VerticalAlignment="Center"
+                                          Padding="2,0"
+                                          IsTextSearchEnabled="False">
+
+                                    <ComboBox.Template>
+                                        <ControlTemplate TargetType="ComboBox">
+                                            <Grid>
+                                                <Border x:Name="border" 
+                                                        Background="{TemplateBinding Background}"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="2">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="20"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <ToggleButton x:Name="ToggleButton"
+                                                                      Grid.Column="1"
+                                                                      Focusable="False"
+                                                                      ClickMode="Press"
+                                                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                                            <ToggleButton.Template>
+                                                                <ControlTemplate TargetType="ToggleButton">
+                                                                    <Border Background="Transparent" BorderThickness="0">
+                                                                        <Path x:Name="Arrow" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                              Data="M 0 0 L 4 4 L 8 0 Z" Fill="White"/>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </ToggleButton.Template>
+                                                        </ToggleButton>
+                                                    </Grid>
+                                                </Border>
+                                                <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" 
+                                                       AllowsTransparency="True" Focusable="False">
+                                                    <Border Background="#2D2D30" BorderBrush="#555555" BorderThickness="1" MinWidth="{TemplateBinding ActualWidth}">
+                                                        <StackPanel IsItemsHost="True" />
+                                                    </Border>
+                                                </Popup>
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </ComboBox.Template>
+
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToTelegram" Content="Telegram" Margin="0,1" HorizontalAlignment="Stretch"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToYandex" Content="Яндекс" Margin="0,1" HorizontalAlignment="Stretch"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToMail" Content="Mail.ru" Margin="0,1" HorizontalAlignment="Stretch"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToGmail" Content="Gmail" Margin="0,1" HorizontalAlignment="Stretch"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToCustomEmail" Content="Другой" Margin="0,1" HorizontalAlignment="Stretch"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToVk" Content="VK" Margin="0,1" HorizontalAlignment="Stretch"/>
+                                    </ComboBoxItem>
+                                    <ComboBoxItem Padding="0" HorizontalContentAlignment="Stretch">
+                                        <CheckBox x:Name="ChkSendToMax" Content="MAX" Margin="0,1" HorizontalAlignment="Stretch"/>
+                                    </ComboBoxItem>
+                                </ComboBox>
+
+                                <TextBlock x:Name="NotifyPlaceholderText" 
+                                           Text="Выбрать..." 
+                                           Foreground="Gray" 
+                                           VerticalAlignment="Center" 
+                                           Margin="5,0,0,0"
+                                           IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ElementName=NotifyChannelsCombo, Path=IsDropDownOpen}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <Button x:Name="NotificationHelpButton" Grid.Column="2" Content="❓ Инструкция"
+                                    Padding="10,2" VerticalAlignment="Center" Click="NotificationHelpButton_Click"/>
+                        </Grid>
+
+                        <TextBlock Text="Способ отправки:" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <ComboBox x:Name="NotificationMethodCombo" Height="24" SelectedIndex="0" SelectionChanged="NotificationMethodCombo_SelectionChanged">
+                            <ComboBoxItem Content="Telegram"/>
+                            <ComboBoxItem Content="Email (SMTP)"/>
+                            <ComboBoxItem Content="ВКонтакте (VK)"/>
+                            <ComboBoxItem Content="MAX (max.ru)"/>
+                            <ComboBoxItem Content="SMS (SMSC.ru)"/>
+                        </ComboBox>
+
+                        <StackPanel x:Name="TelegramPanel" Margin="0,10,0,0">
+                            <TextBlock Text="Telegram Token:" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBox x:Name="TelegramTokenBox" Height="24" Padding="4,2" ToolTip="Токен от @BotFather"/>
+                            <TextBlock Text="Telegram Chat ID:" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="TelegramChatIdBox" Height="24" Padding="4,2" ToolTip="ID вашего чата (можно узнать через getUpdates)"/>
                         </StackPanel>
 
-                        <CheckBox x:Name="ReadPlatinumCheck"
-                                  Content="Читать платину сейчас"
-                                  Margin="0,12,0,0"
-                                  ToolTip="Если снято — программа не будет обращаться к Платине"/>
+                        <StackPanel x:Name="EmailPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="Почтовый провайдер:" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <ComboBox x:Name="EmailProviderCombo" Height="24" SelectionChanged="EmailProviderCombo_SelectionChanged">
+                                <ComboBoxItem Content="Яндекс (yandex.ru)"/>
+                                <ComboBoxItem Content="Mail.ru (mail.ru)"/>
+                                <ComboBoxItem Content="Gmail (gmail.com)"/>
+                                <ComboBoxItem Content="Другой (ввести вручную)"/>
+                            </ComboBox>
+                            <TextBlock Text="SMTP Сервер:" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="EmailHostBox" Height="24" Padding="4,2"/>
+                            <TextBlock Text="Порт:" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="EmailPortBox" Height="24" Padding="4,2" Text="587"/>
+                            <TextBlock Text="Логин (ваша почта):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="EmailUserBox" Height="24" Padding="4,2"/>
+                            <TextBlock Text="Пароль (или пароль приложения):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <PasswordBox x:Name="EmailPassBox" Height="24" Padding="4,2"/>
+                            <TextBlock Text="Кому отправлять (Email):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="EmailToBox" Height="24" Padding="4,2"/>
+                        </StackPanel>
 
-                        <CheckBox x:Name="ShowSktbCardCheck"
-                                  Content="Показывать карточку"
-                                  Margin="0,12,0,0"/>
+                        <StackPanel x:Name="VkPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="Access Token:" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBox x:Name="VkTokenBox" Height="24" Padding="4,2" ToolTip="Токен из OAuth ВКонтакте"/>
+                            <TextBlock Text="Ваш ID (или ID беседы):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="VkPeerIdBox" Height="24" Padding="4,2" ToolTip="Например: 12345678 (личка) или 2000000001 (беседа)"/>
+                        </StackPanel>
+
+                        <StackPanel x:Name="MaxPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="Токен бота MAX:" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBox x:Name="MaxTokenBox" Height="24" Padding="4,2" ToolTip="Токен из платформы МАКС для партнеров"/>
+                            <TextBlock Text="Chat ID (или ID пользователя):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="MaxChatIdBox" Height="24" Padding="4,2" ToolTip="Например: 123456789"/>
+                        </StackPanel>
+
+                        <StackPanel x:Name="SmsPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="Логин SMSC.ru:" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBox x:Name="SmsLoginBox" Height="24" Padding="4,2"/>
+                            <TextBlock Text="Пароль SMSC.ru:" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <PasswordBox x:Name="SmsPassBox" Height="24" Padding="4,2"/>
+                            <TextBlock Text="Номер телефона (напр. +79991234567):" FontWeight="Bold" Margin="0,10,0,5"/>
+                            <TextBox x:Name="SmsPhoneBox" Height="24" Padding="4,2"/>
+                        </StackPanel>
+
+                        <Button x:Name="TestNotificationButton" Content="Отправить тестовое сообщение" 
+                                Width="220" Height="30" Margin="0,20,0,0" HorizontalAlignment="Left" Click="TestNotificationButton_Click"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
         </TabControl>
 
-        <!-- Кнопки -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal"
-                    HorizontalAlignment="Right" Margin="0,15,0,0">
-            <Button Content="По умолчанию" Width="120" Height="30"
-                    Click="Default_Click"/>
-            <Button Content="Сохранить" Width="100" Height="30" Margin="10,0,0,0"
-                    Click="Save_Click"/>
-            <Button Content="Отмена" Width="80" Height="30" Margin="10,0,0,0"
-                    Click="Cancel_Click"/>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <Button Content="По умолчанию" Width="120" Height="30" Click="Default_Click"/>
+            <Button Content="Сохранить" Width="100" Height="30" Margin="10,0,0,0" Click="Save_Click"/>
+            <Button Content="Отмена" Width="80" Height="30" Margin="10,0,0,0" Click="Cancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>

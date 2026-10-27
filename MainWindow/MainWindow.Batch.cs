@@ -12,6 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {
@@ -29,8 +30,11 @@ namespace TERMINAL
                 StartStepText = "1",
                 CaseText = "1",
                 IsEnabled = true,
-                IsCalibrationMode = true
+                IsCalibrationMode = true,
+                StatusText = "ожидает",
+                StatusColor = Brushes.LightGray
             };
+
             _batchJobs.Add(job);
             RenumberBatchJobs();
             SaveSettings();
@@ -120,42 +124,42 @@ namespace TERMINAL
             _batchStopRequested = false;
             _stopRequested = false;
 
-            // ─── СБРОС СТАТУСОВ ───
             foreach (var job in _batchJobs)
             {
-                job.StatusText = "ожидает";
-                job.StatusColor = Brushes.Gray;
+                if (job.IsEnabled)
+                {
+                    job.StatusText = "ожидает";
+                    job.StatusColor = Brushes.LightGray;
+                }
+                else
+                {
+                    job.StatusText = "пропущено";
+                    job.StatusColor = Brushes.LightGray; // или Brushes.DimGray, если хотите сделать неактивные более тусклыми
+                }
             }
 
-            // Валидация активных заданий
+            // Валидация
             for (int i = 0; i < _batchJobs.Count; i++)
             {
                 var job = _batchJobs[i];
                 if (!job.IsEnabled) continue;
-
-                if (!float.TryParse(job.SetPointText?.Replace(',', '.'),
-                    NumberStyles.Float, CultureInfo.InvariantCulture, out float sp))
+                if (!float.TryParse(job.SetPointText?.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out float sp))
                 {
                     MessageBox.Show($"Задание #{i + 1}: некорректная уставка «{job.SetPointText}»");
                     return;
                 }
-
                 if (!int.TryParse(job.StabilizationMinutesText?.Trim(), out int mins) || mins < 0)
                 {
-                    MessageBox.Show($"Задание #{i + 1}: некорректное время стабилизации " +
-                                    $"«{job.StabilizationMinutesText}» (нужно неотрицательное число минут)");
+                    MessageBox.Show($"Задание #{i + 1}: некорректное время стабилизации «{job.StabilizationMinutesText}»");
                     return;
                 }
-
                 job.SetPoint = sp;
                 job.StabilizationMinutes = mins;
-
                 if (!job.IsCalibrationMode)
                 {
                     if (!int.TryParse(job.CyclesText?.Trim(), out int cycles) || cycles <= 0)
                     {
-                        MessageBox.Show($"Задание #{i + 1}: некорректное число циклов " +
-                                        $"«{job.CyclesText}» (нужно положительное число)");
+                        MessageBox.Show($"Задание #{i + 1}: некорректное число циклов «{job.CyclesText}»");
                         return;
                     }
                     job.Cycles = cycles;
@@ -165,25 +169,17 @@ namespace TERMINAL
                 {
                     if (!int.TryParse(job.StartStepText?.Trim(), out int startStep) || startStep < 1)
                     {
-                        MessageBox.Show($"Задание #{i + 1}: некорректный стартовый шаг " +
-                                        $"«{job.StartStepText}» (нужно положительное число)");
+                        MessageBox.Show($"Задание #{i + 1}: некорректный стартовый шаг «{job.StartStepText}»");
                         return;
                     }
-
                     int stepsCount = 0;
-                    if (_selectedTargetPressure != null &&
-                        _stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
-                    {
+                    if (_selectedTargetPressure != null && _stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps))
                         stepsCount = steps.Length;
-                    }
-
                     if (stepsCount > 0 && startStep > stepsCount)
                     {
-                        MessageBox.Show($"Задание #{i + 1}: стартовый шаг {startStep} " +
-                                        $"больше числа шагов в диапазоне «{_selectedTargetPressure}» ({stepsCount})");
+                        MessageBox.Show($"Задание #{i + 1}: стартовый шаг {startStep} больше числа шагов ({stepsCount})");
                         return;
                     }
-
                     job.StartStep = startStep;
                     job.Cycles = 0;
                 }
@@ -207,11 +203,28 @@ namespace TERMINAL
             BatchTargetPressureCombo.IsEnabled = false;
             BatchTimerSetCombo.IsEnabled = false;
 
+            BatchPresetCombo.IsEnabled = false;
+            LoadPresetButton.IsEnabled = false;
+            SavePresetButton.IsEnabled = false;
+            DeletePresetButton.IsEnabled = false;
+
             foreach (var job in _batchJobs)
                 job.IsEditable = false;
 
             try
             {
+                var activeTemps = _batchJobs.Where(j => j.IsEnabled).Select(j => $"+{j.SetPointText} °C");
+                string tempsString = string.Join(", ", activeTemps);
+                var selectedClient = _connectedClients.FirstOrDefault(c => c.IsSelected);
+                string clientInfo = selectedClient != null
+                    ? $" Заказ: {selectedClient.CustomName}, датчиков: {selectedClient.CaseValue}."
+                    : "";
+
+                string startMsg = $"🚀 Пакетный режим запущен.\nЗаданий: {enabledCount} (диапазон: {_selectedTargetPressure}, температуры: {tempsString}).\n{clientInfo}";
+
+                await _batchProgress.SendStatusAsync(startMsg);
+                await NotificationManager.NotifyOthersAsync(startMsg);
+
                 int completedCount = 0;
 
                 for (int i = 0; i < _batchJobs.Count; i++)
@@ -219,107 +232,97 @@ namespace TERMINAL
                     if (_batchStopRequested || _stopRequested)
                     {
                         SetStatusWarning("Пакетный режим остановлен оператором");
+                        string stopMsg = $"⏹ Пакетный режим остановлен оператором. Выполнено: {completedCount}/{enabledCount}";
+                        await _batchProgress.SendStatusAsync(stopMsg);
+                        await NotificationManager.NotifyOthersAsync(stopMsg);
                         return;
                     }
 
                     var job = _batchJobs[i];
-
-                    if (!job.IsEnabled)
-                    {
-                        job.StatusText = "пропущено";
-                        job.StatusColor = Brushes.Gray;
-                        continue;
-                    }
+                    if (!job.IsEnabled) { job.StatusText = "пропущено"; job.StatusColor = Brushes.LightGray; continue; }
 
                     completedCount++;
-
                     _currentBatchSetPointForSave = job.SetPoint;
+                    string stepSetPointText = job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture);
 
-                    // ═══════════════════════════════════════════════════════════
-                    // 1) Запись уставки
-                    // ═══════════════════════════════════════════════════════════
+                    string jobStartMsg = $"▶️ Задание {completedCount}/{enabledCount} (уставка {stepSetPointText} °C) — начато";
+                    await NotificationManager.NotifyOthersAsync(jobStartMsg);
+
+                    // --- Запись уставки ---
                     job.StatusText = "запись уставки";
-                    job.StatusColor = Brushes.Orange;
+                    job.StatusColor = Brushes.Gold;
+                    SetStatus($"[Пакет {completedCount}/{enabledCount}] запись уставки {stepSetPointText} °C...");
 
-                    SetStatus($"[Пакет {completedCount}/{enabledCount}] запись уставки " +
-                              $"{job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C в ST-351...");
-
-                    bool writeOk = await WriteFurnaceSetPointAsync(
-                        job.SetPoint, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
-
+                    bool writeOk = await WriteFurnaceSetPointAsync(job.SetPoint, FurnaceIp, FurnacePort, FurnaceSetPointRegister);
                     if (!writeOk)
                     {
                         job.StatusText = "ошибка записи";
-                        job.StatusColor = Brushes.Red;
+                        job.StatusColor = Brushes.OrangeRed;
                         SetStatusError($"[Пакет {completedCount}] не удалось записать уставку");
+                        string errMsg = $"❌ Ошибка записи уставки на задании {completedCount}. Пакет прерван.";
+                        await _batchProgress.SendStatusAsync(errMsg);
+                        await NotificationManager.NotifyOthersAsync(errMsg);
                         return;
                     }
 
-                    // ─── Успешная запись уставки ───
                     _lastValidFurnaceSetPoint = job.SetPoint;
                     await RefreshFurnaceSetPointAsync();
-
-                    SetStatusSuccess($"[Пакет {completedCount}/{enabledCount}] уставка " +
-                                     $"{job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C успешно записана");
-
+                    SetStatusSuccess($"[Пакет {completedCount}/{enabledCount}] уставка {stepSetPointText} °C записана");
                     ResetStabilizationTimer();
 
-                    // ═══════════════════════════════════════════════════════════
-                    // 2) Стабилизация
-                    // ═══════════════════════════════════════════════════════════
+                    // --- Стабилизация ---
                     if (job.StabilizationMinutes > 0)
                     {
                         job.StatusText = $"стабилизация {job.StabilizationMinutes} мин";
-                        job.StatusColor = Brushes.Orange;
+                        job.StatusColor = Brushes.Gold;
+                        SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации {job.StabilizationMinutes} мин...", false);
 
-                        SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации " +
-                                  $"{job.StabilizationMinutes} мин...", false);
+                        await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
+                        await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
 
-                        bool stable = await WaitForBatchStabilizationAsync(
-                            job.StabilizationMinutes, completedCount, enabledCount);
+                        _lastStabNotify = DateTime.MinValue; // Сброс для первого апдейта
 
+                        bool stable = await WaitForBatchStabilizationAsync(job.StabilizationMinutes, completedCount, enabledCount);
+
+                        // ★ ИСПРАВЛЕНО: добавлена проверка !stable
                         if (!stable)
                         {
                             job.StatusText = "стабилизация прервана";
-                            job.StatusColor = Brushes.Red;
+                            job.StatusColor = Brushes.OrangeRed;
                             SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
+                            string errMsg = $"❌ Стабилизация прервана на задании {completedCount}.";
+                            await _batchProgress.SendStatusAsync(errMsg);
+                            await NotificationManager.NotifyOthersAsync(errMsg);
                             return;
                         }
                     }
                     else
                     {
                         job.StatusText = "проверка допуска";
-                        job.StatusColor = Brushes.Orange;
+                        job.StatusColor = Brushes.Gold;
+                        SetStatus($"[Пакет {completedCount}/{enabledCount}] проверка допуска...");
+                        await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
+                        await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
 
-                        SetStatus($"[Пакет {completedCount}/{enabledCount}] стабилизация 0 мин — " +
-                                  $"проверка попадания в допуск...");
-
-                        bool inTolerance = await WaitForBatchTemperatureInToleranceAsync(
-                            completedCount, enabledCount);
-
+                        bool inTolerance = await WaitForBatchTemperatureInToleranceAsync(completedCount, enabledCount);
                         if (!inTolerance)
                         {
                             job.StatusText = "проверка прервана";
-                            job.StatusColor = Brushes.Red;
+                            job.StatusColor = Brushes.OrangeRed;
                             SetStatusWarning($"[Пакет {completedCount}] проверка допуска прервана");
+                            string errMsg = $"❌ Проверка допуска прервана на задании {completedCount}.";
+                            await _batchProgress.SendStatusAsync(errMsg);
+                            await NotificationManager.NotifyOthersAsync(errMsg);
                             return;
                         }
-
-                        SetStatus($"[Пакет {completedCount}/{enabledCount}] температура в допуске, " +
-                                  $"стабилизация пропущена");
                     }
 
-                    // ═══════════════════════════════════════════════════════════
-                    // 3) Запуск нужного режима
-                    // ═══════════════════════════════════════════════════════════
+                    // --- Запуск режима ---
                     job.StatusText = job.IsCalibrationMode ? "Идёт съём данных" : "Идёт бароциклирование";
-                    job.StatusColor = Brushes.Blue;
-
+                    job.StatusColor = Brushes.DeepSkyBlue;
                     string modeName = job.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
-                    SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» " +
-                              $"на {job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C");
+                    SetStatus($"[Пакет {completedCount}/{enabledCount}] запуск «{modeName}» на {stepSetPointText} °C");
 
-                    // ─── Переключение панелей по режиму задания ───
                     if (job.IsCalibrationMode)
                     {
                         CalibrationPanel.Visibility = Visibility.Visible;
@@ -330,11 +333,17 @@ namespace TERMINAL
                         CalibrationPanel.Visibility = Visibility.Collapsed;
                         PumpPanel.Visibility = Visibility.Visible;
                     }
-                    // ──────────────────────────────────────────────
 
-                    _batchRunDoneSignal = new TaskCompletionSource<bool>(
-                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    _batchRunDoneSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+                    // ★ 1. Отправляем таблицу ПЕРЕД запуском градуировки (только для Градуировки)
+                    if (job.IsCalibrationMode)
+                    {
+                        await UpdatePressureTableInTelegramAsync();
+                        await Task.Delay(500); // Даём Telegram время на отправку
+                    }
+
+                    // ★ 2. Запускаем режим
                     if (job.IsCalibrationMode)
                     {
                         int startStep = job.StartStep;
@@ -346,60 +355,70 @@ namespace TERMINAL
                         _ = Dispatcher.InvokeAsync(() => RunPumpForBatchAsync(cycles));
                     }
 
-                    // ★ Читаем результат — true = все циклы/шаги отработаны, false = прервано
                     bool taskCompleted = await _batchRunDoneSignal.Task;
                     _batchRunDoneSignal = null;
 
                     if (_batchStopRequested || _stopRequested)
                     {
                         SetStatusWarning("Пакетный режим остановлен оператором");
+                        string stopMsg = $"⏹ Пакетный режим остановлен на задании {completedCount}.";
+                        await _batchProgress.SendStatusAsync(stopMsg);
+                        await NotificationManager.NotifyOthersAsync(stopMsg);
                         return;
                     }
 
                     if (!taskCompleted)
                     {
                         job.StatusText = "прервано (см. журнал)";
-                        job.StatusColor = Brushes.Red;
-                        SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано — пакет остановлен");
+                        job.StatusColor = Brushes.OrangeRed;
+                        SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано");
+                        string errMsg = $"❌ Задание {completedCount} прервано. Пакет остановлен.";
+                        await _batchProgress.SendStatusAsync(errMsg);
+                        await NotificationManager.NotifyOthersAsync(errMsg);
                         return;
                     }
 
                     job.StatusText = "завершено";
                     job.StatusColor = Brushes.Green;
-
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] завершён");
+
+                    string jobEndMsg = $"✅ Задание {completedCount}/{enabledCount} (уставка {stepSetPointText} °C) — успешно завершено.";
+                    await NotificationManager.NotifyOthersAsync(jobEndMsg);
                 }
 
                 SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
 
-                // ─── Автовыключение печки ───
+                string endMsg = $"🏁 Пакетный режим завершён успешно. Обработано: {completedCount}/{enabledCount}";
+                await _batchProgress.SendStatusAsync(endMsg);
+                await NotificationManager.NotifyOthersAsync(endMsg);
+                await _batchProgress.ResetAsync();
+
                 if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
                 {
                     try
                     {
-                        AppendLog("Пакет: автовыключение камеры тепла/холода ST-351", Brushes.Blue);
+                        AppendLog("Пакет: автовыключение камеры ST-351", Brushes.Blue);
                         await StopFurnaceAsync();
                     }
                     catch (Exception ex)
                     {
-                        AppendLog($"Пакет: ошибка автовыключения камеры тепла/холода ST-351 — {ex.Message}", Brushes.OrangeRed);
+                        AppendLog($"Пакет: ошибка автовыключения — {ex.Message}", Brushes.OrangeRed);
                     }
                 }
             }
             catch (Exception ex)
             {
-                // ★ Ловим ВСЁ, что прорвалось сквозь внутренние проверки
-                AppendLog($"ПАКЕТ: необработанное исключение — " +
-                          $"{ex.GetType().Name}: {ex.Message}", Brushes.Red);
-
+                AppendLog($"ПАКЕТ: необработанное исключение — {ex.GetType().Name}: {ex.Message}", Brushes.Red);
                 if (ex.StackTrace != null)
                     AppendLog($"ПАКЕТ: stack trace — {ex.StackTrace}", Brushes.Red);
-
                 if (ex.InnerException != null)
-                    AppendLog($"ПАКЕТ: inner — {ex.InnerException.GetType().Name}: " +
-                              $"{ex.InnerException.Message}", Brushes.Red);
+                    AppendLog($"ПАКЕТ: inner — {ex.InnerException.GetType().Name}: {ex.InnerException.Message}", Brushes.Red);
 
                 SetStatusError($"Пакет: необработанная ошибка — {ex.Message}");
+                string errMsg = $"❌ Пакетный режим завершён с ошибкой: {ex.Message}";
+                await _batchProgress.SendStatusAsync(errMsg);
+                await NotificationManager.NotifyOthersAsync(errMsg);
+                await _batchProgress.ResetAsync();
             }
             finally
             {
@@ -408,7 +427,6 @@ namespace TERMINAL
                 StopBatchStatusTimer();
                 _batchRunDoneSignal = null;
                 _batchStopRequested = false;
-
                 StopBatchStatusTimer();
 
                 StartButton.IsEnabled = true;
@@ -419,14 +437,64 @@ namespace TERMINAL
                 SetExternalButtonsEnabled(true);
                 BatchList.IsEnabled = true;
 
+                BatchPresetCombo.IsEnabled = true;
+                LoadPresetButton.IsEnabled = true;
+                SavePresetButton.IsEnabled = true;
+                DeletePresetButton.IsEnabled = true;
+
                 foreach (var job in _batchJobs)
                     job.IsEditable = true;
 
                 BatchProgressText.Text = "";
                 UpdateStartButtonMode();
-
-                UpdateStartButtonMode();
+                _batchProgress.ResetTable();
             }
+        }
+
+        private async Task UpdatePressureTableInTelegramAsync()
+        {
+            if (!_batchRunning || _selectedTargetPressure == null) return;
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
+
+            var sb = new System.Text.StringBuilder();
+
+            sb.AppendLine($"📊 {_selectedTargetPressure}");
+            sb.AppendLine("```");
+
+            sb.AppendLine("Шаг | Давл. | Таймер | Статус");
+            sb.AppendLine("-----|-------|--------|----------");
+
+            for (int i = 0; i < steps.Length; i++)
+            {
+                string mark = (i == _currentStepIndexForNotify) ? "▶️" : (i < _completedSteps ? "✅" : "⏳");
+                string stepNum = $"{i + 1,2}/{steps.Length}".PadLeft(5);
+                string pressure = steps[i].ToString("0.##", CultureInfo.InvariantCulture).PadLeft(5);
+
+                string timerText = "-";
+                string status = "ожидание";
+
+                if (i == _currentStepIndexForNotify)
+                {
+                    timerText = _currentTimerRemaining.ToString();
+                    status = _currentStepStatus;
+                }
+                else if (i < _completedSteps)
+                {
+                    timerText = "0";
+                    var stepItem = i < _stepItems.Count ? _stepItems[i] : null;
+                    if (stepItem?.CompletedAt != null)
+                        status = $"завершён ({stepItem.CompletedAt:HH:mm})";
+                    else
+                        status = "завершён";
+                }
+
+                string timerStr = timerText.PadLeft(6);
+                sb.AppendLine($"{mark}    {stepNum} | {pressure} | {timerStr} | {status}");
+            }
+            sb.AppendLine("```");
+
+            // ★ await — гарантируем, что таблица обновится ДО перехода к следующему шагу
+            await _batchProgress.UpdateTableAsync(sb.ToString());
         }
 
         private async Task RunPumpForBatchAsync(int cycles)
@@ -539,8 +607,23 @@ namespace TERMINAL
                         $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C, " +
                         $"осталось {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
 
+                    // ★ Обновляем Telegram раз в 5 секунд
+                    if ((DateTime.Now - _lastStabNotify).TotalSeconds >= 5)
+                    {
+                        _lastStabNotify = DateTime.Now;
+                        string timeStr = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
+                        _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
+                        _ = _batchProgress.UpdateProgressAsync(_lastStabStatus);
+                    }
+
+                    // ★ Проверка завершения — ПОСЛЕ обновления таймера
                     if (elapsed.TotalMinutes >= requiredMinutes)
+                    {
+                        _ = _batchProgress.UpdateProgressAsync(
+                            $"✅ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — завершена");
+
                         return true;
+                    }
                 }
                 else
                 {
@@ -632,8 +715,6 @@ namespace TERMINAL
                 if (sleep > 0) await SafeDelayAsync(sleep);
             }
         }
-
-
         private void BatchTargetPressureCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (!_uiLoaded) return;
@@ -654,7 +735,6 @@ namespace TERMINAL
             UpdateMaxMinFromRange();
             SaveSettings();
         }
-
         private void BatchTimerSetCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (!_uiLoaded) return;

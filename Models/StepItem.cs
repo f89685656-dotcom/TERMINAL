@@ -8,6 +8,7 @@ namespace TERMINAL.Models
         private string _arrowText = "  ";
         private string _statusMark = "☐";
         private string _kosaCounterText = "";
+        public DateTime? CompletedAt { get; set; }
 
         public string IndexText { get; set; } = "";
         public string ValueNumber { get; set; } = "";

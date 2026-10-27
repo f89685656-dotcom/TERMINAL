@@ -9,177 +9,167 @@
         SnapsToDevicePixels="True"
         MinWidth="960" MinHeight="600"
         WindowStartupLocation="Manual"
-        Loaded="Window_Loaded">
+        Loaded="Window_Loaded"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource TextForeground}">
 
     <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/LightTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <conv:ValueToBrushConverter x:Key="ValueToBrush"/>
-        <models:InverseBoolToVisibilityConverter x:Key="BoolToVisibilityInverse"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+            <conv:ValueToBrushConverter x:Key="ValueToBrush"/>
+            <models:InverseBoolToVisibilityConverter x:Key="BoolToVisibilityInverse"/>
 
-        <!-- Стиль кнопок -->
-        <Style x:Key="ActionButtonStyle" TargetType="Button">
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="2">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Margin="{TemplateBinding Padding}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="border" Property="Background" Value="#FFB0B0B0"/>
-                                <Setter TargetName="border" Property="Opacity" Value="0.7"/>
-                                <Setter Property="Foreground" Value="#FFEEEEEE"/>
-                                <Setter Property="Cursor" Value="Arrow"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Opacity" Value="0.85"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Opacity" Value="0.7"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+            <!-- Стиль кнопок -->
+            <Style x:Key="ActionButtonStyle" TargetType="Button">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="border"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="2">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Margin="{TemplateBinding Padding}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="border" Property="Background" Value="#FFB0B0B0"/>
+                                    <Setter TargetName="border" Property="Opacity" Value="0.7"/>
+                                    <Setter Property="Foreground" Value="#FFEEEEEE"/>
+                                    <Setter Property="Cursor" Value="Arrow"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="border" Property="Opacity" Value="0.7"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
-        <!-- Стили текста таблицы -->
-        <Style x:Key="TableCellTextStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="LineHeight" Value="15"/>
-            <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
-        </Style>
+            <!-- Стили текста таблицы -->
+            <Style x:Key="TableCellTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="LineHeight" Value="15"/>
+                <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
+            </Style>
 
-        <Style x:Key="TableHeaderTextStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="#FF505050"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="LineHeight" Value="14"/>
-            <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
-        </Style>
+            <Style x:Key="TableHeaderTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Foreground" Value="#FF505050"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="LineHeight" Value="14"/>
+                <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
+            </Style>
 
-        <Style x:Key="TableCellBorderStyle" TargetType="Border">
-            <Setter Property="BorderBrush" Value="#FFDDDDDD"/>
-            <Setter Property="BorderThickness" Value="0,0,1,0"/>
-            <Setter Property="Padding" Value="3,0"/>
-        </Style>
+            <Style x:Key="TableCellBorderStyle" TargetType="Border">
+                <Setter Property="BorderBrush" Value="#FFDDDDDD"/>
+                <Setter Property="BorderThickness" Value="0,0,1,0"/>
+                <Setter Property="Padding" Value="3,0"/>
+            </Style>
 
-        <Style x:Key="TableHeaderBorderStyle" TargetType="Border">
-            <Setter Property="BorderBrush" Value="#FFCCCCCC"/>
-            <Setter Property="BorderThickness" Value="0,0,1,0"/>
-            <Setter Property="Padding" Value="3,0"/>
-        </Style>
+            <Style x:Key="TableHeaderBorderStyle" TargetType="Border">
+                <Setter Property="BorderBrush" Value="#FFCCCCCC"/>
+                <Setter Property="BorderThickness" Value="0,0,1,0"/>
+                <Setter Property="Padding" Value="3,0"/>
+            </Style>
 
-        <!-- Короткие единицы -->
-        <DataTemplate x:Key="ShortUnitsTemplate">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="32"/>
-                    <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="55"/>
-                    <ColumnDefinition Width="27"/>
-                    <ColumnDefinition Width="40"/>
-                    <ColumnDefinition Width="62"/>
-                    <ColumnDefinition Width="27"/>
-                </Grid.ColumnDefinitions>
+            <!-- Короткие единицы -->
+            <DataTemplate x:Key="ShortUnitsTemplate">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="55"/>
+                        <ColumnDefinition Width="27"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="62"/>
+                        <ColumnDefinition Width="27"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding IndexText}" Style="{StaticResource TableCellTextStyle}"/>
+                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding ValueNumber}" Style="{StaticResource TableCellTextStyle}" HorizontalAlignment="Right"/>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding ValueUnits}" Style="{StaticResource TableCellTextStyle}"/>
+                    </Border>
+                    <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding ArrowText}" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}" HorizontalAlignment="Left"/>
+                    </Border>
+                    <Border Grid.Column="4" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding KosaCounterText}" Style="{StaticResource TableCellTextStyle}" Foreground="#FF5050A0" HorizontalAlignment="Center"/>
+                    </Border>
+                    <Border Grid.Column="5" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding TimerText}" Style="{StaticResource TableCellTextStyle}" HorizontalAlignment="Right"/>
+                    </Border>
+                    <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
+                        <TextBlock Text="{Binding StatusMark}" Style="{StaticResource TableCellTextStyle}" Foreground="Green" HorizontalAlignment="Center"/>
+                    </Border>
+                </Grid>
+            </DataTemplate>
 
-                <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding IndexText}" Style="{StaticResource TableCellTextStyle}"/>
-                </Border>
-                <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding ValueNumber}" Style="{StaticResource TableCellTextStyle}"
-                               HorizontalAlignment="Right"/>
-                </Border>
-                <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding ValueUnits}" Style="{StaticResource TableCellTextStyle}"/>
-                </Border>
-                <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding ArrowText}" Style="{StaticResource TableCellTextStyle}"
-                               Foreground="Black" HorizontalAlignment="Left"/>
-                </Border>
-                <Border Grid.Column="4" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding KosaCounterText}" Style="{StaticResource TableCellTextStyle}"
-                               Foreground="#FF5050A0" HorizontalAlignment="Center"/>
-                </Border>
-                <Border Grid.Column="5" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding TimerText}" Style="{StaticResource TableCellTextStyle}"
-                               HorizontalAlignment="Right"/>
-                </Border>
-                <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
-                    <TextBlock Text="{Binding StatusMark}" Style="{StaticResource TableCellTextStyle}"
-                               Foreground="Green" HorizontalAlignment="Center"/>
-                </Border>
-            </Grid>
-        </DataTemplate>
-
-        <!-- Длинные единицы -->
-        <DataTemplate x:Key="LongUnitsTemplate">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="32"/>
-                    <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="55"/>
-                    <ColumnDefinition Width="27"/>
-                    <ColumnDefinition Width="40"/>
-                    <ColumnDefinition Width="62"/>
-                    <ColumnDefinition Width="27"/>
-                </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding IndexText}" Style="{StaticResource TableCellTextStyle}"/>
-                </Border>
-                <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding ValueNumber}" Style="{StaticResource TableCellTextStyle}"
-                               HorizontalAlignment="Right"/>
-                </Border>
-                <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding ValueUnits}" Style="{StaticResource TableCellTextStyle}"/>
-                </Border>
-                <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding ArrowText}" Style="{StaticResource TableCellTextStyle}"
-                               Foreground="Black" HorizontalAlignment="Left"/>
-                </Border>
-                <Border Grid.Column="4" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding KosaCounterText}" Style="{StaticResource TableCellTextStyle}"
-                               Foreground="#FF5050A0" HorizontalAlignment="Center"/>
-                </Border>
-                <Border Grid.Column="5" Style="{StaticResource TableCellBorderStyle}">
-                    <TextBlock Text="{Binding TimerText}" Style="{StaticResource TableCellTextStyle}"
-                               HorizontalAlignment="Right"/>
-                </Border>
-                <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
-                    <TextBlock Text="{Binding StatusMark}" Style="{StaticResource TableCellTextStyle}"
-                               Foreground="Green" HorizontalAlignment="Center"/>
-                </Border>
-            </Grid>
-        </DataTemplate>
-
+            <!-- Длинные единицы -->
+            <DataTemplate x:Key="LongUnitsTemplate">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="55"/>
+                        <ColumnDefinition Width="27"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="62"/>
+                        <ColumnDefinition Width="27"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding IndexText}" Style="{StaticResource TableCellTextStyle}"/>
+                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding ValueNumber}" Style="{StaticResource TableCellTextStyle}" HorizontalAlignment="Right"/>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding ValueUnits}" Style="{StaticResource TableCellTextStyle}"/>
+                    </Border>
+                    <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding ArrowText}" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}" HorizontalAlignment="Left"/>
+                    </Border>
+                    <Border Grid.Column="4" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding KosaCounterText}" Style="{StaticResource TableCellTextStyle}" Foreground="#FF5050A0" HorizontalAlignment="Center"/>
+                    </Border>
+                    <Border Grid.Column="5" Style="{StaticResource TableCellBorderStyle}">
+                        <TextBlock Text="{Binding TimerText}" Style="{StaticResource TableCellTextStyle}" HorizontalAlignment="Right"/>
+                    </Border>
+                    <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
+                        <TextBlock Text="{Binding StatusMark}" Style="{StaticResource TableCellTextStyle}" Foreground="Green" HorizontalAlignment="Center"/>
+                    </Border>
+                </Grid>
+            </DataTemplate>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
-            <!-- 1: путь + кнопки -->
             <RowDefinition Height="Auto"/>
-            <!-- 2: клиенты -->
             <RowDefinition Height="Auto"/>
-            <!-- 3: ТАКТ (новая строка) -->
             <RowDefinition Height="Auto"/>
-            <!-- 4: статус + версия -->
         </Grid.RowDefinitions>
 
         <!-- ═══════════════════ ROW 0 ═══════════════════ -->
@@ -190,70 +180,36 @@
             </Grid.ColumnDefinitions>
 
             <!-- КОЛОНКА 0 -->
-            <StackPanel Grid.Column="0"
-                        HorizontalAlignment="Stretch" VerticalAlignment="Top"
-                        Margin="0,0,8,0">
+            <StackPanel Grid.Column="0" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="0,0,8,0">
 
-                <!-- СТАРТ / ПАУЗА / НАСТРОЙКИ -->
+                <!-- СТАРТ / ПАУЗА / НАСТРОЙКИ / УВЕДОМЛЕНИЯ -->
                 <Grid Margin="0,0,0,6" HorizontalAlignment="Stretch">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <Button Grid.Column="0" x:Name="StartButton"
-                            Content="СТАРТ (пакет)"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Height="34" FontSize="13"
-                            Padding="4,4"
-                            Background="#FF2E8B8B"
-                            Click="StartButton_Click"/>
-
-                    <Button Grid.Column="1" x:Name="PauseButton"
-                            Content="ПАУЗА"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Height="34" FontSize="14"
-                            Padding="6,4" Margin="8,0,0,0"
-                            Background="#FFB0A050"
-                            IsEnabled="False"
-                            Click="PauseButton_Click"/>
-
-                    <Button Grid.Column="2"
-                            x:Name="DeviceSettingsButton"
-                            Content="⚙"
-                            Style="{StaticResource ActionButtonStyle}"
-                            Width="34" Height="34" FontSize="16"
-                            Padding="0" Margin="8,0,0,0"
-                            Background="#FF607090"
-                            ToolTip="Настройки приборов"
-                            Click="DeviceSettingsButton_Click"/>
+                    <Button Grid.Column="0" x:Name="StartButton" Content="СТАРТ (пакет)" Style="{StaticResource ActionButtonStyle}" Height="34" FontSize="13" Padding="4,4" Background="#FF2E8B8B" Click="StartButton_Click"/>
+                    <Button Grid.Column="1" x:Name="PauseButton" Content="ПАУЗА" Style="{StaticResource ActionButtonStyle}" Height="34" FontSize="14" Padding="6,4" Margin="6,0,0,0" Background="#FFB0A050" IsEnabled="False" Click="PauseButton_Click"/>
+                    <Button Grid.Column="2" x:Name="DeviceSettingsButton" Content="⚙" Style="{StaticResource ActionButtonStyle}" Width="34" Height="34" FontSize="16" Padding="0" Margin="6,0,0,0" Background="#FF607090" ToolTip="Настройки приборов" Click="DeviceSettingsButton_Click"/>
+                    <Button Grid.Column="3" x:Name="NotificationsButton" Content="🔔" Style="{StaticResource ActionButtonStyle}" Width="34" Height="34" FontSize="16" Padding="0" Margin="4,0,0,0" Background="#FF607090" ToolTip="Настройки уведомлений" Click="NotificationsButton_Click"/>
+                    <Button Grid.Column="4" x:Name="ThemeToggleButton" Content="🌙" Style="{StaticResource ActionButtonStyle}" Width="34" Height="34" FontSize="16" Padding="0" Margin="4,0,0,0" Background="#FF607090" ToolTip="Переключить тему" Click="ThemeToggleButton_Click"/>
                 </Grid>
 
                 <!-- Пакетный режим -->
-                <Border BorderBrush="LightGray" BorderThickness="1"
-                        CornerRadius="6" Padding="8,6"
-                        Background="#FFF8F8F8" Margin="0,0,0,6"
-                        HorizontalAlignment="Stretch">
+                <Border BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" CornerRadius="6" Padding="8,6" Background="{DynamicResource PanelBackground}" Margin="0,0,0,6" HorizontalAlignment="Stretch">
                     <StackPanel>
-
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                            <TextBlock Text="Пакетный режим" FontSize="13" FontWeight="Bold"
-                                       Foreground="#FF505050" VerticalAlignment="Center"/>
-                            <Border x:Name="KosaBadge" CornerRadius="3" Padding="6,1"
-                                    Margin="8,0,0,0" Background="#FFE0A050"
-                                    VerticalAlignment="Center" Visibility="Collapsed"
-                                    ToolTip="КОСА включена — 3 съёма на точку">
-                                <TextBlock x:Name="KosaBadgeText" Text="КОСА 3×"
-                                           FontSize="10" FontWeight="Bold" Foreground="White"/>
+                            <TextBlock Text="Пакетный режим" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center"/>
+                            <Border x:Name="KosaBadge" CornerRadius="3" Padding="6,1" Margin="8,0,0,0" Background="#FFE0A050" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="КОСА включена — 3 съёма на точку">
+                                <TextBlock x:Name="KosaBadgeText" Text="КОСА 3×" FontSize="10" FontWeight="Bold" Foreground="White"/>
                             </Border>
-                            <TextBlock Text=" — если есть активные задания, СТАРТ запустит пакет"
-                                       FontSize="11" Foreground="Gray"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text=" — если есть активные задания, СТАРТ запустит пакет" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
 
-                        <!-- Шапка пакета -->
                         <Grid Margin="0,0,0,5" Grid.IsSharedSizeScope="True">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" SharedSizeGroup="LabelCol"/>
@@ -266,62 +222,23 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <!-- Строка 1 -->
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Диапазон:"
-                                       FontSize="11" VerticalAlignment="Center" Margin="0,0,4,5"/>
-                            <ComboBox Grid.Row="0" Grid.Column="1"
-                                      x:Name="BatchTargetPressureCombo"
-                                      Width="120" Height="22" FontSize="11"
-                                      Padding="3,1" VerticalContentAlignment="Center"
-                                      Margin="0,0,10,5" HorizontalAlignment="Left"
-                                      SelectionChanged="BatchTargetPressureCombo_SelectionChanged"/>
-                            <StackPanel Grid.Row="0" Grid.Column="2"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center" Margin="0,0,0,5">
-                                <TextBlock Text="Таймеры:" FontSize="11"
-                                        VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                <ComboBox x:Name="BatchTimerSetCombo"
-                                      Width="120" Height="22" FontSize="11"
-                                      Padding="3,1" VerticalContentAlignment="Center"
-                                      SelectionChanged="BatchTimerSetCombo_SelectionChanged"/>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Диапазон:" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,5"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="BatchTargetPressureCombo" Width="120" Height="22" FontSize="11" Padding="3,1" VerticalContentAlignment="Center" Margin="0,0,10,5" HorizontalAlignment="Left" SelectionChanged="BatchTargetPressureCombo_SelectionChanged"/>
+                            <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,5">
+                                <TextBlock Text="Таймеры:" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox x:Name="BatchTimerSetCombo" Width="120" Height="22" FontSize="11" Padding="3,1" VerticalContentAlignment="Center" SelectionChanged="BatchTimerSetCombo_SelectionChanged"/>
                             </StackPanel>
 
-                            <!-- Строка 2 -->
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Пресет:"
-                                       FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <ComboBox Grid.Row="1" Grid.Column="1"
-                                      x:Name="BatchPresetCombo"
-                                      Width="120" Height="22" FontSize="11"
-                                      Padding="3,1" VerticalContentAlignment="Center"
-                                      DisplayMemberPath="DisplayText"
-                                      Margin="0,0,10,0" HorizontalAlignment="Left"/>
-                            <StackPanel Grid.Row="1" Grid.Column="2"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center">
-                                <Button x:Name="LoadPresetButton" Content="Загрузить"
-                                        Style="{StaticResource ActionButtonStyle}"
-                                        Height="22" FontSize="10" Padding="6,1"
-                                        Background="#FF5090D0" Margin="0,0,3,0"
-                                        Click="LoadPreset_Click"/>
-                                <Button x:Name="SavePresetButton" Content="Сохранить"
-                                        Style="{StaticResource ActionButtonStyle}"
-                                        Height="22" FontSize="10" Padding="6,1"
-                                        Background="#FF80B080" Margin="0,0,3,0"
-                                        Click="SavePreset_Click"/>
-                                <Button x:Name="DeletePresetButton" Content="Удалить"
-                                        Style="{StaticResource ActionButtonStyle}"
-                                        Height="22" FontSize="10" Padding="6,1"
-                                        Background="#FFD08080"
-                                        Click="DeletePreset_Click"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Пресет:" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <ComboBox Grid.Row="1" Grid.Column="1" x:Name="BatchPresetCombo" Width="120" Height="22" FontSize="11" Padding="3,1" VerticalContentAlignment="Center" DisplayMemberPath="DisplayText" Margin="0,0,10,0" HorizontalAlignment="Left"/>
+                            <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="LoadPresetButton" Content="Загрузить" Style="{StaticResource ActionButtonStyle}" Height="22" FontSize="10" Padding="6,1" Background="#FF5090D0" Margin="0,0,3,0" Click="LoadPreset_Click"/>
+                                <Button x:Name="SavePresetButton" Content="Сохранить" Style="{StaticResource ActionButtonStyle}" Height="22" FontSize="10" Padding="6,1" Background="#FF80B080" Margin="0,0,3,0" Click="SavePreset_Click"/>
+                                <Button x:Name="DeletePresetButton" Content="Удалить" Style="{StaticResource ActionButtonStyle}" Height="22" FontSize="10" Padding="6,1" Background="#FFD08080" Click="DeletePreset_Click"/>
                             </StackPanel>
                         </Grid>
 
-                        <!-- Список заданий пакета -->
-                        <Border x:Name="BatchPanel"
-                                BorderBrush="#FFDDDDDD" BorderThickness="1"
-                                CornerRadius="4" Padding="5"
-                                Background="White" MinHeight="70"
-                                HorizontalAlignment="Stretch">
+                        <Border x:Name="BatchPanel" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" CornerRadius="4" Padding="5" Background="{DynamicResource PanelBackground}" MinHeight="70" HorizontalAlignment="Stretch">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -330,9 +247,7 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <ScrollViewer Grid.Row="0" MaxHeight="200"
-                                              VerticalScrollBarVisibility="Auto"
-                                              HorizontalScrollBarVisibility="Disabled">
+                                <ScrollViewer Grid.Row="0" MaxHeight="200" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <ItemsControl x:Name="BatchList" HorizontalAlignment="Stretch">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
@@ -349,137 +264,40 @@
                                                     </Grid.Style>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <!-- 0 CheckBox -->
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <!-- 1 IndexText -->
                                                         <ColumnDefinition Width="45"/>
-                                                        <!-- 2 SetPoint -->
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <!-- 3 °C -->
                                                         <ColumnDefinition Width="45"/>
-                                                        <!-- 4 Stabilization -->
                                                         <ColumnDefinition Width="30"/>
-                                                        <!-- 5 мин -->
                                                         <ColumnDefinition Width="130"/>
-                                                        <!-- 6 ComboBox режим -->
                                                         <ColumnDefinition Width="45"/>
-                                                        <!-- 7 шаг/цикл -->
                                                         <ColumnDefinition Width="36"/>
-                                                        <!-- 8 подпись -->
                                                         <ColumnDefinition Width="90"/>
-                                                        <!-- 9 Точка -->
                                                         <ColumnDefinition Width="*"/>
-                                                        <!-- 10 StatusText -->
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <!-- 11 ✕ -->
+                                                        <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
 
-                                                    <CheckBox Grid.Column="0"
-                                                              IsChecked="{Binding IsEnabled, Mode=TwoWay}"
-                                                              VerticalAlignment="Center" Margin="0,0,5,0"
-                                                              ToolTip="Снять галочку, чтобы пропустить задание"/>
-
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{Binding IndexText}"
-                                                               FontSize="11" VerticalAlignment="Center"
-                                                               Margin="0,0,5,0"/>
-
-                                                    <TextBox Grid.Column="2"
-                                                             Text="{Binding SetPointText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                             FontSize="12" Padding="3,1"
-                                                             HorizontalContentAlignment="Center"
-                                                             VerticalContentAlignment="Center"
-                                                             IsEnabled="{Binding IsEditable}"
-                                                             ToolTip="Температура уставки, °C"/>
-
-                                                    <TextBlock Grid.Column="3" Text="°C"
-                                                               FontSize="10" Foreground="#FF505050"
-                                                               VerticalAlignment="Center" Margin="3,0,5,0"/>
-
-                                                    <TextBox Grid.Column="4"
-                                                             Text="{Binding StabilizationMinutesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                             FontSize="12" Padding="3,1"
-                                                             HorizontalContentAlignment="Center"
-                                                             VerticalContentAlignment="Center"
-                                                             IsEnabled="{Binding IsEditable}"
-                                                             ToolTip="Время стабилизации, мин"/>
-
-                                                    <TextBlock Grid.Column="5" Text="мин"
-                                                               FontSize="10" Foreground="#FF505050"
-                                                               VerticalAlignment="Center" Margin="3,0,5,0"/>
-
-                                                    <ComboBox Grid.Column="6"
-                                                              SelectedIndex="{Binding ModeIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                              FontSize="11" Height="20" Padding="2,0"
-                                                              VerticalContentAlignment="Center"
-                                                              Margin="0,0,5,0"
-                                                              IsEnabled="{Binding IsEditable}"
-                                                              ToolTip="Режим">
+                                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,5,0" ToolTip="Снять галочку, чтобы пропустить задание"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding IndexText}" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{DynamicResource TextForeground}"/>
+                                                    <TextBox Grid.Column="2" Text="{Binding SetPointText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" Padding="3,1" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" IsEnabled="{Binding IsEditable}" ToolTip="Температура уставки, °C"/>
+                                                    <TextBlock Grid.Column="3" Text="°C" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="3,0,5,0"/>
+                                                    <TextBox Grid.Column="4" Text="{Binding StabilizationMinutesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" Padding="3,1" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" IsEnabled="{Binding IsEditable}" ToolTip="Время стабилизации, мин"/>
+                                                    <TextBlock Grid.Column="5" Text="мин" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="3,0,5,0"/>
+                                                    <ComboBox Grid.Column="6" SelectedIndex="{Binding ModeIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="11" Height="20" Padding="2,0" VerticalContentAlignment="Center" Margin="0,0,5,0" IsEnabled="{Binding IsEditable}" ToolTip="Режим">
                                                         <ComboBoxItem Content="Градуировка"/>
                                                         <ComboBoxItem Content="Бароциклирование"/>
                                                     </ComboBox>
-
-                                                    <TextBox Grid.Column="7"
-                                                             Text="{Binding StartStepText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                             FontSize="12" Padding="3,1"
-                                                             HorizontalContentAlignment="Center"
-                                                             VerticalContentAlignment="Center"
-                                                             IsEnabled="{Binding IsEditable}"
-                                                             Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"
-                                                             ToolTip="Стартовый шаг градуировки"/>
-
-                                                    <TextBlock Grid.Column="8" Text="шаг"
-                                                               FontSize="10" Foreground="#FF505050"
-                                                               VerticalAlignment="Center" Margin="3,0,5,0"
-                                                               Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
-
-                                                    <TextBox Grid.Column="7"
-                                                             Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                             FontSize="12" Padding="3,1"
-                                                             HorizontalContentAlignment="Center"
-                                                             VerticalContentAlignment="Center"
-                                                             IsEnabled="{Binding IsEditable}"
-                                                             Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"
-                                                             ToolTip="Количество циклов"/>
-
-                                                    <TextBlock Grid.Column="8" Text="цикл"
-                                                               FontSize="10" Foreground="#FF505050"
-                                                               VerticalAlignment="Center" Margin="3,0,5,0"
-                                                               Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
-
-                                                    <!-- Точка -->
-                                                    <StackPanel Grid.Column="9"
-                                                                Orientation="Horizontal"
-                                                                VerticalAlignment="Center"
-                                                                Margin="0,0,5,0"
-                                                                Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}">
-                                                        <TextBlock Text="Точка:" FontSize="10"
-                                                                   Foreground="#FF505050"
-                                                                   VerticalAlignment="Center"
-                                                                   Margin="0,0,3,0"/>
-                                                        <TextBox Text="{Binding CaseText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                 FontSize="11" Width="32" Padding="2,1"
-                                                                 HorizontalContentAlignment="Center"
-                                                                 VerticalContentAlignment="Center"
-                                                                 IsEnabled="{Binding IsEditable}"
-                                                                 ToolTip="Точка: 1..10 или -1..-5"/>
+                                                    <TextBox Grid.Column="7" Text="{Binding StartStepText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" Padding="3,1" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" IsEnabled="{Binding IsEditable}" Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}" ToolTip="Стартовый шаг градуировки"/>
+                                                    <TextBlock Grid.Column="8" Text="шаг" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="3,0,5,0" Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}"/>
+                                                    <TextBox Grid.Column="7" Text="{Binding CyclesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" Padding="3,1" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" IsEnabled="{Binding IsEditable}" Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}" ToolTip="Количество циклов"/>
+                                                    <TextBlock Grid.Column="8" Text="цикл" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="3,0,5,0" Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibilityInverse}}"/>
+                                                    <StackPanel Grid.Column="9" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,5,0" Visibility="{Binding IsCalibrationMode, Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="Точка:" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                                        <TextBox Text="{Binding CaseText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="11" Width="32" Padding="2,1" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" IsEnabled="{Binding IsEditable}" ToolTip="Точка: 1..10 или -1..-5"/>
                                                     </StackPanel>
-
-                                                    <TextBlock Grid.Column="10"
-                                                               Text="{Binding StatusText}"
-                                                               FontSize="10"
-                                                               Foreground="{Binding StatusColor}"
-                                                               VerticalAlignment="Center"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               Margin="0,0,5,0"/>
-
-                                                    <Button Grid.Column="11"
-                                                            Content="✕" FontSize="10"
-                                                            Width="20" Height="20" Padding="0"
-                                                            Background="#FFD08080" Foreground="White"
-                                                            BorderThickness="0"
-                                                            Click="RemoveBatchJob_Click"
-                                                            Tag="{Binding}"/>
+                                                    <TextBlock Grid.Column="10" Text="{Binding StatusText}" FontSize="10" Foreground="{Binding StatusColor}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,5,0"/>
+                                                    <Button Grid.Column="11" Content="✕" FontSize="10" Width="20" Height="20" Padding="0" Background="#FFD08080" Foreground="White" BorderThickness="0" Click="RemoveBatchJob_Click" Tag="{Binding}"/>
                                                 </Grid>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -491,24 +309,11 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" x:Name="AddBatchJobButton"
-                                            Content="+ Добавить"
-                                            Style="{StaticResource ActionButtonStyle}"
-                                            Height="24" FontSize="10" Padding="3,1"
-                                            Background="#FF80B080"
-                                            Click="AddBatchJob_Click"/>
-                                    <Button Grid.Column="1" x:Name="ClearBatchButton"
-                                            Content="Очистить"
-                                            Style="{StaticResource ActionButtonStyle}"
-                                            Height="24" FontSize="10" Padding="3,1" Margin="5,0,0,0"
-                                            Background="#FFB0A050"
-                                            Click="ClearBatch_Click"/>
+                                    <Button Grid.Column="0" x:Name="AddBatchJobButton" Content="+ Добавить" Style="{StaticResource ActionButtonStyle}" Height="24" FontSize="10" Padding="3,1" Background="#FF80B080" Click="AddBatchJob_Click"/>
+                                    <Button Grid.Column="1" x:Name="ClearBatchButton" Content="Очистить" Style="{StaticResource ActionButtonStyle}" Height="24" FontSize="10" Padding="3,1" Margin="5,0,0,0" Background="#FFB0A050" Click="ClearBatch_Click"/>
                                 </Grid>
 
-                                <Border x:Name="BatchStatusPanel" Grid.Row="2"
-                                        CornerRadius="4" Padding="8,5" Margin="0,5,0,0"
-                                        Background="#FFF0F0F0" BorderBrush="#FFDDDDDD"
-                                        BorderThickness="1" Visibility="Collapsed">
+                                <Border x:Name="BatchStatusPanel" Grid.Row="2" CornerRadius="4" Padding="8,5" Margin="0,5,0,0" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" Visibility="Collapsed">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -518,49 +323,26 @@
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-
-                                        <TextBlock Grid.Column="0" Text="Задание:"
-                                                   FontSize="11" Foreground="#FF505050"
-                                                   VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                        <TextBlock Grid.Column="1" x:Name="BatchCurrentJobText"
-                                                   Text="—" FontSize="12" FontWeight="Bold"
-                                                   Foreground="#FF2E4A6B" VerticalAlignment="Center"/>
-
-                                        <TextBlock Grid.Column="2" Text="Текущая:"
-                                                   FontSize="11" Foreground="#FF505050"
-                                                   VerticalAlignment="Center" Margin="16,0,6,0"/>
-                                        <TextBlock Grid.Column="3" x:Name="BatchCurrentTempText"
-                                                   Text="— °C" FontSize="12" FontWeight="Bold"
-                                                   Foreground="#FF2E4A6B" VerticalAlignment="Center"/>
-
-                                        <TextBlock Grid.Column="4" Text="Δ:"
-                                                   FontSize="11" Foreground="#FF505050"
-                                                   VerticalAlignment="Center" Margin="16,0,6,0"/>
-                                        <TextBlock Grid.Column="5" x:Name="BatchDeltaText"
-                                                   Text="—" FontSize="12" FontWeight="Bold"
-                                                   Foreground="Gray" VerticalAlignment="Center"
-                                                   MinWidth="70"/>
+                                        <TextBlock Grid.Column="0" Text="Задание:" FontSize="11" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBlock Grid.Column="1" x:Name="BatchCurrentJobText" Text="—" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="Текущая:" FontSize="11" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center" Margin="16,0,6,0"/>
+                                        <TextBlock Grid.Column="3" x:Name="BatchCurrentTempText" Text="— °C" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="4" Text="Δ:" FontSize="11" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center" Margin="16,0,6,0"/>
+                                        <TextBlock Grid.Column="5" x:Name="BatchDeltaText" Text="—" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center" MinWidth="70"/>
                                     </Grid>
                                 </Border>
 
-                                <TextBlock x:Name="BatchProgressText" Grid.Row="3"
-                                           Text="" FontSize="10" Foreground="#FF5050A0"
-                                           TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                <TextBlock x:Name="BatchProgressText" Grid.Row="3" Text="" FontSize="10" Foreground="#FF5050A0" TextWrapping="Wrap" Margin="0,4,0,0"/>
                             </Grid>
                         </Border>
-
                     </StackPanel>
                 </Border>
 
                 <!-- Таблица давлений -->
-                <StackPanel x:Name="CalibrationPanel"
-                            HorizontalAlignment="Left" VerticalAlignment="Top">
-                    <Border BorderBrush="LightGray" BorderThickness="1"
-                            Padding="6" HorizontalAlignment="Left" VerticalAlignment="Top"
-                            Background="#FFF8F8F8" CornerRadius="6">
+                <StackPanel x:Name="CalibrationPanel" HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Border BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" Padding="6" HorizontalAlignment="Left" VerticalAlignment="Top" Background="{DynamicResource PanelBackground}" CornerRadius="6">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="320">
                             <StackPanel>
-
                                 <Grid x:Name="StepsHeaderShort" Margin="0,0,0,2">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32"/>
@@ -575,8 +357,7 @@
                                         <TextBlock Text="№" Style="{StaticResource TableHeaderTextStyle}"/>
                                     </Border>
                                     <Border Grid.Column="1" Style="{StaticResource TableHeaderBorderStyle}">
-                                        <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}"
-                                                   HorizontalAlignment="Right"/>
+                                        <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Right"/>
                                     </Border>
                                     <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
                                         <TextBlock Text="Ед.изм." Style="{StaticResource TableHeaderTextStyle}"/>
@@ -585,19 +366,15 @@
                                         <TextBlock Text="←" Style="{StaticResource TableHeaderTextStyle}"/>
                                     </Border>
                                     <Border Grid.Column="4" Style="{StaticResource TableHeaderBorderStyle}">
-                                        <TextBlock Text="Изм." Style="{StaticResource TableHeaderTextStyle}"
-                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Изм." Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Center"/>
                                     </Border>
                                     <Border Grid.Column="5" Style="{StaticResource TableHeaderBorderStyle}">
-                                        <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}"
-                                                   HorizontalAlignment="Right"/>
+                                        <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Right"/>
                                     </Border>
                                     <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
-                                        <TextBlock Text="✓" Style="{StaticResource TableHeaderTextStyle}"
-                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="✓" Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Center"/>
                                     </Border>
                                 </Grid>
-
                                 <Grid x:Name="StepsHeaderLong" Margin="0,0,0,2" Visibility="Collapsed">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="32"/>
@@ -612,8 +389,7 @@
                                         <TextBlock Text="№" Style="{StaticResource TableHeaderTextStyle}"/>
                                     </Border>
                                     <Border Grid.Column="1" Style="{StaticResource TableHeaderBorderStyle}">
-                                        <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}"
-                                                   HorizontalAlignment="Right"/>
+                                        <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Right"/>
                                     </Border>
                                     <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
                                         <TextBlock Text="Ед.изм." Style="{StaticResource TableHeaderTextStyle}"/>
@@ -622,19 +398,15 @@
                                         <TextBlock Text="←" Style="{StaticResource TableHeaderTextStyle}"/>
                                     </Border>
                                     <Border Grid.Column="4" Style="{StaticResource TableHeaderBorderStyle}">
-                                        <TextBlock Text="Изм." Style="{StaticResource TableHeaderTextStyle}"
-                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Изм." Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Center"/>
                                     </Border>
                                     <Border Grid.Column="5" Style="{StaticResource TableHeaderBorderStyle}">
-                                        <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}"
-                                                   HorizontalAlignment="Right"/>
+                                        <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Right"/>
                                     </Border>
                                     <Border Grid.Column="6" BorderThickness="0" Padding="3,0">
-                                        <TextBlock Text="✓" Style="{StaticResource TableHeaderTextStyle}"
-                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="✓" Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Center"/>
                                     </Border>
                                 </Grid>
-
                                 <ItemsControl x:Name="StepsList" HorizontalAlignment="Left">
                                     <ItemsControl.ItemContainerStyle>
                                         <Style TargetType="ContentPresenter">
@@ -643,24 +415,16 @@
                                         </Style>
                                     </ItemsControl.ItemContainerStyle>
                                 </ItemsControl>
-
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
-
-                    <TextBlock x:Name="StepCounterText" Text="Шаг: 0/0"
-                               FontSize="13" Margin="6,4,0,0"/>
+                    <TextBlock x:Name="StepCounterText" Text="Шаг: 0/0" FontSize="13" Margin="6,4,0,0" Foreground="{DynamicResource TextForeground}"/>
                 </StackPanel>
 
                 <!-- Максимум/Минимум -->
-                <StackPanel x:Name="PumpPanel"
-                            HorizontalAlignment="Left" VerticalAlignment="Top"
-                            Visibility="Collapsed">
-                    <Border BorderBrush="LightGray" BorderThickness="1"
-                            Padding="6" HorizontalAlignment="Left" VerticalAlignment="Top"
-                            Background="#FFF8F8F8" CornerRadius="6">
+                <StackPanel x:Name="PumpPanel" HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed">
+                    <Border BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" Padding="6" HorizontalAlignment="Left" VerticalAlignment="Top" Background="{DynamicResource PanelBackground}" CornerRadius="6">
                         <StackPanel>
-
                             <Grid Margin="0,0,0,4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="27"/>
@@ -676,18 +440,15 @@
                                     <TextBlock Text="Режим" Style="{StaticResource TableHeaderTextStyle}"/>
                                 </Border>
                                 <Border Grid.Column="2" Style="{StaticResource TableHeaderBorderStyle}">
-                                    <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}"
-                                               HorizontalAlignment="Right"/>
+                                    <TextBlock Text="Давл." Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Right"/>
                                 </Border>
                                 <Border Grid.Column="3" Style="{StaticResource TableHeaderBorderStyle}">
                                     <TextBlock Text="Ед.изм." Style="{StaticResource TableHeaderTextStyle}"/>
                                 </Border>
                                 <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
-                                    <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}"
-                                               HorizontalAlignment="Right"/>
+                                    <TextBlock Text="Таймер" Style="{StaticResource TableHeaderTextStyle}" HorizontalAlignment="Right"/>
                                 </Border>
                             </Grid>
-
                             <Grid Margin="0,2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="27"/>
@@ -697,29 +458,21 @@
                                     <ColumnDefinition Width="62"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MaxArrow" Text="  "
-                                               Style="{StaticResource TableCellTextStyle}"
-                                               Foreground="Black" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="MaxArrow" Text="  " Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}" HorizontalAlignment="Left"/>
                                 </Border>
                                 <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock Text="Максимум:" Style="{StaticResource TableCellTextStyle}"/>
+                                    <TextBlock Text="Максимум:" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}"/>
                                 </Border>
                                 <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MaxValueText" Text="0"
-                                               Style="{StaticResource TableCellTextStyle}"
-                                               HorizontalAlignment="Right"/>
+                                    <TextBlock x:Name="MaxValueText" Text="0" Style="{StaticResource TableCellTextStyle}" HorizontalAlignment="Right" Foreground="{DynamicResource TextForeground}"/>
                                 </Border>
                                 <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MaxUnitsText" Text=""
-                                               Style="{StaticResource TableCellTextStyle}"/>
+                                    <TextBlock x:Name="MaxUnitsText" Text="" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}"/>
                                 </Border>
                                 <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
-                                    <TextBlock x:Name="MaxTimerText" Text=""
-                                               Style="{StaticResource TableCellTextStyle}"
-                                               HorizontalAlignment="Right"/>
+                                    <TextBlock x:Name="MaxTimerText" Text="" Style="{StaticResource TableCellTextStyle}" HorizontalAlignment="Right" Foreground="{DynamicResource TextForeground}"/>
                                 </Border>
                             </Grid>
-
                             <Grid Margin="0,2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="27"/>
@@ -729,49 +482,32 @@
                                     <ColumnDefinition Width="62"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MinArrow" Text="  "
-                                               Style="{StaticResource TableCellTextStyle}"
-                                               Foreground="Black" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="MinArrow" Text="  " Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}" HorizontalAlignment="Left"/>
                                 </Border>
                                 <Border Grid.Column="1" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock Text="Минимум:" Style="{StaticResource TableCellTextStyle}"/>
+                                    <TextBlock Text="Минимум:" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}"/>
                                 </Border>
                                 <Border Grid.Column="2" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MinValueText" Text="0"
-                                               Style="{StaticResource TableCellTextStyle}"
-                                               HorizontalAlignment="Right"/>
+                                    <TextBlock x:Name="MinValueText" Text="0" Style="{StaticResource TableCellTextStyle}" HorizontalAlignment="Right" Foreground="{DynamicResource TextForeground}"/>
                                 </Border>
                                 <Border Grid.Column="3" Style="{StaticResource TableCellBorderStyle}">
-                                    <TextBlock x:Name="MinUnitsText" Text=""
-                                               Style="{StaticResource TableCellTextStyle}"/>
+                                    <TextBlock x:Name="MinUnitsText" Text="" Style="{StaticResource TableCellTextStyle}" Foreground="{DynamicResource TextForeground}"/>
                                 </Border>
                                 <Border Grid.Column="4" BorderThickness="0" Padding="3,0">
-                                    <TextBlock x:Name="MinTimerText" Text=""
-                                               Style="{StaticResource TableCellTextStyle}"
-                                               HorizontalAlignment="Right"/>
+                                    <TextBlock x:Name="MinTimerText" Text="" Style="{StaticResource TableCellTextStyle}" HorizontalAlignment="Right" Foreground="{DynamicResource TextForeground}"/>
                                 </Border>
                             </Grid>
-
                         </StackPanel>
                     </Border>
-
-                    <TextBlock x:Name="CyclesText" Text="Цикл: 0/0"
-                               FontSize="13" Margin="6,4,0,0"/>
+                    <TextBlock x:Name="CyclesText" Text="Цикл: 0/0" FontSize="13" Margin="6,4,0,0" Foreground="{DynamicResource TextForeground}"/>
                 </StackPanel>
             </StackPanel>
 
             <!-- КОЛОНКА 1: приборы -->
-            <StackPanel Grid.Column="1" Orientation="Vertical"
-                        HorizontalAlignment="Right" VerticalAlignment="Top">
-
+            <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Right" VerticalAlignment="Top">
                 <!-- ST-351 -->
-                <Border x:Name="FurnaceCardBorder"
-                    BorderBrush="LightGray" BorderThickness="1"
-                    CornerRadius="6" Padding="8,6"
-                    Background="#FFF8F8F8" Width="270"
-                    Margin="0,0,0,8" HorizontalAlignment="Right">
+                <Border x:Name="FurnaceCardBorder" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" CornerRadius="6" Padding="8,6" Background="{DynamicResource PanelBackground}" Width="270" Margin="0,0,0,8" HorizontalAlignment="Right">
                     <StackPanel Orientation="Vertical">
-
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -780,154 +516,62 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-
-                            <Ellipse Grid.Column="0"
-                                         x:Name="FurnaceStatusEllipse"
-                                         Width="10" Height="10"
-                                         Fill="Red"
-                                         VerticalAlignment="Center"
-                                         Margin="0,0,6,0"/>
-
-                            <Border Grid.Column="1"
-                                        Width="36" Height="36"
-                                        CornerRadius="4"
-                                        Background="White"
-                                        BorderBrush="#FFDDDDDD"
-                                        BorderThickness="1"
-                                        Margin="0,0,8,0"
-                                        VerticalAlignment="Center">
+                            <Ellipse Grid.Column="0" x:Name="FurnaceStatusEllipse" Width="10" Height="10" Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Border Grid.Column="1" Width="36" Height="36" CornerRadius="4" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" Margin="0,0,8,0" VerticalAlignment="Center">
                                 <Image Source="/Images/ST_351.png" Stretch="Uniform" Margin="2"/>
                             </Border>
-
-                            <TextBlock Grid.Column="2"
-                                       Text="Печь ST-351"
-                                       FontSize="13" FontWeight="Bold"
-                                       Foreground="#FF505050"
-                                       VerticalAlignment="Center"
-                                       Cursor="Hand"
-                                       MouseLeftButtonUp="FurnaceTitle_Click"/>
-
-                            <Button Grid.Column="4"
-                                        Content="⚙"
-                                        FontSize="14"
-                                        Width="22" Height="22"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Foreground="Gray"
-                                        Cursor="Hand"
-                                        ToolTip="Настройки печи ST-351"
-                                        Click="FurnaceSettings_Click"/>
+                            <TextBlock Grid.Column="2" Text="Печь ST-351" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="FurnaceTitle_Click"/>
+                            <Button Grid.Column="4" Content="⚙" FontSize="14" Width="22" Height="22" Padding="0" Background="Transparent" BorderThickness="0" Foreground="Gray" Cursor="Hand" ToolTip="Настройки печи ST-351" Click="FurnaceSettings_Click"/>
                         </Grid>
-
-                        <Border CornerRadius="4" Padding="6,3" Margin="0,0,0,4"
-                                Background="#FF2E6B4A">
+                        <Border CornerRadius="4" Padding="6,3" Margin="0,0,0,4" Background="#FF2E6B4A">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Уставка:"
-                                           FontSize="12" Foreground="#FFCCEEDD"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="FurnaceSetPointBox"
-                                         Width="60" Height="22" FontSize="14" FontWeight="Bold"
-                                         Text="25" Padding="4,1"
-                                         Background="Transparent" BorderBrush="#FF6A9F88"
-                                         BorderThickness="1" Foreground="White" CaretBrush="White"
-                                         HorizontalAlignment="Right"
-                                         HorizontalContentAlignment="Center"
-                                         VerticalContentAlignment="Center"
-                                         TextChanged="FurnaceSetPointBox_TextChanged"/>
-                                <TextBlock Grid.Column="2" Text="°C"
-                                           FontSize="12" Foreground="#FFCCEEDD"
-                                           VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                <TextBlock Grid.Column="0" Text="Уставка:" FontSize="12" Foreground="#FFCCEEDD" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBox Grid.Column="1" x:Name="FurnaceSetPointBox" Width="60" Height="22" FontSize="14" FontWeight="Bold" Text="25" Padding="4,1" Background="Transparent" BorderBrush="#FF6A9F88" BorderThickness="1" Foreground="White" CaretBrush="White" HorizontalAlignment="Right" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" TextChanged="FurnaceSetPointBox_TextChanged"/>
+                                <TextBlock Grid.Column="2" Text="°C" FontSize="12" Foreground="#FFCCEEDD" VerticalAlignment="Center" Margin="5,0,0,0"/>
                             </Grid>
                         </Border>
-
                         <Grid Margin="0,0,0,5">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" x:Name="ReadFurnaceSetPointButton"
-                                    Content="Читать уставку"
-                                    Style="{StaticResource ActionButtonStyle}"
-                                    Height="26" FontSize="11" Padding="3,2"
-                                    Background="#FF6A9FD8"
-                                    Click="ReadFurnaceSetPoint_Click"/>
-                            <Button Grid.Column="1" x:Name="TestFurnaceButton"
-                                    Content="Записать уставку"
-                                    Style="{StaticResource ActionButtonStyle}"
-                                    Height="26" FontSize="11" Padding="3,2" Margin="4,0,0,0"
-                                    Background="#FFB0A050"
-                                    Click="TestWriteFurnace_Click"/>
+                            <Button Grid.Column="0" x:Name="ReadFurnaceSetPointButton" Content="Читать уставку" Style="{StaticResource ActionButtonStyle}" Height="26" FontSize="11" Padding="3,2" Background="#FF6A9FD8" Click="ReadFurnaceSetPoint_Click"/>
+                            <Button Grid.Column="1" x:Name="TestFurnaceButton" Content="Записать уставку" Style="{StaticResource ActionButtonStyle}" Height="26" FontSize="11" Padding="3,2" Margin="4,0,0,0" Background="#FFB0A050" Click="TestWriteFurnace_Click"/>
                         </Grid>
-
-                        <Border CornerRadius="4" Padding="6,5" Margin="0,0,0,5"
-                                Background="#FF2E4A6B">
+                        <Border CornerRadius="4" Padding="6,5" Margin="0,0,0,5" Background="#FF2E4A6B">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Текущая:"
-                                           FontSize="12" Foreground="#FFCCDDEE"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1" x:Name="FurnaceCurrentTempText"
-                                           Text="— °C" FontSize="18" FontWeight="Bold"
-                                           Foreground="White" HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="Текущая:" FontSize="12" Foreground="#FFCCDDEE" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1" x:Name="FurnaceCurrentTempText" Text="— °C" FontSize="18" FontWeight="Bold" Foreground="White" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
-
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" x:Name="FurnaceRunButton"
-                                    Content="Запуск"
-                                    Style="{StaticResource ActionButtonStyle}"
-                                    Height="26" FontSize="11" Padding="3,2"
-                                    Background="#FF80B080"
-                                    Click="FurnaceRun_Click"/>
-                            <Button Grid.Column="1" x:Name="FurnaceStopButton"
-                                    Content="Стоп"
-                                    Style="{StaticResource ActionButtonStyle}"
-                                    Height="26" FontSize="11" Padding="3,2" Margin="4,0,0,0"
-                                    Background="#FFD08080"
-                                    Click="FurnaceStop_Click"/>
+                            <Button Grid.Column="0" x:Name="FurnaceRunButton" Content="Запуск" Style="{StaticResource ActionButtonStyle}" Height="26" FontSize="11" Padding="3,2" Background="#FF80B080" Click="FurnaceRun_Click"/>
+                            <Button Grid.Column="1" x:Name="FurnaceStopButton" Content="Стоп" Style="{StaticResource ActionButtonStyle}" Height="26" FontSize="11" Padding="3,2" Margin="4,0,0,0" Background="#FFD08080" Click="FurnaceStop_Click"/>
                         </Grid>
-
-                        <TextBlock Text="Время стабилизации температуры:"
-                                   FontSize="11" Foreground="#FF505050" Margin="0,6,0,2"/>
-
+                        <TextBlock Text="Время стабилизации температуры:" FontSize="11" Foreground="{DynamicResource TextForeground}" Margin="0,6,0,2"/>
                         <Border CornerRadius="4" Padding="6,4" Background="#FF3A3A3A">
-                            <TextBlock x:Name="StabilizationTimerText" Text="00:00:00"
-                                       FontSize="18" FontWeight="Bold" Foreground="#FF80FF80"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StabilizationTimerText" Text="00:00:00" FontSize="18" FontWeight="Bold" Foreground="#FF80FF80" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-
-                        <Button x:Name="ResetStabilizationTimerButton"
-                                Content="Сброс таймера стабилизации"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="26" FontSize="11" Padding="3,2" Margin="0,4,0,0"
-                                Background="#FF808080"
-                                Click="ResetStabilizationTimer_Click"/>
-
+                        <Button x:Name="ResetStabilizationTimerButton" Content="Сброс таймера стабилизации" Style="{StaticResource ActionButtonStyle}" Height="26" FontSize="11" Padding="3,2" Margin="0,4,0,0" Background="#FF808080" Click="ResetStabilizationTimer_Click"/>
                     </StackPanel>
                 </Border>
 
                 <!-- АГК -->
-                <Border x:Name="AgkCardBorder"
-                                BorderBrush="LightGray" BorderThickness="1"
-                                CornerRadius="6" Padding="8,6"
-                                Background="#FFF8F8F8" Width="270"
-                                Margin="0,0,0,8" HorizontalAlignment="Right">
+                <Border x:Name="AgkCardBorder" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" CornerRadius="6" Padding="8,6" Background="{DynamicResource PanelBackground}" Width="270" Margin="0,0,0,8" HorizontalAlignment="Right">
                     <StackPanel Orientation="Vertical">
-
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -936,123 +580,54 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-
-                            <Ellipse Grid.Column="0" x:Name="AgkStatusEllipse"
-                                             Width="10" Height="10"
-                                             Fill="Red"
-                                             VerticalAlignment="Center"
-                                             Margin="0,0,6,0"/>
-
-                            <Border Grid.Column="1"
-                                            Width="36" Height="36"
-                                            CornerRadius="4"
-                                            Background="White"
-                                            BorderBrush="#FFDDDDDD"
-                                            BorderThickness="1"
-                                            Margin="0,0,8,0"
-                                            VerticalAlignment="Center">
+                            <Ellipse Grid.Column="0" x:Name="AgkStatusEllipse" Width="10" Height="10" Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Border Grid.Column="1" Width="36" Height="36" CornerRadius="4" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" Margin="0,0,8,0" VerticalAlignment="Center">
                                 <Image Source="Images/AGK.png" Stretch="Uniform" Margin="2"/>
                             </Border>
-
-                            <TextBlock Grid.Column="2"
-                                           Text="АГК"
-                                           FontSize="13" FontWeight="Bold"
-                                           Foreground="#FF505050"
-                                           VerticalAlignment="Center"
-                                           Cursor="Hand"
-                                           MouseLeftButtonUp="AgkTitle_Click"/>
-
-                            <Button Grid.Column="4"
-                                            Content="⚙"
-                                            Width="22" Height="22" FontSize="14"
-                                            Padding="0"
-                                            Background="Transparent" BorderThickness="0"
-                                            Foreground="Gray" Cursor="Hand"
-                                            ToolTip="Настройки АГК"
-                                            Click="AgkSettings_Click"/>
+                            <TextBlock Grid.Column="2" Text="АГК" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="AgkTitle_Click"/>
+                            <Button Grid.Column="4" Content="⚙" Width="22" Height="22" FontSize="14" Padding="0" Background="Transparent" BorderThickness="0" Foreground="Gray" Cursor="Hand" ToolTip="Настройки АГК" Click="AgkSettings_Click"/>
                         </Grid>
-
-                        <Border CornerRadius="4" Padding="6,5" Margin="0,0,0,4"
-                                Background="#FF2E4A6B">
+                        <Border CornerRadius="4" Padding="6,5" Margin="0,0,0,4" Background="#FF2E4A6B">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Давление:"
-                                           FontSize="12" Foreground="#FFCCDDEE"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1" x:Name="AgkPressureText"
-                                           Text="—" FontSize="15" FontWeight="Bold"
-                                           Foreground="White" HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="Давление:" FontSize="12" Foreground="#FFCCDDEE" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1" x:Name="AgkPressureText" Text="—" FontSize="15" FontWeight="Bold" Foreground="White" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
-
                         <Border CornerRadius="4" Padding="6,5" Background="#FF2E6B4A">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Уставка:"
-                                           FontSize="12" Foreground="#FFCCEEDD"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1" x:Name="AgkSetPointText"
-                                           Text="—" FontSize="15" FontWeight="Bold"
-                                           Foreground="White" HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="Уставка:" FontSize="12" Foreground="#FFCCEEDD" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1" x:Name="AgkSetPointText" Text="—" FontSize="15" FontWeight="Bold" Foreground="White" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
-
                         <Grid Margin="0,6,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" x:Name="StopButton" Content="СТОП"
-                                    Style="{StaticResource ActionButtonStyle}"
-                                    Height="30" FontSize="12" Padding="4,3"
-                                    Background="#FFD05050"
-                                    Click="StopButton_Click"/>
-                            <Button Grid.Column="1" x:Name="VentButton" Content="СБРОС"
-                                    Style="{StaticResource ActionButtonStyle}"
-                                    Height="30" FontSize="12" Padding="4,3" Margin="6,0,0,0"
-                                    Background="#FF5080D0"
-                                    Click="VentButton_Click"/>
+                            <Button Grid.Column="0" x:Name="StopButton" Content="СТОП" Style="{StaticResource ActionButtonStyle}" Height="30" FontSize="12" Padding="4,3" Background="#FFD05050" Click="StopButton_Click"/>
+                            <Button Grid.Column="1" x:Name="VentButton" Content="СБРОС" Style="{StaticResource ActionButtonStyle}" Height="30" FontSize="12" Padding="4,3" Margin="6,0,0,0" Background="#FF5080D0" Click="VentButton_Click"/>
                         </Grid>
-
-                        <Button x:Name="CalibrateStocksButton"
-                                Content="Калибровка штоков"
-                                Style="{StaticResource ActionButtonStyle}"
-                                Height="30" FontSize="12" Padding="4,3" Margin="0,6,0,0"
-                                Background="#FF6A4FA0"
-                                Click="CalibrateStocksButton_Click"/>
-
-                        <Border CornerRadius="4" Padding="6,5" Margin="0,6,0,0"
-                                Background="#FF2E2E2E">
+                        <Button x:Name="CalibrateStocksButton" Content="Калибровка штоков" Style="{StaticResource ActionButtonStyle}" Height="30" FontSize="12" Padding="4,3" Margin="0,6,0,0" Background="#FF6A4FA0" Click="CalibrateStocksButton_Click"/>
+                        <Border CornerRadius="4" Padding="6,5" Margin="0,6,0,0" Background="#FF2E2E2E">
                             <StackPanel Orientation="Vertical">
-                                <TextBlock Text="Статус АГК:" FontSize="11"
-                                           Foreground="#FFAAAAAA" Margin="0,0,0,2"/>
-                                <TextBlock x:Name="AgkStatusTextBox" Text="—"
-                                           FontSize="12" FontFamily="Consolas"
-                                           Foreground="#FF80FF80" TextWrapping="Wrap"
-                                           MaxHeight="50"/>
+                                <TextBlock Text="Статус АГК:" FontSize="11" Foreground="#FFAAAAAA" Margin="0,0,0,2"/>
+                                <TextBlock x:Name="AgkStatusTextBox" Text="—" FontSize="12" FontFamily="Consolas" Foreground="#FF80FF80" TextWrapping="Wrap" MaxHeight="50"/>
                             </StackPanel>
                         </Border>
-
                     </StackPanel>
                 </Border>
 
                 <!-- СКТБ ЭлПА -->
-            <!-- СКТБ ЭлПА -->
-                <Border x:Name="SktbCardBorder"
-                            BorderBrush="LightGray" BorderThickness="1"
-                            CornerRadius="6" Padding="8,6"
-                            Background="#FFF8F8F8" Width="270"
-                            HorizontalAlignment="Right">
-                <StackPanel Orientation="Vertical">
-
+                <Border x:Name="SktbCardBorder" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" CornerRadius="6" Padding="8,6" Background="{DynamicResource PanelBackground}" Width="270" HorizontalAlignment="Right">
+                    <StackPanel Orientation="Vertical">
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -1060,96 +635,48 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-
-                            <Ellipse Grid.Column="0" x:Name="PlatinaStatusEllipse"
-                                 Width="10" Height="10"
-                                 Fill="Red"
-                                 VerticalAlignment="Center"
-                                 Margin="0,0,6,0"/>
-
-                            <TextBlock Grid.Column="1"
-                               Text="СКТБ ЭлПА"
-                               FontSize="13" FontWeight="Bold"
-                               Foreground="#FF505050"
-                               VerticalAlignment="Center"
-                               Cursor="Hand"
-                               MouseLeftButtonUp="SktbTitle_Click"/>
-
-                            <Button Grid.Column="3"
-                                Content="⚙"
-                                Width="22" Height="22" FontSize="14"
-                                Padding="0"
-                                Background="Transparent" BorderThickness="0"
-                                Foreground="Gray" Cursor="Hand"
-                                ToolTip="Настройки СКТБ ЭлПА"
-                                Click="SktbSettings_Click"/>
+                            <Ellipse Grid.Column="0" x:Name="PlatinaStatusEllipse" Width="10" Height="10" Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Grid.Column="1" Text="СКТБ ЭлПА" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="SktbTitle_Click"/>
+                            <Button Grid.Column="3" Content="⚙" Width="22" Height="22" FontSize="14" Padding="0" Background="Transparent" BorderThickness="0" Foreground="Gray" Cursor="Hand" ToolTip="Настройки СКТБ ЭлПА" Click="SktbSettings_Click"/>
                         </Grid>
-
-                        <Border x:Name="PlatinaRowBorder" CornerRadius="4" Padding="6,4"
-                                Background="#FF2E4A6B" Margin="0,0,0,4">
+                        <Border x:Name="PlatinaRowBorder" CornerRadius="4" Padding="6,4" Background="#FF2E4A6B" Margin="0,0,0,4">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" x:Name="PlatinaRowEllipse"
-                                         Width="8" Height="8" Fill="Red"
-                                         VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1" Text="Платина:"
-                                           FontSize="12" Foreground="#FFCCDDEE"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="2" x:Name="PlatinaTempText"
-                                           Text="— °C" FontSize="15" FontWeight="Bold"
-                                           Foreground="White" HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"/>
+                                <Ellipse Grid.Column="0" x:Name="PlatinaRowEllipse" Width="8" Height="8" Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1" Text="Платина:" FontSize="12" Foreground="#FFCCDDEE" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="2" x:Name="PlatinaTempText" Text="— °C" FontSize="15" FontWeight="Bold" Foreground="White" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
-
-                        <Border x:Name="PdaRowBorder" CornerRadius="4" Padding="6,4"
-                                Background="#FF2E4A6B" Margin="0,0,0,4">
+                        <Border x:Name="PdaRowBorder" CornerRadius="4" Padding="6,4" Background="#FF2E4A6B" Margin="0,0,0,4">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" x:Name="PdaStatusEllipse"
-                                         Width="8" Height="8" Fill="Red"
-                                         VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1" Text="ПДА:"
-                                           FontSize="12" Foreground="#FFCCDDEE"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="2" x:Name="PdaPressureText"
-                                           Text="— мм рт. ст." FontSize="15" FontWeight="Bold"
-                                           Foreground="White" HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"/>
+                                <Ellipse Grid.Column="0" x:Name="PdaStatusEllipse" Width="8" Height="8" Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1" Text="ПДА:" FontSize="12" Foreground="#FFCCDDEE" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="2" x:Name="PdaPressureText" Text="— мм рт. ст." FontSize="15" FontWeight="Bold" Foreground="White" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
-
-                        <Border x:Name="PtkRowBorder" CornerRadius="4" Padding="6,4"
-                                Background="#FF2E4A6B">
+                        <Border x:Name="PtkRowBorder" CornerRadius="4" Padding="6,4" Background="#FF2E4A6B">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" x:Name="PtkStatusEllipse"
-                                         Width="8" Height="8" Fill="Red"
-                                         VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="1" Text="ПТК:"
-                                           FontSize="12" Foreground="#FFCCDDEE"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Grid.Column="2" x:Name="PtkTempText"
-                                           Text="— °C" FontSize="15" FontWeight="Bold"
-                                           Foreground="White" HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"/>
+                                <Ellipse Grid.Column="0" x:Name="PtkStatusEllipse" Width="8" Height="8" Fill="Red" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="1" Text="ПТК:" FontSize="12" Foreground="#FFCCDDEE" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="2" x:Name="PtkTempText" Text="— °C" FontSize="15" FontWeight="Bold" Foreground="White" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
                     </StackPanel>
                 </Border>
-
             </StackPanel>
         </Grid>
 
@@ -1159,49 +686,17 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-
             <StackPanel Grid.Row="0" Margin="0,0,0,5">
-                <TextBlock Text="Путь сохранения:" FontSize="13"
-                           VerticalAlignment="Center" Margin="0,0,0,3"/>
-                <TextBox x:Name="SavePathBox" Height="26" FontSize="12"
-                         Padding="6,3" HorizontalAlignment="Stretch"
-                         VerticalContentAlignment="Center"
-                         TextChanged="SavePathBox_TextChanged"/>
+                <TextBlock Text="Путь сохранения:" FontSize="13" VerticalAlignment="Center" Margin="0,0,0,3" Foreground="{DynamicResource TextForeground}"/>
+                <TextBox x:Name="SavePathBox" Height="26" FontSize="12" Padding="4,2" HorizontalAlignment="Stretch" VerticalContentAlignment="Center" TextChanged="SavePathBox_TextChanged"/>
             </StackPanel>
-
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left">
-                <Button x:Name="TakePointBroadcastButton" Content="Снять данные"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="28" Width="120" FontSize="12" Padding="4,3"
-                        Background="#FF80B080"
-                        Click="TakePointBroadcast_Click"/>
-                <Button x:Name="SaveDataButton" Content="Сохранить данные"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="28" Width="130" FontSize="12" Padding="4,3" Margin="6,0,0,0"
-                        Background="#FF5090D0"
-                        Click="SaveData_Click"/>
-                <Button x:Name="ClearDataButton" Content="Очистить данные"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="28" Width="120" FontSize="12" Padding="4,3" Margin="6,0,0,0"
-                        Background="#FFB0A050"
-                        Click="ClearData_Click"/>
-                <Button x:Name="RemoveOfflineButton" Content="Удалить Offline"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="28" Width="110" FontSize="12" Padding="4,3" Margin="6,0,0,0"
-                        Background="#FFD08080"
-                        Click="RemoveOffline_Click"/>
-                <Button x:Name="RunExcelMacroButton" Content="Тесты в Excel"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="28" Width="130" FontSize="12" Padding="4,3" Margin="6,0,0,0"
-                        Background="#FF6A4FA0"
-                        Click="RunExcelMacroButton_Click"/>
-                <Button x:Name="SummaryButton"
-                        Content="Сводка данных"
-                        Style="{StaticResource ActionButtonStyle}"
-                        Height="28" Width="130" FontSize="12"
-                        Padding="4,3" Margin="6,0,0,0"
-                        Background="#FF4A6FA5"
-                        Click="SummaryButton_Click"/>
+                <Button x:Name="TakePointBroadcastButton" Content="Снять данные" Style="{StaticResource ActionButtonStyle}" Height="28" Width="120" FontSize="12" Padding="4,3" Background="#FF80B080" Click="TakePointBroadcast_Click"/>
+                <Button x:Name="SaveDataButton" Content="Сохранить данные" Style="{StaticResource ActionButtonStyle}" Height="28" Width="130" FontSize="12" Padding="4,3" Margin="6,0,0,0" Background="#FF5090D0" Click="SaveData_Click"/>
+                <Button x:Name="ClearDataButton" Content="Очистить данные" Style="{StaticResource ActionButtonStyle}" Height="28" Width="120" FontSize="12" Padding="4,3" Margin="6,0,0,0" Background="#FFB0A050" Click="ClearData_Click"/>
+                <Button x:Name="RemoveOfflineButton" Content="Удалить Offline" Style="{StaticResource ActionButtonStyle}" Height="28" Width="110" FontSize="12" Padding="4,3" Margin="6,0,0,0" Background="#FFD08080" Click="RemoveOffline_Click"/>
+                <Button x:Name="RunExcelMacroButton" Content="Тесты в Excel" Style="{StaticResource ActionButtonStyle}" Height="28" Width="130" FontSize="12" Padding="4,3" Margin="6,0,0,0" Background="#FF6A4FA0" Click="RunExcelMacroButton_Click"/>
+                <Button x:Name="SummaryButton" Content="Сводка данных" Style="{StaticResource ActionButtonStyle}" Height="28" Width="130" FontSize="12" Padding="4,3" Margin="6,0,0,0" Background="#FF4A6FA5" Click="SummaryButton_Click"/>
             </StackPanel>
         </Grid>
 
@@ -1211,15 +706,8 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-
-            <TextBlock Grid.Row="0"
-                       Text="Подключённые клиенты KalibratorGUI:"
-                       FontSize="13" FontWeight="Bold"
-                       VerticalAlignment="Center" Margin="0,0,0,4"/>
-
-            <Border Grid.Row="1" BorderBrush="LightGray" BorderThickness="1"
-                    Padding="6" MaxHeight="90" HorizontalAlignment="Stretch"
-                    CornerRadius="4" Background="#FFF8F8F8">
+            <TextBlock Grid.Row="0" Text="Подключённые клиенты KalibratorGUI:" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,0,4" Foreground="{DynamicResource TextForeground}"/>
+            <Border Grid.Row="1" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" Padding="6" MaxHeight="90" HorizontalAlignment="Stretch" CornerRadius="4" Background="{DynamicResource PanelBackground}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl x:Name="ClientsList">
                         <ItemsControl.ItemTemplate>
@@ -1227,9 +715,7 @@
                                 <Grid Margin="0,2">
                                     <Grid.ContextMenu>
                                         <ContextMenu>
-                                            <MenuItem Header="Отключить"
-                                                      Click="DisconnectClient_Click"
-                                                      Tag="{Binding}"/>
+                                            <MenuItem Header="Отключить" Click="DisconnectClient_Click" Tag="{Binding}"/>
                                         </ContextMenu>
                                     </Grid.ContextMenu>
                                     <Grid.ColumnDefinitions>
@@ -1242,48 +728,14 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*" MinWidth="100"/>
                                     </Grid.ColumnDefinitions>
-
-                                    <CheckBox Grid.Column="0"
-                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                              VerticalAlignment="Center" Margin="0,0,6,0"/>
-
-                                    <Ellipse Grid.Column="1" Width="12" Height="12"
-                                             Fill="{Binding StatusColor}"
-                                             VerticalAlignment="Center" Margin="0,0,6,0"/>
-
-                                    <TextBlock Grid.Column="2" Text="{Binding DisplayText}"
-                                               FontFamily="Consolas" FontSize="12"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
-
-                                    <TextBox Grid.Column="3"
-                                             Text="{Binding CustomName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             FontSize="12" Padding="3,1"
-                                             VerticalContentAlignment="Center" Margin="0,0,6,0"
-                                             ToolTip="Введите произвольное имя клиента"/>
-
-                                    <TextBlock Grid.Column="4" Text="{Binding RoleLabel}"
-                                               FontSize="11" FontStyle="Italic"
-                                               Foreground="#FF2E6B4A"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
-
-                                    <TextBlock Grid.Column="5" Text="Кол-во датчиков:"
-                                               FontSize="11" VerticalAlignment="Center"
-                                               Margin="0,0,4,0"/>
-
-                                    <TextBox Grid.Column="6" Width="40"
-                                                 Text="{Binding CaseValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                 FontSize="12" Padding="3,1"
-                                                 HorizontalContentAlignment="Center"
-                                                 VerticalContentAlignment="Center"
-                                                 Margin="0,0,6,0"
-                                                 ToolTip="Количество датчиков в текущей загрузке"/>
-
-                                    <TextBlock Grid.Column="7" Text="{Binding StatusText}"
-                                               FontSize="12" FontWeight="SemiBold"
-                                               Foreground="Black" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Ellipse Grid.Column="1" Width="12" Height="12" Fill="{Binding StatusColor}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding DisplayText}" FontFamily="Consolas" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,6,0" Foreground="{DynamicResource TextForeground}"/>
+                                    <TextBox Grid.Column="3" Text="{Binding CustomName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" Padding="3,1" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="Введите произвольное имя клиента"/>
+                                    <TextBlock Grid.Column="4" Text="{Binding RoleLabel}" FontSize="11" FontStyle="Italic" Foreground="#FF2E6B4A" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="5" Text="Кол-во датчиков:" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="{DynamicResource TextForeground}"/>
+                                    <TextBox Grid.Column="6" Width="40" Text="{Binding CaseValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontSize="12" Padding="3,1" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,6,0" ToolTip="Количество датчиков в текущей загрузке"/>
+                                    <TextBlock Grid.Column="7" Text="{Binding StatusText}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextForeground}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -1292,59 +744,29 @@
             </Border>
         </Grid>
 
-        <!-- ROW 3: Статус + версия -->
-        <!-- ROW 3: Такт (вся ширина) -->
-        <!-- ROW 3: Такт (2 строки) -->
-        <Border Grid.Row="3"
-                    x:Name="TickTimingPanel"
-                    BorderBrush="#FFE0E0E0"
-                    BorderThickness="0,1,0,0"
-                    Padding="0,3,0,3"
-                    Margin="0,4,0,0">
+        <!-- ROW 3: Такт -->
+        <Border Grid.Row="3" x:Name="TickTimingPanel" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,1,0,0" Padding="0,3,0,3" Margin="0,4,0,0">
             <StackPanel Orientation="Vertical">
-                <TextBlock x:Name="TickTimingText"
-                   Text="такт: —"
-                   Foreground="#FF808080"
-                   FontSize="11"
-                   FontFamily="Consolas"
-                   TextTrimming="CharacterEllipsis"
-                   ToolTip="Суммарное время такта за секунду (без SafeDelay)"/>
-
-                <TextBlock x:Name="TickTimingText2"
-                   Text=""
-                   Foreground="#FF808080"
-                   FontSize="11"
-                   FontFamily="Consolas"
-                   TextTrimming="CharacterEllipsis"
-                   Margin="0,1,0,0"/>
+                <TextBlock x:Name="TickTimingText" Text="такт: —" Foreground="{DynamicResource TextForeground}" FontSize="11" FontFamily="Consolas" TextTrimming="CharacterEllipsis" ToolTip="Суммарное время такта за секунду (без SafeDelay)"/>
+                <TextBlock x:Name="TickTimingText2" Text="" Foreground="{DynamicResource TextForeground}" FontSize="11" FontFamily="Consolas" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
             </StackPanel>
         </Border>
 
-        <!-- ROW 4: Статус + версия -->
+        <!-- ROW 4: Статус + версия + уведомления -->
         <Grid Grid.Row="4" Margin="0,4,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-
-            <Button x:Name="ShowLogButton" Grid.Column="0" Content="Журнал"
-            Style="{StaticResource ActionButtonStyle}"
-            Height="22" FontSize="11" Padding="8,2"
-            Background="#FF808080" VerticalAlignment="Bottom"
-            Margin="0,0,8,0"
-            Click="ShowLogButton_Click"/>
-
-            <TextBlock x:Name="StatusText" Grid.Column="1"
-               Text="Готов" Foreground="Gray" FontSize="12"
-               VerticalAlignment="Bottom" TextTrimming="CharacterEllipsis"/>
-
-            <TextBlock x:Name="VersionText" Grid.Column="2" Text="v0.0.0"
-               Foreground="Gray" FontSize="12" FontWeight="SemiBold"
-               VerticalAlignment="Bottom" Margin="10,0,0,0"
-               Cursor="Hand" TextDecorations="Underline"
-               ToolTip="Показать историю изменений"
-               MouseLeftButtonUp="VersionText_MouseLeftButtonUp"/>
+            <Button x:Name="ShowLogButton" Grid.Column="0" Content="Журнал" Style="{StaticResource ActionButtonStyle}" Height="22" FontSize="11" Padding="8,2" Background="#FF808080" VerticalAlignment="Bottom" Margin="0,0,8,0" Click="ShowLogButton_Click"/>
+            <TextBlock x:Name="StatusText" Grid.Column="1" Text="Готов" Foreground="{DynamicResource TextForeground}" FontSize="12" VerticalAlignment="Bottom" TextTrimming="CharacterEllipsis"/>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,15,0" VerticalAlignment="Bottom">
+                <Ellipse x:Name="NotificationStatusEllipse" Width="10" Height="10" Fill="Gray" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <TextBlock x:Name="NotificationStatusText" Text="Уведомления: выкл" FontSize="11" Foreground="Gray" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock x:Name="VersionText" Grid.Column="3" Text="v0.0.0" Foreground="{DynamicResource TextForeground}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Bottom" Margin="10,0,0,0" Cursor="Hand" TextDecorations="Underline" ToolTip="Показать историю изменений" MouseLeftButtonUp="VersionText_MouseLeftButtonUp"/>
         </Grid>
     </Grid>
 </Window>

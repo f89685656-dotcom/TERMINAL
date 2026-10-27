@@ -17,7 +17,8 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using HidSharp;
-using TERMINAL.Models;  
+using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {

@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Net.Http;
 using System.Globalization;
 using System.IO;
 using System.IO.Ports;
@@ -22,6 +24,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
+
 
 namespace TERMINAL
 {
@@ -92,10 +96,10 @@ namespace TERMINAL
         private bool _readPlatinum = true;
         private string _platinumMtkCommand = "pass2 meas2? 2";
 
+
+
         private SerialPort? _platinumSerial;
         private readonly object _platinumSerialLock = new object();
-
-
 
         public string PlatinumSource => _platinumSource;
         public string PlatinumComPort => _platinumComPort;
@@ -124,6 +128,8 @@ namespace TERMINAL
 
         private DispatcherTimer? _sensorUiTimer;
 
+        private string? _lastStabStatus = null;
+
         private const double SensorStaleSeconds = 5.0;
         private const double SktbAllDeadSeconds = 5.0;
 
@@ -142,6 +148,8 @@ namespace TERMINAL
         private string? _lastSavedFilePath = null;
 
         private const int ConnectionLostThreshold = 5;
+
+        private DateTime _lastStabNotify = DateTime.MinValue;
 
         private int _agkFailCount = 0;
         private int _furnaceTempFailCount = 0;
@@ -267,6 +275,7 @@ namespace TERMINAL
         private System.Windows.Controls.TextBox? _logFilterBox = null;
         private const int LogMaxEntries = 5000;
         private System.Windows.Controls.TextBlock? _logCounterText = null;
+        private readonly BatchProgressNotifier _batchProgress = new();
 
         // Публичные свойства для окна настроек
         public string FurnaceIp => _furnaceIp;
@@ -290,9 +299,130 @@ namespace TERMINAL
 
         private string _currentAgkMode = "";
 
+        // ═══════════════════════════════════════════════════════════════════
+        // УВЕДОМЛЕНИЯ
+        // ═══════════════════════════════════════════════════════════════════
+        private bool _notificationsEnabled = false;
+        private int _notificationMethodIndex = 0;
+
+        // ★ НОВЫЕ ПОЛЯ (для галочек)
+        private bool _notifyTgEnabled = false;
+        private bool _notifyEmailEnabled = false;
+        private bool _notifyVkEnabled = false;
+        private bool _notifyMaxEnabled = false;
+
+        private bool _notifyYandexEnabled = false;
+        private bool _notifyMailEnabled = false;
+        private bool _notifyGmailEnabled = false;
+        private bool _notifyCustomEnabled = false;
+
+
+
+
+        // ★ ПУБЛИЧНЫЕ СВОЙСТВА (чтобы окно настроек могло их прочитать)
+        public bool NotifyTgEnabled => _notifyTgEnabled;
+        public bool NotifyEmailEnabled => _notifyEmailEnabled;
+        public bool NotifyVkEnabled => _notifyVkEnabled;
+        public bool NotifyMaxEnabled => _notifyMaxEnabled;
+
+        public bool NotifyYandexEnabled => _notifyYandexEnabled;
+        public bool NotifyMailEnabled => _notifyMailEnabled;
+        public bool NotifyGmailEnabled => _notifyGmailEnabled;
+        public bool NotifyCustomEnabled => _notifyCustomEnabled;
+
+        // Telegram
+        private string _telegramToken = "";
+        private string _telegramChatId = "";
+
+        // ★ Для живой таблицы в Telegram
+        private int _currentStepIndexForNotify = -1;
+        private int _currentTimerRemaining = 0;
+        private string _currentStepStatus = "ожидание";
+        private string _lastSentTable = "";
+
+        // Email
+        private string _emailHost = "";
+        private int _emailPort = 587;
+        private string _emailUser = "";
+        private string _emailPass = "";
+        private string _emailTo = "";
+        private int _emailProviderIndex = 0;
+
+        // ★ ВОТ ЭТИ ПЕРЕМЕННЫЕ НУЖНО ДОБАВИТЬ:
+        private string _emailYandexUser = "";
+        private string _emailYandexPass = "";
+        private string _emailYandexTo = "";
+
+        private string _emailMailUser = "";
+        private string _emailMailPass = "";
+        private string _emailMailTo = "";
+
+        private string _emailGmailUser = "";
+        private string _emailGmailPass = "";
+        private string _emailGmailTo = "";
+
+        private string _emailCustomHost = "";
+        private int _emailCustomPort = 587;
+        private string _emailCustomUser = "";
+        private string _emailCustomPass = "";
+        private string _emailCustomTo = "";
+
+        // VK
+        private string _vkToken = "";
+        private long _vkPeerId = 0;
+
+        // МАКС
+
+        private string _maxToken = "";
+        private string _maxChatId = "";
+
+        // SMS
+        private string _smsLogin = "";
+        private string _smsPass = "";
+        private string _smsPhone = "";
+
+        // Публичные свойства для окна настроек (DeviceSettingsWindow)
+        public bool NotificationsEnabled => _notificationsEnabled;
+        public int NotificationMethodIndex => _notificationMethodIndex;
+        public string TelegramToken => _telegramToken;
+        public string TelegramChatId => _telegramChatId;
+        public string EmailHost => _emailHost;
+        public int EmailPort => _emailPort;
+        public string EmailUser => _emailUser;
+        public string EmailPass => _emailPass;
+        public string EmailTo => _emailTo;
+        public int EmailProviderIndex => _emailProviderIndex;
+
+        // ★ ВОТ ЭТИ СВОЙСТВА НУЖНО ДОБАВИТЬ (с сеттерами!):
+        public string EmailYandexUser { get => _emailYandexUser; set => _emailYandexUser = value ?? ""; }
+        public string EmailYandexPass { get => _emailYandexPass; set => _emailYandexPass = value ?? ""; }
+        public string EmailYandexTo { get => _emailYandexTo; set => _emailYandexTo = value ?? ""; }
+
+        public string EmailMailUser { get => _emailMailUser; set => _emailMailUser = value ?? ""; }
+        public string EmailMailPass { get => _emailMailPass; set => _emailMailPass = value ?? ""; }
+        public string EmailMailTo { get => _emailMailTo; set => _emailMailTo = value ?? ""; }
+
+        public string EmailGmailUser { get => _emailGmailUser; set => _emailGmailUser = value ?? ""; }
+        public string EmailGmailPass { get => _emailGmailPass; set => _emailGmailPass = value ?? ""; }
+        public string EmailGmailTo { get => _emailGmailTo; set => _emailGmailTo = value ?? ""; }
+
+        public string EmailCustomHost { get => _emailCustomHost; set => _emailCustomHost = value ?? ""; }
+        public int EmailCustomPort { get => _emailCustomPort; set => _emailCustomPort = value; }
+        public string EmailCustomUser { get => _emailCustomUser; set => _emailCustomUser = value ?? ""; }
+        public string EmailCustomPass { get => _emailCustomPass; set => _emailCustomPass = value ?? ""; }
+        public string EmailCustomTo { get => _emailCustomTo; set => _emailCustomTo = value ?? ""; }
+        public string VkToken => _vkToken;
+        public long VkPeerId => _vkPeerId;
+        public string MaxToken => _maxToken;
+        public string MaxChatId => _maxChatId;
+        public string SmsLogin => _smsLogin;
+        public string SmsPass => _smsPass;
+        public string SmsPhone => _smsPhone;
+
         public MainWindow()
         {
             InitializeComponent();
+
             Current = this;
 
             if (StartButtonBatchBrush is SolidColorBrush sb2 && sb2.CanFreeze)
@@ -306,13 +436,43 @@ namespace TERMINAL
 
             LoadTargetPressures();
             LoadTimerSets();
-            LoadSettings();
+            LoadSettings(); // ★ Читаем JSON, заполняем _loadedSettings (и _isDarkTheme, если добавили в LoadSettings)
+
+            // ─── Инициализация сервиса уведомлений из сохранённых настроек ───
+            if (_notificationsEnabled
+                && !string.IsNullOrEmpty(_telegramToken)
+                && long.TryParse(_telegramChatId, out long _initChatId))
+            {
+                try
+                {
+                    NotificationManager.SetService(
+                        new TelegramNotificationService(_telegramToken, _initChatId));
+                }
+                catch (Exception ex)
+                {
+                    NotificationManager.SetService(new NullNotificationService());
+                    System.Diagnostics.Debug.WriteLine(
+                        "Уведомления: не удалось инициализировать — " + ex.Message);
+                }
+            }
+            else
+            {
+                NotificationManager.SetService(new NullNotificationService());
+            }
 
             ApplyWindowPositionOrFallback();
 
             _uiLoaded = true;
 
-            ApplyLoadedSettingsToUi();
+            ApplyLoadedSettingsToUi(); // ★ Здесь _isDarkTheme тоже обновляется (если добавили)
+
+            // ★★★ ВОТ СЮДА ПЕРЕНОСИМ ПРИМЕНЕНИЕ ТЕМЫ ★★★
+            if (_isDarkTheme)
+            {
+                ChangeTheme(true);
+                if (ThemeToggleButton != null) ThemeToggleButton.Content = "💡";
+            }
+            // ★★★ КОНЕЦ БЛОКА ★★★
 
             if (BatchList != null)
                 BatchList.ItemsSource = _batchJobs;
@@ -454,6 +614,12 @@ namespace TERMINAL
             OpenDeviceSettings(1);
         }
 
+        private void NotificationsButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Открываем окно настроек сразу на вкладке "Уведомления" (индекс 4)
+            OpenDeviceSettings(4);
+        }
+
         private void FurnaceTitle_Click(object sender, MouseButtonEventArgs e)
         {
             OpenDeviceSettings(1);
@@ -498,12 +664,12 @@ namespace TERMINAL
                     _logSlowTicks,
                     _autoStopFurnace,
                     _platinumSource,
-                    _platinumComPort,
-                    _readPlatinum);
-
+                    _platinumComPort,        // ← 10-й
+                    _readPlatinum,           // ← 11-й
+                    _platinumMtkCommand);    // ← 12-й
 
                 win.Owner = this;
-                win.ShowDialog();
+                win.Show();   // ★ Show() вместо ShowDialog() — окно немодальное
             }
             catch (Exception ex)
             {
@@ -513,66 +679,90 @@ namespace TERMINAL
         }
 
         public void ApplyDeviceSettings(
-            string furnaceIp, int furnacePort,
-            ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
-            bool autoStopFurnace, bool showFurnaceCard,
-            string agkIp, int agkPort, bool showAgkCard,
-            int agkPressureTimeoutMinutes,
-            string sktbFilterScript, bool showSktbCard,
-            string platinumSource, string platinumComPort, bool readPlatinum,
-            string platinumMtkCommand,
-            double furnaceStabilizationTolerance)
+      string furnaceIp, int furnacePort,
+      ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
+      bool autoStopFurnace, bool showFurnaceCard,
+      string agkIp, int agkPort, bool showAgkCard,
+      int agkPressureTimeoutMinutes,
+      string sktbFilterScript, bool showSktbCard,
+      string platinumSource, string platinumComPort, bool readPlatinum,
+      string platinumMtkCommand,
+      double furnaceStabilizationTolerance)
         {
+            // ★ Сохраняем СТАРЫЕ значения для сравнения
+            string oldFurnaceIp = _furnaceIp;
+            int oldFurnacePort = _furnacePort;
+            string oldAgkIp = _deviceIp;
+            int oldAgkPort = _devicePort;
+            string oldPlatinumSource = _platinumSource;
+            string oldPlatinumComPort = _platinumComPort;
+            bool oldReadPlatinum = _readPlatinum;
+
+            // ─── Применяем новые значения ───
+            _furnaceIp = furnaceIp;
+            _furnacePort = furnacePort;
+            _furnaceSetPointRegister = furnaceSetPointReg;
+            _furnaceCurrentTempRegister = furnaceCurrentTempReg;
+            _furnaceModeRegister = furnaceModeReg;
+            _autoStopFurnace = autoStopFurnace;
+            _showFurnaceCard = showFurnaceCard;
+
+            _deviceIp = agkIp;
+            _devicePort = agkPort;
+            _showAgkCard = showAgkCard;
+            _agkPressureTimeoutMinutes = agkPressureTimeoutMinutes > 0
+                ? agkPressureTimeoutMinutes : 5;
+
+            _sktbFilterScript = sktbFilterScript;
+            _showSktbCard = showSktbCard;
+
+            _platinumSource = platinumSource;
+            _platinumComPort = platinumComPort;
+            _readPlatinum = readPlatinum;
+            _platinumMtkCommand = platinumMtkCommand;
+            _furnaceStabilizationTolerance = furnaceStabilizationTolerance > 0
+                ? furnaceStabilizationTolerance
+                : 0.1;
+
+            // ─── Закрываем старый COM-порт, если источник/порт изменился
+            //     или чтение платины выключили ───
+            lock (_platinumSerialLock)
             {
-                _furnaceIp = furnaceIp;
-                _furnacePort = furnacePort;
-                _furnaceSetPointRegister = furnaceSetPointReg;
-                _furnaceCurrentTempRegister = furnaceCurrentTempReg;
-                _furnaceModeRegister = furnaceModeReg;
-                _autoStopFurnace = autoStopFurnace;
-                _showFurnaceCard = showFurnaceCard;
+                bool needClose =
+                    _platinumSerial != null &&
+                    (!_readPlatinum ||
+                     _platinumSource != "mit_803" ||
+                     _platinumComPort != (_platinumSerial.PortName ?? ""));
 
-                _deviceIp = agkIp;
-                _devicePort = agkPort;
-                _showAgkCard = showAgkCard;
-                _agkPressureTimeoutMinutes = agkPressureTimeoutMinutes > 0
-                    ? agkPressureTimeoutMinutes : 5;
-
-                _sktbFilterScript = sktbFilterScript;
-                _showSktbCard = showSktbCard;
-
-                _platinumSource = platinumSource;
-                _platinumComPort = platinumComPort;
-                _readPlatinum = readPlatinum;
-                _platinumMtkCommand = platinumMtkCommand;
-                _furnaceStabilizationTolerance = furnaceStabilizationTolerance > 0
-                    ? furnaceStabilizationTolerance
-                    : 0.1;   // ★ НОВОЕ
-
-
-
-                // ─── Пункт 12: закрыть старый COM-порт, если источник/порт изменился
-                //     или чтение платины выключили ───
-                lock (_platinumSerialLock)
+                if (needClose)
                 {
-                    bool needClose =
-                        _platinumSerial != null &&
-                        (!_readPlatinum ||
-                         _platinumSource != "mit_803" ||
-                         _platinumComPort != (_platinumSerial.PortName ?? ""));
-
-                    if (needClose)
-                    {
-                        try { _platinumSerial.Close(); } catch { }
-                        try { _platinumSerial.Dispose(); } catch { }
-                        _platinumSerial = null;
-                    }
+                    try { _platinumSerial.Close(); } catch { }
+                    try { _platinumSerial.Dispose(); } catch { }
+                    _platinumSerial = null;
                 }
+            }
 
-                SaveSettings();
-                RefreshDeviceCardsVisibility();
+            // ★ Проверяем, изменились ли настройки, влияющие на ПОДКЛЮЧЕНИЕ
+            bool connectionChanged =
+                oldFurnaceIp != _furnaceIp ||
+                oldFurnacePort != _furnacePort ||
+                oldAgkIp != _deviceIp ||
+                oldAgkPort != _devicePort ||
+                oldPlatinumSource != _platinumSource ||
+                oldPlatinumComPort != _platinumComPort ||
+                oldReadPlatinum != _readPlatinum;
 
+            SaveSettings();
+            RefreshDeviceCardsVisibility();
+
+            if (connectionChanged)
+            {
+                AppendLog("Настройки подключения изменены — переподключение...", Brushes.Blue);
                 _ = Task.Run(ReconnectDevicesAsync);
+            }
+            else
+            {
+                AppendLog("Настройки сохранены (переподключение не требуется)", Brushes.Gray);
             }
         }
 
@@ -763,14 +953,28 @@ namespace TERMINAL
             }
 
             // ─── CASE для второго макроса ───
-            int caseForCopy = GetCurrentBatchCase();
+            // Если пакет запущен — берем текущее задание. 
+            // Если нет (ручной тест) — берем первое выбранное задание из списка или 1.
+            int caseForCopy = 0;
+
+            if (_batchRunning)
+            {
+                caseForCopy = GetCurrentBatchCase();
+            }
+
+            // Если пакет не запущен или не удалось определить CASE, ищем в списке заданий
             if (caseForCopy == 0)
             {
-                string msg = "Не удалось определить номер текущего задания пакета.\n" +
-                             "Убедитесь, что пакетный режим запущен.";
-                AppendLog($"Excel: {msg}", Brushes.OrangeRed);
-                if (!silent) MessageBox.Show(msg, "Excel", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
+                // Ищем первое активное (включенное) задание
+                var activeJob = _batchJobs.FirstOrDefault(j => j.IsEnabled);
+                if (activeJob != null && !string.IsNullOrEmpty(activeJob.CaseText) && int.TryParse(activeJob.CaseText, out int parsedCase))
+                {
+                    caseForCopy = parsedCase;
+                }
+
+                // Если задания нет, берем 1 (или можно поставить 0, если хотите, чтобы макрос упал)
+                if (caseForCopy == 0)
+                    caseForCopy = 1;
             }
 
             // ─── Родительская папка ───
@@ -792,15 +996,11 @@ namespace TERMINAL
                       $"(Case={sensorCount}, CASE={caseForCopy})", Brushes.Blue);
 
             // ═══════════════════════════════════════════════════════════════
-            // 2. Работа с Excel — в фоне, UI не блокируется
+            // 2. Работа с Excel — асинхронно, UI не блокируется
             // ═══════════════════════════════════════════════════════════════
 
-            await Task.Run(() =>
-            {
-                RunExcelPipeline(csvPath, sensorCount, caseForCopy, parentFolder, addinPath, silent);
-            });
+            await RunExcelPipeline(csvPath, sensorCount, caseForCopy, parentFolder, addinPath, silent);
         }
-
         private string GetCurrentBatchSetPoint()
         {
             if (!_batchRunning) return "";
@@ -833,13 +1033,13 @@ namespace TERMINAL
         /// Синхронная часть работы с Excel. Вызывается из Task.Run — фон.
         /// Внутри — только COM-вызовы и AppendLog/SetStatus (уже потокобезопасные).
         /// </summary>
-        private void RunExcelPipeline(
-            string csvPath,
-            int sensorCount,
-            int caseForCopy,
-            string parentFolder,
-            string addinPath,
-            bool silent)
+        private async Task RunExcelPipeline(
+    string csvPath,
+    int sensorCount,
+    int caseForCopy,
+    string parentFolder,
+    string addinPath,
+    bool silent)
         {
             object? xlApp = null;
             object? csvBook = null;
@@ -863,9 +1063,9 @@ namespace TERMINAL
                 xl.ScreenUpdating = false;
                 xl.EnableEvents = false;
 
-                // ─── Временная книга, чтобы Calculation можно было менять ───
+                // ─── Временная книга ───
                 dynamic tempBook = xl.Workbooks.Add();
-                xl.Calculation = -4135;   // xlCalculationManual
+                xl.Calculation = -4135;
                 tempBook.Close(false);
 
                 // ─── Загрузка надстройки IvanoFF ───
@@ -910,13 +1110,13 @@ namespace TERMINAL
                 sheet.Range("Z3").Value = parentFolder;
 
                 // ═══════════════════════════════════════════════════════
-                // ★ МАКРОС 1: выбор фильтра по _sktbFilterScript
+                // ★ МАКРОС 1: выбор фильтра
                 // ═══════════════════════════════════════════════════════
                 string filterMacro = _sktbFilterScript switch
                 {
                     "Фильтр_данных_ПДС" => "Фильтр_данных_ПДС",
                     "Фильтр_данных_БИДТ" => "Фильтр_данных_БИДТ",
-                    "Фильтр_РЧ" => "Фильтр_РЧ",
+                    "Фильтр_РЧ" => "Run_Filter_RcH",
                     "Filter_for_KOSA_GUI" => "Filter_KOSA_GUI_Auto",
                     _ => "Filter_KOSA_GUI_Auto"
                 };
@@ -926,8 +1126,29 @@ namespace TERMINAL
                 try
                 {
                     AppendLog($"Excel: запуск макроса «{filterMacro}»", Brushes.Blue);
-                    xl.Run(filterMacro);
+
+                    // ★ Включаем авто-режим
+                    xl.Run("SetAutoMode", true);
+
+                    // ★ ЗАПУСК С ТАЙМАУТОМ (2 минуты)
+                    var runTask1 = Task.Run(() => xl.Run(filterMacro));
+                    if (await Task.WhenAny(runTask1, Task.Delay(10000)) != runTask1)
+                    {
+                        throw new TimeoutException($"Макрос «{filterMacro}» не завершился за 2 минуты. Возможно, он завис.");
+                    }
+                    await runTask1; // пробрасываем исключение, если оно было
+
+                    // ★ Выключаем авто-режим
+                    xl.Run("SetAutoMode", false);
+
                     AppendLog($"Excel: макрос «{filterMacro}» выполнен", Brushes.Green);
+                }
+                catch (TimeoutException tex)
+                {
+                    AppendLog($"Excel: {tex.Message}", Brushes.Red);
+                    if (!silent)
+                        UI(() => MessageBox.Show(tex.Message, "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
+                    throw;
                 }
                 catch (System.Runtime.InteropServices.COMException comEx)
                 {
@@ -939,8 +1160,7 @@ namespace TERMINAL
                                           "Проверьте, что в настройках СКТБ ЭлПа выбран существующий скрипт.";
                         AppendLog($"Excel: {friendly}", Brushes.Red);
                         if (!silent)
-                            UI(() => MessageBox.Show(friendly, "Excel",
-                                MessageBoxButton.OK, MessageBoxImage.Error));
+                            UI(() => MessageBox.Show(friendly, "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
                         throw;
                     }
 
@@ -952,7 +1172,7 @@ namespace TERMINAL
                 WaitForExcelIdle(xl, timeoutMs: 30000);
                 System.Threading.Thread.Sleep(800);
 
-                // ─── Перезаписываем Z1/Z2/Z3 в новой книге ───
+                // ─── Перезаписываем Z1/Z2/Z3 ───
                 try
                 {
                     dynamic activeBook = xl.ActiveWorkbook;
@@ -968,13 +1188,28 @@ namespace TERMINAL
                 }
 
                 // ═══════════════════════════════════════════════════════
-                // ★ МАКРОС 2: Universal_Insert_FULL_Auto
+                // ★ МАКРОС 2: Universal_Insert_FULL_Auto (с таймаутом)
                 // ═══════════════════════════════════════════════════════
                 try
                 {
                     AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
-                    xl.Run("Universal_Insert_FULL_Auto");
+
+                    // ★ ЗАПУСК С ТАЙМАУТОМ (3 минуты)
+                    var runTask2 = Task.Run(() => xl.Run("Universal_Insert_FULL_Auto"));
+                    if (await Task.WhenAny(runTask2, Task.Delay(180000)) != runTask2)
+                    {
+                        throw new TimeoutException("Макрос «Universal Insert» не завершился за 3 минуты. Возможно, он завис.");
+                    }
+                    await runTask2;
+
                     AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
+                }
+                catch (TimeoutException tex)
+                {
+                    AppendLog($"Excel: {tex.Message}", Brushes.Red);
+                    if (!silent)
+                        UI(() => MessageBox.Show(tex.Message, "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -982,7 +1217,7 @@ namespace TERMINAL
                     throw;
                 }
 
-                WaitForExcelIdle(xl, timeoutMs: 60000);
+                WaitForExcelIdle(xl, timeoutMs: 120000);
                 System.Threading.Thread.Sleep(500);
 
                 // ─── Закрываем CSV-книгу ───
@@ -992,32 +1227,11 @@ namespace TERMINAL
                 AppendLog($"Excel: обработка завершена — {Path.GetFileName(csvPath)}", Brushes.Green);
                 SetStatus($"Excel: обработка завершена — {Path.GetFileName(csvPath)}");
             }
-            catch (System.Runtime.InteropServices.COMException comEx)
-            {
-                string msg = comEx.Message;
-                string friendly;
-
-                if (msg.Contains("Cannot run the macro"))
-                    friendly = "Макрос не найден в надстройке IvanoFF.xlam";
-                else if (msg.Contains("Unable to get the Add property"))
-                    friendly = "Не удалось загрузить надстройку IvanoFF.xlam";
-                else if (msg.Contains("method 'Run'"))
-                    friendly = "Ошибка вызова макроса (проверьте VBA)";
-                else
-                    friendly = $"Excel COM: {msg}";
-
-                AppendLog($"Excel: {friendly}", Brushes.OrangeRed);
-                if (!silent)
-                    UI(() => MessageBox.Show(friendly, "Excel",
-                        MessageBoxButton.OK, MessageBoxImage.Error));
-                SetStatusError("Excel: ошибка — см. журнал");
-            }
             catch (Exception ex)
             {
                 AppendLog($"Excel: {ex.GetType().Name} — {ex.Message}", Brushes.OrangeRed);
                 if (!silent)
-                    UI(() => MessageBox.Show($"Ошибка: {ex.Message}", "Excel",
-                        MessageBoxButton.OK, MessageBoxImage.Error));
+                    UI(() => MessageBox.Show($"Ошибка Excel: {ex.Message}", "Excel", MessageBoxButton.OK, MessageBoxImage.Error));
                 SetStatusError("Excel: ошибка — см. журнал");
             }
             finally
@@ -1314,12 +1528,225 @@ namespace TERMINAL
             SaveSettings();
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // УВЕДОМЛЕНИЯ — применение настроек
+        // ═══════════════════════════════════════════════════════════════════
+        public void ApplyNotificationSettings(
+    bool enabled,
+    bool tgEnabled, bool yandexEnabled, bool mailEnabled, bool gmailEnabled,
+    bool customEnabled, bool vkEnabled, bool maxEnabled,
+    int methodIndex,
+    string tgToken, string tgChatId,
+    string vkToken, long vkPeerId,
+    string maxToken, string maxChatId,
+    string smsLogin, string smsPass, string smsPhone)
+        {
+            _notificationsEnabled = enabled;
+            _notificationMethodIndex = methodIndex;
+
+            _notifyTgEnabled = tgEnabled;
+            _notifyYandexEnabled = yandexEnabled;
+            _notifyMailEnabled = mailEnabled;
+            _notifyGmailEnabled = gmailEnabled;
+            _notifyCustomEnabled = customEnabled;
+            _notifyVkEnabled = vkEnabled;
+            _notifyMaxEnabled = maxEnabled;
+
+            _telegramToken = tgToken ?? "";
+            _telegramChatId = tgChatId ?? "";
+
+            _vkToken = vkToken ?? "";
+            _vkPeerId = vkPeerId;
+
+            _maxToken = maxToken ?? "";
+            _maxChatId = maxChatId ?? "";
+
+            _smsLogin = smsLogin ?? "";
+            _smsPass = smsPass ?? "";
+            _smsPhone = smsPhone ?? "";
+
+            // ★ Email-данные каждого провайдера уже сохранены в полях MainWindow
+            //   (через SaveCurrentEmailFields в окне настроек)
+
+            NotificationManager.ClearServices();
+
+            if (enabled)
+            {
+                if (_notifyTgEnabled && !string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long chatIdLong))
+                    NotificationManager.AddService(new TelegramNotificationService(_telegramToken, chatIdLong));
+
+                // ★ Каждая почта — со своими данными
+                if (_notifyYandexEnabled && !string.IsNullOrEmpty(_emailYandexUser))
+                    NotificationManager.AddService(new EmailNotificationService(
+                        "smtp.yandex.ru", 587,
+                        _emailYandexUser, _emailYandexPass, _emailYandexTo));
+
+                if (_notifyMailEnabled && !string.IsNullOrEmpty(_emailMailUser))
+                    NotificationManager.AddService(new EmailNotificationService(
+                        "smtp.mail.ru", 587,
+                        _emailMailUser, _emailMailPass, _emailMailTo));
+
+                if (_notifyGmailEnabled && !string.IsNullOrEmpty(_emailGmailUser))
+                    NotificationManager.AddService(new EmailNotificationService(
+                        "smtp.gmail.com", 587,
+                        _emailGmailUser, _emailGmailPass, _emailGmailTo));
+
+                if (_notifyCustomEnabled && !string.IsNullOrEmpty(_emailCustomHost))
+                    NotificationManager.AddService(new EmailNotificationService(
+                        _emailCustomHost, _emailCustomPort,
+                        _emailCustomUser, _emailCustomPass, _emailCustomTo));
+
+                if (_notifyVkEnabled && !string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
+                    NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
+
+                if (_notifyMaxEnabled && !string.IsNullOrEmpty(_maxToken) && long.TryParse(_maxChatId, out long maxId))
+                    NotificationManager.AddService(new MaxNotificationService(_maxToken, maxId));
+            }
+
+            UpdateNotificationStatus(_notificationsEnabled);
+            AppendLog($"Уведомления: сервисы = {NotificationManager.DumpServices()}", Brushes.Blue);
+
+            // ★ Если пакет идёт и Telegram только что включили —
+            //   сразу отправляем текущее состояние (таблицу или таймер стабилизации).
+            if (_batchRunning && _notifyTgEnabled && _selectedTargetPressure != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(500); // Даём NotificationManager время добавить сервис
+
+                        if (_currentStepIndexForNotify >= 0)
+                        {
+                            // ★ Градуировка идёт — отправляем таблицу
+                            await UpdatePressureTableInTelegramAsync();
+                        }
+                        else
+                        {
+                            // ★ Стабилизация идёт — отправляем сообщение с таймером
+                            // (или «проверка допуска», если стабилизация 0 мин)
+                            string status = _lastStabStatus ?? "Ожидание стабилизации...";
+                            await _batchProgress.UpdateProgressAsync(status);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"Уведомления: не удалось отправить состояние — {ex.Message}", Brushes.OrangeRed);
+                    }
+                });
+            }
+
+            SaveSettings();
+        }
+
         private void ApplyTickTimingVisibility()
         {
             if (TickTimingPanel != null)
                 TickTimingPanel.Visibility = _tickTimingEnabled
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+        }
+
+        private bool _isDarkTheme = false;
+
+        public bool IsDarkTheme => _isDarkTheme;
+        public event Action<bool>? ThemeChanged;
+
+        private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            _isDarkTheme = !_isDarkTheme;
+            ChangeTheme(_isDarkTheme);
+            ThemeToggleButton.Content = _isDarkTheme ? "💡" : "🌙";
+
+            SaveSettings(); // ★ ДОБАВИТЬ ЭТУ СТРОКУ
+        }
+
+        public void ChangeTheme(bool isDark)
+        {
+            _isDarkTheme = isDark;
+
+            var themeUri = new Uri(isDark ? "Themes/DarkTheme.xaml" : "Themes/LightTheme.xaml", UriKind.Relative);
+            var themeDict = new ResourceDictionary { Source = themeUri };
+
+            var mergedDicts = Application.Current.MainWindow.Resources.MergedDictionaries;
+            if (mergedDicts.Count > 0)
+            {
+                mergedDicts[0] = themeDict;
+            }
+
+            ThemeChanged?.Invoke(isDark);  // ★ уведомляем подписчиков
+        }
+
+        public void UpdateNotificationStatus(bool isActive)
+        {
+            if (NotificationStatusEllipse != null)
+            {
+                NotificationStatusEllipse.Fill = isActive ? Brushes.Green : Brushes.Gray;
+                NotificationStatusText.Text = isActive ? "Уведомления: вкл" : "Уведомления: выкл";
+            }
+        }
+
+        private async Task CheckForUpdatesAsync()
+        {
+            try
+            {
+                // 1. Ссылка на файл version.txt в вашем Gitea (ветка main)
+                string versionUrl = "https://gitea.sctbelpa/Ivanoff/T.E.R.M.I.N.A.L./raw/branch/main/version.txt";
+
+                // 2. Текущая версия программы (берется автоматически из свойств проекта)
+                string currentVersion = GetAppVersion();
+
+                // 3. Токен из Gitea (вставьте свой новый токен)
+                string giteaToken = "2e144c6218e171356d5b9798bc349797b72d2374";
+
+                using var client = new HttpClient();
+
+                // Добавляем заголовок авторизации для приватного репозитория
+                client.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("token", giteaToken);
+
+                // Получаем строку версии с сервера
+                string latestVersion = (await client.GetStringAsync(versionUrl)).Trim();
+
+                // Если версия на сервере отличается от текущей
+                if (latestVersion != currentVersion)
+                {
+                    var result = MessageBox.Show(
+                        $"Доступна новая версия {latestVersion}.\nТекущая версия: {currentVersion}\n\nСкачать обновление?",
+                        "Обновление",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        // Открываем ссылку на страницу релизов в браузере
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = "https://gitea.sctbelpa/Ivanoff/T.E.R.M.I.N.A.L./releases",
+                            UseShellExecute = true
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Логируем ошибку (например, если нет интернета), но не мешаем работе программы
+                System.Diagnostics.Debug.WriteLine($"Ошибка проверки обновлений: {ex.Message}");
+            }
+        }
+
+        // Отправляет событие во все каналы, КРОМЕ Telegram (чтобы не дублировать живую таблицу)
+        private void NotifyEvents(string text)
+        {
+            // Временно отключаем Telegram, чтобы событие не ушло туда
+            var services = NotificationManager.GetServices(); // Нам понадобится метод GetServices
+            foreach (var svc in services)
+            {
+                if (svc is not TelegramNotificationService)
+                {
+                    _ = svc.SendAsync(text);
+                }
+            }
         }
 
 

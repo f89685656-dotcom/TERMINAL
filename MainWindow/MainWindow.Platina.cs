@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Text.RegularExpressions;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {

@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {
@@ -106,6 +107,24 @@ namespace TERMINAL
 
             if (snap.CurrentTemp.HasValue)
             {
+                // ★ Восстановление связи
+                if (_furnaceTempFailCount >= ConnectionLostThreshold)
+                {
+                    // Шлём только если идёт пакет
+                    if (_batchRunning)
+                    {
+                        _ = NotificationManager.NotifyAsync(
+                            $"🟢 ST-351: связь восстановлена ({_furnaceIp}:{_furnacePort})");
+
+                        // ★ Отправка SMS при восстановлении
+                        if (!string.IsNullOrEmpty(_smsLogin) && !string.IsNullOrEmpty(_smsPhone))
+                        {
+                            _ = new SmsNotificationService(_smsLogin, _smsPass, _smsPhone)
+                                    .SendAsync($"ST-351: связь восстановлена!");
+                        }
+                    }
+                }
+
                 _furnaceTempFailCount = 0;
                 double rounded = Math.Round((double)snap.CurrentTemp.Value, 3);
                 string sign = rounded >= 0 ? "+" : "";
@@ -118,6 +137,25 @@ namespace TERMINAL
             else
             {
                 _furnaceTempFailCount++;
+
+                // ★ Потеря связи
+                if (_furnaceTempFailCount == ConnectionLostThreshold)
+                {
+                    // Шлём только если идёт пакет
+                    if (_batchRunning)
+                    {
+                        _ = NotificationManager.NotifyAsync(
+                            $"🔴 ST-351: потеря связи ({_furnaceIp}:{_furnacePort})");
+
+                        // ★ Отправка SMS при потере связи
+                        if (!string.IsNullOrEmpty(_smsLogin) && !string.IsNullOrEmpty(_smsPhone))
+                        {
+                            _ = new SmsNotificationService(_smsLogin, _smsPass, _smsPhone)
+                                    .SendAsync($"КРИТИЧНО: Потеря связи ST-351 ({_furnacePort})!");
+                        }
+                    }
+                }
+
                 if (_furnaceTempFailCount >= ConnectionLostThreshold)
                 {
                     FurnaceCurrentTempText.Text = "— °C";

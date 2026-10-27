@@ -4,26 +4,28 @@
         Title="Сводка данных"
         Width="1200" Height="800"
         MinWidth="800" MinHeight="500"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource TextForeground}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TERMINAL;component/Themes/LightTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- 0: toolbar -->
             <RowDefinition Height="Auto"/>
-            <!-- 1: путь -->
             <RowDefinition Height="Auto"/>
-            <!-- 2: прогресс -->
             <RowDefinition Height="Auto"/>
-            <!-- 3: заголовок сводки -->
             <RowDefinition Height="Auto" MaxHeight="260"/>
-            <!-- 4: DataGrid сводки → было 2* -->
             <RowDefinition Height="Auto"/>
-            <!-- 5: заголовок деталей -->
             <RowDefinition Height="Auto"/>
-            <!-- 6: TabControl -->
             <RowDefinition Height="4*"/>
-            <!-- 7: область деталей → было 3* -->
         </Grid.RowDefinitions>
 
         <!-- ═══ Toolbar ═══ -->
@@ -63,7 +65,7 @@
                    TextWrapping="Wrap"
                    Margin="0,0,0,4"/>
 
-        <!-- ═══ Прогресс-бар (отдельная строка) ═══ -->
+        <!-- ═══ Прогресс-бар ═══ -->
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal"
                     Margin="0,0,0,6">
@@ -100,7 +102,14 @@
                   GridLinesVisibility="All"
                   HeadersVisibility="Column"
                   RowHeaderWidth="0"
-                  FontSize="12">
+                  FontSize="12"
+                  Background="{DynamicResource PanelBackground}"
+                  Foreground="{DynamicResource TextForeground}"
+                  BorderBrush="{DynamicResource PanelBorder}"
+                  HorizontalGridLinesBrush="{DynamicResource PanelBorder}"
+                  VerticalGridLinesBrush="{DynamicResource PanelBorder}"
+                  RowBackground="{DynamicResource PanelBackground}"
+                  AlternatingRowBackground="{DynamicResource WindowBackground}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="№" Binding="{Binding Number}" Width="50"/>
                 <DataGridTextColumn Header="Опис.град." Binding="{Binding GradDescriptionText}" Width="90"/>
@@ -121,10 +130,49 @@
 
         <!-- ═══ TabControl ═══ -->
         <TabControl Grid.Row="6"
-                    x:Name="DetailTabs"
-                    SelectionChanged="DetailTabs_SelectionChanged"
-                    Height="30"
-                    Margin="0,0,0,4">
+            x:Name="DetailTabs"
+            SelectionChanged="DetailTabs_SelectionChanged"
+            Height="30"
+            Margin="0,0,0,4"
+            Background="{DynamicResource PanelBackground}"
+            BorderBrush="{DynamicResource PanelBorder}">
+            <TabControl.Resources>
+                <Style TargetType="TabItem">
+                    <Setter Property="Background" Value="{DynamicResource PanelBackground}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextForeground}"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="TabItem">
+                                <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{DynamicResource PanelBorder}"
+                                BorderThickness="1,1,1,0"
+                                CornerRadius="2,2,0,0"
+                                Padding="6,2">
+                                    <ContentPresenter ContentSource="Header"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <!-- ★ Активная вкладка: светлый фон, как в окне настроек -->
+                                        <Setter TargetName="Bd" Property="Background" Value="#3F3F46"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#505050"/>
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Foreground" Value="Gray"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </TabControl.Resources>
+
             <TabItem Header="Гистерезис"/>
             <TabItem Header="ТЧХ"/>
             <TabItem Header="Погрешность"/>
@@ -133,8 +181,9 @@
 
         <!-- ═══ Область деталей ═══ -->
         <Border Grid.Row="7"
-                BorderBrush="#FFCCCCCC" BorderThickness="1"
-                Background="#FFFCFCFC"
+                BorderBrush="{DynamicResource PanelBorder}"
+                BorderThickness="1"
+                Background="{DynamicResource PanelBackground}"
                 CornerRadius="2">
             <ContentControl x:Name="DetailContent"/>
         </Border>

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using TERMINAL.Models;
+using TERMINAL.Notifications;
 
 namespace TERMINAL
 {
@@ -170,6 +171,7 @@ namespace TERMINAL
                 if (i < startStep - 1)
                 {
                     _stepItems[i].StatusMark = "☑";
+                    _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                     _stepItems[i].TimerText = "0";
                     _stepItems[i].ArrowText = "  ";
                     _stepItems[i].KosaCounterText = _batchKosaEnabled ? "3/3" : "1/1";
@@ -190,6 +192,9 @@ namespace TERMINAL
 
             try
             {
+                // ★★★ ОТПРАВЛЯЕМ СТАРТ ГРАДУИРОВКИ (ПРОГРЕСС-БАР) ★★★
+                //await _batchProgress.UpdateProgressAsync($"🔄 Градуировка: подготовка к шагу {startStep}/{steps.Length}...");
+
                 await RunSequenceAsync(steps, longTimers, startStep - 1);
                 programCompleted = true;
             }
@@ -282,6 +287,7 @@ namespace TERMINAL
                 if (!await WaitIfPausedAsync()) { SetStatus("Остановлено оператором"); return; }
 
                 _currentStepIndex = i;
+                await UpdatePressureTableInTelegramAsync(); // ★ await — гарантируем порядок
 
                 for (int k = 0; k < _stepItems.Count; k++)
                     _stepItems[k].ArrowText = "  ";
@@ -293,6 +299,12 @@ namespace TERMINAL
                 int human = i + 1;
                 double v = steps[i];
                 int duration = GetStepDuration(steps, i, longTimers);
+
+                string units = _selectedTargetPressure?.Contains("МПа") == true ? "МПа" : "кгс/см²";
+
+                // ★ Уведомляем о старте шага в Email/VK/MAX
+                AppendLog($"Уведомления: отправка шага {human}, сервисы = {NotificationManager.DumpServices()}", Brushes.Gray);
+                await NotificationManager.NotifyOthersAsync($"▶️ Шаг {human}/{steps.Length} (давление {v} {units}) — начат");
 
                 if (IsTestPressureRange())
                 {
@@ -321,10 +333,13 @@ namespace TERMINAL
                     if (i < _stepItems.Count)
                     {
                         _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                         _stepItems[i].ArrowText = "  ";
                     }
                     _completedSteps = i + 1;
                     UpdateStepCounter();
+
+                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
@@ -349,15 +364,11 @@ namespace TERMINAL
                         SetStatus("Шаг 1: set_mode=control (1)");
                         bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
                         if (!m1) return;
-
                         await SafeDelayAsync(1000);
-
                         SetStatus("Шаг 1: set_mode=control (2)");
                         bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
                         if (!m2) return;
-
                         SetStatus($"Шаг 1: установка {v}");
-
                         _agkBatchBusy = true;
                         try
                         {
@@ -365,24 +376,13 @@ namespace TERMINAL
                             if (!setOk) return;
                             await Task.Delay(1000);
                         }
-                        finally
-                        {
-                            _agkBatchBusy = false;
-                        }
-
-                        lock (_agkStateLock)
-                        {
-                            _agkState.StateInPointOk = false;
-                            _agkState.StateInPointWait = true;
-                        }
-
+                        finally { _agkBatchBusy = false; }
+                        lock (_agkStateLock) { _agkState.StateInPointOk = false; _agkState.StateInPointWait = true; }
                         SetStatus("Шаг 1: ожидание стабилизации");
                         bool stable = await WaitForStateInPointAsync(v);
                         if (!stable) return;
-
                         SetStatus($"Шаг 1: измерение {duration} сек");
                         await RunTimerWithStepAsync(duration, i, waitForState: true);
-
                         SetStatus("Шаг 1: команда съёма");
                         bool q1 = await TakePointForStepAsync(i, waitForState: true);
                         if (!q1) return;
@@ -391,10 +391,13 @@ namespace TERMINAL
                     if (i < _stepItems.Count)
                     {
                         _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                         _stepItems[i].ArrowText = "  ";
                     }
                     _completedSteps = 1;
                     UpdateStepCounter();
+
+                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
@@ -406,7 +409,6 @@ namespace TERMINAL
                         SetStatus($"Шаг {human}: сброс до атмосферы (vent)");
                         bool ventOk = await GoToVentAsync();
                         if (!ventOk) return;
-
                         SetStatus($"Шаг {human}: ожидание снижения давления");
                         bool lowOk = await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
                         if (!lowOk) return;
@@ -416,15 +418,11 @@ namespace TERMINAL
                         SetStatus($"Шаг {human}: set_mode=control (1)");
                         bool m1 = await SendWithRetryAsync("set_mode=control;", "ok;");
                         if (!m1) return;
-
                         await SafeDelayAsync(1000);
-
                         SetStatus($"Шаг {human}: set_mode=control (2)");
                         bool m2 = await SendWithRetryAsync("set_mode=control;", "ok;");
                         if (!m2) return;
-
                         SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
-
                         _agkBatchBusy = true;
                         try
                         {
@@ -432,17 +430,8 @@ namespace TERMINAL
                             if (!setOk) return;
                             await Task.Delay(1000);
                         }
-                        finally
-                        {
-                            _agkBatchBusy = false;
-                        }
-
-                        lock (_agkStateLock)
-                        {
-                            _agkState.StateInPointOk = false;
-                            _agkState.StateInPointWait = true;
-                        }
-
+                        finally { _agkBatchBusy = false; }
+                        lock (_agkStateLock) { _agkState.StateInPointOk = false; _agkState.StateInPointWait = true; }
                         SetStatus($"Шаг {human}: ожидание стабилизации");
                         bool stable = await WaitForStateInPointAsync(v);
                         if (!stable) return;
@@ -458,26 +447,25 @@ namespace TERMINAL
                     if (i < _stepItems.Count)
                     {
                         _stepItems[i].StatusMark = "☑";
+                        _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                         _stepItems[i].ArrowText = "  ";
                     }
                     _completedSteps = i + 1;
                     UpdateStepCounter();
+
+                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
-                // ─── Обычный шаг (середина) ───
+                // ─── Обычный шаг ───
                 SetStatus($"Шаг {human}: set_mode=control (1)");
                 bool mm1 = await SendWithRetryAsync("set_mode=control;", "ok;");
                 if (!mm1) return;
-
                 await SafeDelayAsync(1000);
-
                 SetStatus($"Шаг {human}: set_mode=control (2)");
                 bool mm2 = await SendWithRetryAsync("set_mode=control;", "ok;");
                 if (!mm2) return;
-
                 SetStatus($"Шаг {human}/{steps.Length}: установка {v}");
-
                 _agkBatchBusy = true;
                 try
                 {
@@ -485,24 +473,13 @@ namespace TERMINAL
                     if (!setOk2) return;
                     await Task.Delay(1000);
                 }
-                finally
-                {
-                    _agkBatchBusy = false;
-                }
-
-                lock (_agkStateLock)
-                {
-                    _agkState.StateInPointOk = false;
-                    _agkState.StateInPointWait = true;
-                }
-
+                finally { _agkBatchBusy = false; }
+                lock (_agkStateLock) { _agkState.StateInPointOk = false; _agkState.StateInPointWait = true; }
                 SetStatus($"Шаг {human}: ожидание стабилизации");
                 bool stable2 = await WaitForStateInPointAsync(v);
                 if (!stable2) return;
-
                 SetStatus($"Шаг {human}: измерение {duration} сек");
                 await RunTimerWithStepAsync(duration, i, waitForState: v != 0);
-
                 SetStatus($"Шаг {human}: команда съёма");
                 bool q = await TakePointForStepAsync(i, waitForState: v != 0);
                 if (!q) return;
@@ -510,28 +487,28 @@ namespace TERMINAL
                 if (i < _stepItems.Count)
                 {
                     _stepItems[i].StatusMark = "☑";
+                    _stepItems[i].CompletedAt = DateTime.Now; // ★ Запоминаем время
                     _stepItems[i].ArrowText = "  ";
                 }
                 _completedSteps = i + 1;
                 UpdateStepCounter();
+
+                await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
             }
 
-            // ─── Финальный сброс ───
+            // Финальный сброс
             double lastPressure = steps[steps.Length - 1];
             if (lastPressure != 0)
             {
                 SetStatus("Программа завершена — финальный сброс до атмосферы");
                 bool ventOk = await GoToVentAsync();
                 if (!ventOk) return;
-
                 SetStatus("Ожидание снижения давления");
                 await WaitUntilPressureBelowAsync(atmoThreshold, 300_000);
             }
 
             SetStatus("Программа завершена");
         }
-
-
         private async Task<bool> RunPumpSequenceAsync(double maxPressure, int totalCycles, string unitsCode, string unitsLabel, double atmoThreshold)
         {
             MaxArrow.Text = "  ";
@@ -551,6 +528,9 @@ namespace TERMINAL
             {
                 if (_stopRequested) return false;
                 if (!await WaitIfPausedAsync()) return false;
+
+                // ★★★ ОБНОВЛЯЕМ ПРОГРЕСС-БАР (РЕДАКТИРУЕМ СООБЩЕНИЕ) ★★★
+                await _batchProgress.UpdateProgressAsync($"💨 Бароциклирование: цикл {cycle}/{totalCycles}");
 
                 MaxArrow.Text = "  ";
                 MinArrow.Text = "  ";
@@ -645,9 +625,6 @@ namespace TERMINAL
             SetStatus($"Режим «Бароциклирование» завершён, сделано ({totalCycles} циклов)");
             return true;
         }
-
-
-
         /// <summary>
         /// Таймер выдержки. Идёт по часам (DateTime), не зависит от get_state_in_point.
         /// 
@@ -764,9 +741,12 @@ namespace TERMINAL
         private async Task RunTimerWithStepAsync(int seconds, int stepIndex, bool waitForState)
         {
             int remaining = seconds;
+            _currentStepIndexForNotify = stepIndex;
+            _currentTimerRemaining = remaining;
 
             if (!waitForState)
             {
+                _currentStepStatus = "таймер";
                 SetStatus($"До начала съёма данных: {remaining} сек — таймер запущен");
 
                 while (remaining > 0)
@@ -776,6 +756,7 @@ namespace TERMINAL
                     var cycleStart = DateTime.Now;
 
                     remaining--;
+                    _currentTimerRemaining = remaining; // ★ Обновляем для Telegram
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
@@ -788,6 +769,7 @@ namespace TERMINAL
                     if (sleep > 0) await SafeDelayAsync(sleep);
                 }
 
+                _currentStepStatus = "съём";
                 if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                     _stepItems[stepIndex].TimerText = "0";
                 return;
@@ -795,7 +777,7 @@ namespace TERMINAL
 
             // ─── waitForState == true ───
             bool firstOkReceived = false;
-
+            _currentStepStatus = "ожидание";
             SetStatus($"До начала съёма данных: таймер запущен на {remaining} сек");
 
             while (remaining > 0)
@@ -808,20 +790,17 @@ namespace TERMINAL
                 long unitsMs = 0;
                 long stateMs = 0;
 
-                // ─── RefreshPressure (из кэша, мгновенно) ───
                 var t1 = DateTime.Now;
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
                 _lastKnownPressure = snap.Pressure;
                 refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
 
-                // ─── get_units (из кэша) ───
                 var t2 = DateTime.Now;
                 if (!string.IsNullOrEmpty(snap.Units))
                     UpdateUnits(snap.Units);
                 unitsMs = (long)(DateTime.Now - t2).TotalMilliseconds;
 
-                // ─── get_state_in_point (из кэша) ───
                 var t3 = DateTime.Now;
                 bool stateOk = snap.StateInPointOk;
                 bool stateWait = snap.StateInPointWait;
@@ -831,6 +810,8 @@ namespace TERMINAL
                 {
                     firstOkReceived = true;
                     remaining--;
+                    _currentTimerRemaining = remaining; // ★ Обновляем для Telegram
+                    _currentStepStatus = "таймер";      // ★ Обновляем для Telegram
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
@@ -839,12 +820,14 @@ namespace TERMINAL
                     if (firstOkReceived)
                     {
                         remaining += 30;
+                        _currentTimerRemaining = remaining; // ★
                         SetStatus($"Срыв! Таймер +30 сек. Осталось: {remaining}");
                         if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                             _stepItems[stepIndex].TimerText = remaining.ToString();
                     }
                     else
                     {
+                        _currentStepStatus = "ожидание стабилизации"; // ★
                         SetStatus("Ожидание стабилизации давления...");
                     }
 
@@ -864,7 +847,6 @@ namespace TERMINAL
                     }
                 }
 
-                // ─── Замер чистого времени такта ───
                 long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
                 AddTickTiming("timer-step", pureMs);
 
@@ -879,11 +861,10 @@ namespace TERMINAL
                 if (sleep > 0) await SafeDelayAsync(sleep);
             }
 
+            _currentTimerRemaining = 0;
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
         }
-
-
         private string GetUnitsCode(string? tp)
         {
             if (string.IsNullOrEmpty(tp)) return "kgs";
