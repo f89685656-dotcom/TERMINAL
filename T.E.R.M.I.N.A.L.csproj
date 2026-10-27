@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+		<TargetFramework>net8.0-windows</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
@@ -16,12 +16,12 @@
 		<NoWarn>$(NoWarn);CA1416</NoWarn>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 	</PropertyGroup>
-	
+
 	<ItemGroup>
-	  <Content Include="$(NuGetPackageRoot)system.io.ports\8.0.0\runtimes\win\lib\net8.0\System.IO.Ports.dll">
+		<Content Include="$(NuGetPackageRoot)system.io.ports\8.0.0\runtimes\win\lib\net8.0\System.IO.Ports.dll">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<Link>runtimes\win\lib\net8.0\System.IO.Ports.dll</Link>
-	  </Content>
+		</Content>
 	</ItemGroup>
 
 	<ItemGroup>
@@ -43,13 +43,20 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Include="Setup.vdproj" />
+		<None Include="Setup.vdproj" />
 	</ItemGroup>
 
+	<!-- NuGet-пакеты -->
 	<ItemGroup>
 		<PackageReference Include="HidSharp" Version="2.6.4" />
 		<PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
-		<PackageReference Include="System.IO.Ports" Version="8.0.0" />   <!-- ← 8.0.0 вместо 11.0.0-rc -->
+		<PackageReference Include="System.IO.Ports" Version="8.0.0" />
+	</ItemGroup>
+
+	<!-- Ссылки на проекты (должны быть отдельно от PackageReference!) -->
+	<ItemGroup>
+		<!-- Путь ..\..\ выходит из папки T.E.R.M.I.N.A.L._code на диск C:\ и заходит в GUI_Merge -->
+		<ProjectReference Include="..\..\GUI_Merge\KalibratorGUI\KalibratorGUI_WPF\KalibratorGUI_WPF.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

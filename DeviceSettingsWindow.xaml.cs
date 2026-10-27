@@ -7,7 +7,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using TERMINAL.Notifications;
-using Windows.Devices.Enumeration;
 
 namespace TERMINAL.Windows
 {

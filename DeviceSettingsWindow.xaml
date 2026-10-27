@@ -27,32 +27,29 @@
                     BorderBrush="{DynamicResource PanelBorder}">
             <TabControl.Resources>
                 <Style TargetType="TabItem">
-                    <Setter Property="Background" Value="#2D2D30"/>
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Background" Value="{DynamicResource PanelBackground}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextForeground}"/>
+                    <Setter Property="Padding" Value="12,6"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="TabItem">
                                 <Border x:Name="Bd"
-                                        Background="{TemplateBinding Background}"
-                                        BorderBrush="{DynamicResource PanelBorder}"
-                                        BorderThickness="1,1,1,0"
-                                        CornerRadius="2,2,0,0"
-                                        Padding="6,2">
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{DynamicResource PanelBorder}"
+                        BorderThickness="1,1,1,0"
+                        CornerRadius="3,3,0,0"
+                        Padding="{TemplateBinding Padding}">
                                     <ContentPresenter ContentSource="Header"
-                                                      HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"
-                                                      TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsSelected" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#3F3F46"/>
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ButtonStart}"/>
                                         <Setter Property="Foreground" Value="White"/>
                                     </Trigger>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#505050"/>
-                                    </Trigger>
-                                    <Trigger Property="IsEnabled" Value="False">
-                                        <Setter Property="Foreground" Value="Gray"/>
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelBorder}"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
