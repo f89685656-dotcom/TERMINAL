@@ -128,6 +128,8 @@ namespace TERMINAL
 
         private DispatcherTimer? _sensorUiTimer;
 
+        private string? _lastStabStatus = null;
+
         private const double SensorStaleSeconds = 5.0;
         private const double SktbAllDeadSeconds = 5.0;
 

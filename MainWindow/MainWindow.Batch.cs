@@ -612,8 +612,8 @@ namespace TERMINAL
                     {
                         _lastStabNotify = DateTime.Now;
                         string timeStr = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
-                        _ = _batchProgress.UpdateProgressAsync(
-                            $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}");
+                        _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
+                        _ = _batchProgress.UpdateProgressAsync(_lastStabStatus);
                     }
 
                     // ★ Проверка завершения — ПОСЛЕ обновления таймера
