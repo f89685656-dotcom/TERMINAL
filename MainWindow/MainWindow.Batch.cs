@@ -195,6 +195,11 @@ namespace TERMINAL
             BatchTargetPressureCombo.IsEnabled = false;
             BatchTimerSetCombo.IsEnabled = false;
 
+            BatchPresetCombo.IsEnabled = false;
+            LoadPresetButton.IsEnabled = false;
+            SavePresetButton.IsEnabled = false;
+            DeletePresetButton.IsEnabled = false;
+
             foreach (var job in _batchJobs)
                 job.IsEditable = false;
 
@@ -267,7 +272,11 @@ namespace TERMINAL
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
                         await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
 
+                        _lastStabNotify = DateTime.MinValue; // Сброс для первого апдейта
+
                         bool stable = await WaitForBatchStabilizationAsync(job.StabilizationMinutes, completedCount, enabledCount);
+
+                        // ★ ИСПРАВЛЕНО: добавлена проверка !stable
                         if (!stable)
                         {
                             job.StatusText = "стабилизация прервана";
@@ -319,6 +328,14 @@ namespace TERMINAL
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+                    // ★ 1. Отправляем таблицу ПЕРЕД запуском градуировки (только для Градуировки)
+                    if (job.IsCalibrationMode)
+                    {
+                        await UpdatePressureTableInTelegramAsync();
+                        await Task.Delay(500); // Даём Telegram время на отправку
+                    }
+
+                    // ★ 2. Запускаем режим
                     if (job.IsCalibrationMode)
                     {
                         int startStep = job.StartStep;
@@ -412,6 +429,11 @@ namespace TERMINAL
                 SetExternalButtonsEnabled(true);
                 BatchList.IsEnabled = true;
 
+                BatchPresetCombo.IsEnabled = true;
+                LoadPresetButton.IsEnabled = true;
+                SavePresetButton.IsEnabled = true;
+                DeletePresetButton.IsEnabled = true;
+
                 foreach (var job in _batchJobs)
                     job.IsEditable = true;
 
@@ -421,7 +443,7 @@ namespace TERMINAL
             }
         }
 
-        private void UpdatePressureTableInTelegram()
+        private async Task UpdatePressureTableInTelegramAsync()
         {
             if (!_batchRunning || _selectedTargetPressure == null) return;
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
@@ -431,22 +453,15 @@ namespace TERMINAL
             sb.AppendLine($"📊 {_selectedTargetPressure}");
             sb.AppendLine("```");
 
-            // Заголовки
             sb.AppendLine("Шаг | Давл. | Таймер | Статус");
             sb.AppendLine("-----|-------|--------|----------");
 
             for (int i = 0; i < steps.Length; i++)
             {
-                // 1. Эмодзи
                 string mark = (i == _currentStepIndexForNotify) ? "▶️" : (i < _completedSteps ? "✅" : "⏳");
-
-                // 2. Номер шага (5 символов: " 1/16", "10/16")
                 string stepNum = $"{i + 1,2}/{steps.Length}".PadLeft(5);
-
-                // 3. Давление (выравнивание по правому краю до 5 символов)
                 string pressure = steps[i].ToString("0.##", CultureInfo.InvariantCulture).PadLeft(5);
 
-                // 4. Таймер и статус
                 string timerText = "-";
                 string status = "ожидание";
 
@@ -465,15 +480,13 @@ namespace TERMINAL
                         status = "завершён";
                 }
 
-                // 5. Таймер (выравнивание по правому краю до 6 символов)
                 string timerStr = timerText.PadLeft(6);
-
-                // Формируем строку. 4 пробела после эмодзи (чтобы компенсировать его ширину)
                 sb.AppendLine($"{mark}    {stepNum} | {pressure} | {timerStr} | {status}");
             }
             sb.AppendLine("```");
 
-            _ = _batchProgress.UpdateTableAsync(sb.ToString());
+            // ★ await — гарантируем, что таблица обновится ДО перехода к следующему шагу
+            await _batchProgress.UpdateTableAsync(sb.ToString());
         }
 
         private async Task RunPumpForBatchAsync(int cycles)
@@ -586,8 +599,23 @@ namespace TERMINAL
                         $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C, " +
                         $"осталось {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
 
+                    // ★ Обновляем Telegram раз в 5 секунд
+                    if ((DateTime.Now - _lastStabNotify).TotalSeconds >= 5)
+                    {
+                        _lastStabNotify = DateTime.Now;
+                        string timeStr = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
+                        _ = _batchProgress.UpdateProgressAsync(
+                            $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}");
+                    }
+
+                    // ★ Проверка завершения — ПОСЛЕ обновления таймера
                     if (elapsed.TotalMinutes >= requiredMinutes)
+                    {
+                        _ = _batchProgress.UpdateProgressAsync(
+                            $"✅ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — завершена");
+
                         return true;
+                    }
                 }
                 else
                 {
@@ -679,8 +707,6 @@ namespace TERMINAL
                 if (sleep > 0) await SafeDelayAsync(sleep);
             }
         }
-
-
         private void BatchTargetPressureCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (!_uiLoaded) return;
@@ -701,7 +727,6 @@ namespace TERMINAL
             UpdateMaxMinFromRange();
             SaveSettings();
         }
-
         private void BatchTimerSetCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (!_uiLoaded) return;

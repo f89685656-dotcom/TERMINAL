@@ -274,7 +274,7 @@ namespace TERMINAL
             }
             if (_batchRunning && _currentStepIndexForNotify >= 0)
             {
-                UpdatePressureTableInTelegram();
+                _ = UpdatePressureTableInTelegramAsync();  // fire-and-forget, потому что Timer_Tick — void
             }
 
         }

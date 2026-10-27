@@ -147,6 +147,8 @@ namespace TERMINAL
 
         private const int ConnectionLostThreshold = 5;
 
+        private DateTime _lastStabNotify = DateTime.MinValue;
+
         private int _agkFailCount = 0;
         private int _furnaceTempFailCount = 0;
         private int _furnaceSetPointFailCount = 0;
@@ -660,12 +662,12 @@ namespace TERMINAL
                     _logSlowTicks,
                     _autoStopFurnace,
                     _platinumSource,
-                    _platinumComPort,        // ← 10-й, ДОБАВЛЕН
+                    _platinumComPort,        // ← 10-й
                     _readPlatinum,           // ← 11-й
                     _platinumMtkCommand);    // ← 12-й
 
                 win.Owner = this;
-                win.ShowDialog();
+                win.Show();   // ★ Show() вместо ShowDialog() — окно немодальное
             }
             catch (Exception ex)
             {
@@ -675,66 +677,90 @@ namespace TERMINAL
         }
 
         public void ApplyDeviceSettings(
-            string furnaceIp, int furnacePort,
-            ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
-            bool autoStopFurnace, bool showFurnaceCard,
-            string agkIp, int agkPort, bool showAgkCard,
-            int agkPressureTimeoutMinutes,
-            string sktbFilterScript, bool showSktbCard,
-            string platinumSource, string platinumComPort, bool readPlatinum,
-            string platinumMtkCommand,
-            double furnaceStabilizationTolerance)
+      string furnaceIp, int furnacePort,
+      ushort furnaceSetPointReg, ushort furnaceCurrentTempReg, ushort furnaceModeReg,
+      bool autoStopFurnace, bool showFurnaceCard,
+      string agkIp, int agkPort, bool showAgkCard,
+      int agkPressureTimeoutMinutes,
+      string sktbFilterScript, bool showSktbCard,
+      string platinumSource, string platinumComPort, bool readPlatinum,
+      string platinumMtkCommand,
+      double furnaceStabilizationTolerance)
         {
+            // ★ Сохраняем СТАРЫЕ значения для сравнения
+            string oldFurnaceIp = _furnaceIp;
+            int oldFurnacePort = _furnacePort;
+            string oldAgkIp = _deviceIp;
+            int oldAgkPort = _devicePort;
+            string oldPlatinumSource = _platinumSource;
+            string oldPlatinumComPort = _platinumComPort;
+            bool oldReadPlatinum = _readPlatinum;
+
+            // ─── Применяем новые значения ───
+            _furnaceIp = furnaceIp;
+            _furnacePort = furnacePort;
+            _furnaceSetPointRegister = furnaceSetPointReg;
+            _furnaceCurrentTempRegister = furnaceCurrentTempReg;
+            _furnaceModeRegister = furnaceModeReg;
+            _autoStopFurnace = autoStopFurnace;
+            _showFurnaceCard = showFurnaceCard;
+
+            _deviceIp = agkIp;
+            _devicePort = agkPort;
+            _showAgkCard = showAgkCard;
+            _agkPressureTimeoutMinutes = agkPressureTimeoutMinutes > 0
+                ? agkPressureTimeoutMinutes : 5;
+
+            _sktbFilterScript = sktbFilterScript;
+            _showSktbCard = showSktbCard;
+
+            _platinumSource = platinumSource;
+            _platinumComPort = platinumComPort;
+            _readPlatinum = readPlatinum;
+            _platinumMtkCommand = platinumMtkCommand;
+            _furnaceStabilizationTolerance = furnaceStabilizationTolerance > 0
+                ? furnaceStabilizationTolerance
+                : 0.1;
+
+            // ─── Закрываем старый COM-порт, если источник/порт изменился
+            //     или чтение платины выключили ───
+            lock (_platinumSerialLock)
             {
-                _furnaceIp = furnaceIp;
-                _furnacePort = furnacePort;
-                _furnaceSetPointRegister = furnaceSetPointReg;
-                _furnaceCurrentTempRegister = furnaceCurrentTempReg;
-                _furnaceModeRegister = furnaceModeReg;
-                _autoStopFurnace = autoStopFurnace;
-                _showFurnaceCard = showFurnaceCard;
+                bool needClose =
+                    _platinumSerial != null &&
+                    (!_readPlatinum ||
+                     _platinumSource != "mit_803" ||
+                     _platinumComPort != (_platinumSerial.PortName ?? ""));
 
-                _deviceIp = agkIp;
-                _devicePort = agkPort;
-                _showAgkCard = showAgkCard;
-                _agkPressureTimeoutMinutes = agkPressureTimeoutMinutes > 0
-                    ? agkPressureTimeoutMinutes : 5;
-
-                _sktbFilterScript = sktbFilterScript;
-                _showSktbCard = showSktbCard;
-
-                _platinumSource = platinumSource;
-                _platinumComPort = platinumComPort;
-                _readPlatinum = readPlatinum;
-                _platinumMtkCommand = platinumMtkCommand;
-                _furnaceStabilizationTolerance = furnaceStabilizationTolerance > 0
-                    ? furnaceStabilizationTolerance
-                    : 0.1;   // ★ НОВОЕ
-
-
-
-                // ─── Пункт 12: закрыть старый COM-порт, если источник/порт изменился
-                //     или чтение платины выключили ───
-                lock (_platinumSerialLock)
+                if (needClose)
                 {
-                    bool needClose =
-                        _platinumSerial != null &&
-                        (!_readPlatinum ||
-                         _platinumSource != "mit_803" ||
-                         _platinumComPort != (_platinumSerial.PortName ?? ""));
-
-                    if (needClose)
-                    {
-                        try { _platinumSerial.Close(); } catch { }
-                        try { _platinumSerial.Dispose(); } catch { }
-                        _platinumSerial = null;
-                    }
+                    try { _platinumSerial.Close(); } catch { }
+                    try { _platinumSerial.Dispose(); } catch { }
+                    _platinumSerial = null;
                 }
+            }
 
-                SaveSettings();
-                RefreshDeviceCardsVisibility();
+            // ★ Проверяем, изменились ли настройки, влияющие на ПОДКЛЮЧЕНИЕ
+            bool connectionChanged =
+                oldFurnaceIp != _furnaceIp ||
+                oldFurnacePort != _furnacePort ||
+                oldAgkIp != _deviceIp ||
+                oldAgkPort != _devicePort ||
+                oldPlatinumSource != _platinumSource ||
+                oldPlatinumComPort != _platinumComPort ||
+                oldReadPlatinum != _readPlatinum;
 
+            SaveSettings();
+            RefreshDeviceCardsVisibility();
+
+            if (connectionChanged)
+            {
+                AppendLog("Настройки подключения изменены — переподключение...", Brushes.Blue);
                 _ = Task.Run(ReconnectDevicesAsync);
+            }
+            else
+            {
+                AppendLog("Настройки сохранены (переподключение не требуется)", Brushes.Gray);
             }
         }
 
@@ -1576,6 +1602,7 @@ namespace TERMINAL
             }
 
             UpdateNotificationStatus(_notificationsEnabled);
+            AppendLog($"Уведомления: сервисы = {NotificationManager.DumpServices()}", Brushes.Blue);
             SaveSettings();
         }
 

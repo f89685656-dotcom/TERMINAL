@@ -269,8 +269,6 @@ namespace TERMINAL
                 _batchRunDoneSignal?.TrySetResult(true);
             }
         }
-
-
         private async Task RunSequenceAsync(double[] steps, bool longTimers, int startIndex)
         {
             string unitsCode = GetUnitsCode(_selectedTargetPressure!);
@@ -289,7 +287,7 @@ namespace TERMINAL
                 if (!await WaitIfPausedAsync()) { SetStatus("Остановлено оператором"); return; }
 
                 _currentStepIndex = i;
-                UpdatePressureTableInTelegram(); // Обновляем таблицу в Telegram
+                await UpdatePressureTableInTelegramAsync(); // ★ await — гарантируем порядок
 
                 for (int k = 0; k < _stepItems.Count; k++)
                     _stepItems[k].ArrowText = "  ";
@@ -305,6 +303,7 @@ namespace TERMINAL
                 string units = _selectedTargetPressure?.Contains("МПа") == true ? "МПа" : "кгс/см²";
 
                 // ★ Уведомляем о старте шага в Email/VK/MAX
+                AppendLog($"Уведомления: отправка шага {human}, сервисы = {NotificationManager.DumpServices()}", Brushes.Gray);
                 await NotificationManager.NotifyOthersAsync($"▶️ Шаг {human}/{steps.Length} (давление {v} {units}) — начат");
 
                 if (IsTestPressureRange())
@@ -510,8 +509,6 @@ namespace TERMINAL
 
             SetStatus("Программа завершена");
         }
-
-
         private async Task<bool> RunPumpSequenceAsync(double maxPressure, int totalCycles, string unitsCode, string unitsLabel, double atmoThreshold)
         {
             MaxArrow.Text = "  ";
@@ -628,9 +625,6 @@ namespace TERMINAL
             SetStatus($"Режим «Бароциклирование» завершён, сделано ({totalCycles} циклов)");
             return true;
         }
-
-
-
         /// <summary>
         /// Таймер выдержки. Идёт по часам (DateTime), не зависит от get_state_in_point.
         /// 
@@ -871,8 +865,6 @@ namespace TERMINAL
             if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                 _stepItems[stepIndex].TimerText = "0";
         }
-
-
         private string GetUnitsCode(string? tp)
         {
             if (string.IsNullOrEmpty(tp)) return "kgs";

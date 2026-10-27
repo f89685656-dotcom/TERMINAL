@@ -150,5 +150,14 @@ namespace TERMINAL.Notifications
                 _notifyLock.Release();
             }
         }
+
+        public static string DumpServices()
+        {
+            lock (_lock)
+            {
+                if (_services.Count == 0) return "(пусто)";
+                return string.Join(", ", _services.Select(s => s.GetType().Name));
+            }
+        }
     }
 }

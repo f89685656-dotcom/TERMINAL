@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO.Ports;
 using System.Net;
@@ -32,6 +31,7 @@ namespace TERMINAL.Windows
         {
             InitializeComponent();
 
+            // Предотвращаем закрытие выпадающего списка при клике на галочку
             NotifyChannelsCombo.AddHandler(ComboBox.MouseDownEvent, new System.Windows.Input.MouseButtonEventHandler((s, e) =>
             {
                 if (!NotifyChannelsCombo.IsDropDownOpen) return;
@@ -48,6 +48,7 @@ namespace TERMINAL.Windows
                 }
             }), true);
 
+            // ─── Общие настройки ───
             GeneralQ2ViewCheck.IsChecked = q2viewEnabled;
             GeneralTimerBox.Text = timerSeconds.ToString(CultureInfo.InvariantCulture);
             GeneralTimerBox.IsEnabled = q2viewEnabled;
@@ -65,6 +66,7 @@ namespace TERMINAL.Windows
                     if (!char.IsDigit(c)) { e.Handled = true; return; }
             };
 
+            // ─── Вкладка по умолчанию ───
             if (initialTab < 0 || initialTab >= DeviceTabs.Items.Count)
                 initialTab = 0;
             DeviceTabs.SelectedIndex = initialTab;
@@ -73,14 +75,20 @@ namespace TERMINAL.Windows
 
             LoadCurrent();
 
+            // ★ Применяем текущую тему из MainWindow
             ApplyThemeFromMainWindow();
 
+            // ★ Подписываемся на смену темы в MainWindow
             Loaded += (s, e) =>
             {
                 if (MainWindow.Current != null)
                     MainWindow.Current.ThemeChanged += OnMainThemeChanged;
             };
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Тема
+        // ═══════════════════════════════════════════════════════════════════
 
         private void OnMainThemeChanged(bool isDark)
         {
@@ -118,11 +126,16 @@ namespace TERMINAL.Windows
             base.OnClosed(e);
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // Загрузка текущих настроек
+        // ═══════════════════════════════════════════════════════════════════
+
         private void LoadCurrent()
         {
             var mw = MainWindow.Current;
             if (mw == null) return;
 
+            // ST-351
             FurnaceIpBox.Text = mw.FurnaceIp;
             FurnacePortBox.Text = mw.FurnacePort.ToString();
             FurnaceSetPointRegBox.Text = mw.FurnaceSetPointRegister.ToString();
@@ -133,11 +146,13 @@ namespace TERMINAL.Windows
             AutoStopFurnaceCheck.IsChecked = mw.AutoStopFurnace;
             ShowFurnaceCardCheck.IsChecked = mw.ShowFurnaceCard;
 
+            // АГК
             AgkIpBox.Text = mw.DeviceIp;
             AgkPortBox.Text = mw.DevicePort.ToString();
             AgkPressureTimeoutBox.Text = mw.AgkPressureTimeoutMinutes.ToString();
             ShowAgkCardCheck.IsChecked = mw.ShowAgkCard;
 
+            // СКТБ
             SktbFilterScriptCombo.SelectedIndex = mw.SktbFilterScript switch
             {
                 "Фильтр_данных_ПДС" => 0,
@@ -148,6 +163,7 @@ namespace TERMINAL.Windows
             };
             ShowSktbCardCheck.IsChecked = mw.ShowSktbCard;
 
+            // Платина
             PlatinumSourceCombo.SelectedIndex = mw.PlatinumSource switch
             {
                 "mit_803" => 1,
@@ -159,6 +175,9 @@ namespace TERMINAL.Windows
             PlatinumMtkCommandBox.Text = mw.PlatinumMtkCommand;
             PlatinumSourceCombo_SelectionChanged(null, null);
 
+            // ═══════════════════════════════════════════════════════════════════
+            // УВЕДОМЛЕНИЯ
+            // ═══════════════════════════════════════════════════════════════════
             NotificationsEnabledCheck.IsChecked = mw.NotificationsEnabled;
             NotificationMethodCombo.SelectedIndex = mw.NotificationMethodIndex;
             NotificationMethodCombo_SelectionChanged(null, null);
@@ -171,9 +190,11 @@ namespace TERMINAL.Windows
             ChkSendToVk.IsChecked = mw.NotifyVkEnabled;
             ChkSendToMax.IsChecked = mw.NotifyMaxEnabled;
 
+            // Telegram
             TelegramTokenBox.Text = mw.TelegramToken;
             TelegramChatIdBox.Text = mw.TelegramChatId;
 
+            // ─── Уведомления: Email ───
             _isLoadingData = true;
             EmailProviderCombo.SelectedIndex = mw.EmailProviderIndex;
             _lastSelectedProvider = mw.EmailProviderIndex;
@@ -223,16 +244,23 @@ namespace TERMINAL.Windows
                     break;
             }
 
+            // VK
             VkTokenBox.Text = mw.VkToken;
             VkPeerIdBox.Text = mw.VkPeerId.ToString();
 
+            // MAX
             MaxTokenBox.Text = mw.MaxToken;
             MaxChatIdBox.Text = mw.MaxChatId;
 
+            // SMS
             SmsLoginBox.Text = mw.SmsLogin;
             SmsPassBox.Password = mw.SmsPass;
             SmsPhoneBox.Text = mw.SmsPhone;
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Сброс на значения по умолчанию
+        // ═══════════════════════════════════════════════════════════════════
 
         private void Default_Click(object sender, RoutedEventArgs e)
         {
@@ -265,6 +293,10 @@ namespace TERMINAL.Windows
             TelegramChatIdBox.Text = "";
             NotificationMethodCombo.SelectedIndex = 0;
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Сохранение
+        // ═══════════════════════════════════════════════════════════════════
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
@@ -412,7 +444,6 @@ namespace TERMINAL.Windows
                     smsPhone: SmsPhoneBox.Text.Trim()
                 );
 
-                DialogResult = true;
                 Close();
             }
             catch (Exception ex)
@@ -427,8 +458,12 @@ namespace TERMINAL.Windows
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            DialogResult = false;
+            Close();
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Тест уведомлений
+        // ═══════════════════════════════════════════════════════════════════
 
         private async void TestNotificationButton_Click(object sender, RoutedEventArgs e)
         {
@@ -552,6 +587,10 @@ namespace TERMINAL.Windows
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // Валидация
+        // ═══════════════════════════════════════════════════════════════════
+
         private bool Validate()
         {
             if (!IPAddress.TryParse(FurnaceIpBox.Text.Trim(), out _))
@@ -594,6 +633,10 @@ namespace TERMINAL.Windows
             return true;
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // COM-порты
+        // ═══════════════════════════════════════════════════════════════════
+
         private void FillComPorts(string current)
         {
             PlatinumComPortCombo.Items.Clear();
@@ -626,6 +669,10 @@ namespace TERMINAL.Windows
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // Платина
+        // ═══════════════════════════════════════════════════════════════════
+
         private void PlatinumSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (PlatinumComPanel == null || PlatinumSourceCombo == null) return;
@@ -642,6 +689,10 @@ namespace TERMINAL.Windows
                     ? Visibility.Visible
                     : Visibility.Collapsed;
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Уведомления — переключение панелей
+        // ═══════════════════════════════════════════════════════════════════
 
         private void NotificationMethodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -673,6 +724,10 @@ namespace TERMINAL.Windows
                     break;
             }
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Email — провайдеры
+        // ═══════════════════════════════════════════════════════════════════
 
         private void EmailProviderCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -774,6 +829,10 @@ namespace TERMINAL.Windows
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // Инструкция
+        // ═══════════════════════════════════════════════════════════════════
+
         private void NotificationHelpButton_Click(object sender, RoutedEventArgs e)
         {
             int selectedIndex = NotificationMethodCombo?.SelectedIndex ?? 0;
@@ -781,7 +840,7 @@ namespace TERMINAL.Windows
 
             switch (selectedIndex)
             {
-                case 0:
+                case 0: // Telegram
                     instruction =
         @"🤖 ИНСТРУКЦИЯ ДЛЯ TELEGRAM:
 
@@ -802,7 +861,7 @@ namespace TERMINAL.Windows
 ⚠️ ВАЖНО: Если вы в России, Telegram API может быть заблокирован. Для корректной работы включите VPN (в программе Happ лучше использовать режим TUN или Системный прокси) перед отправкой сообщений.";
                     break;
 
-                case 1:
+                case 1: // Email (SMTP)
                     instruction =
         @"📧 ИНСТРУКЦИЯ ДЛЯ EMAIL:
 
@@ -818,7 +877,7 @@ namespace TERMINAL.Windows
    • Введите адрес почты, на который должны приходить уведомления.";
                     break;
 
-                case 2:
+                case 2: // VK
                     instruction =
         @"💬 ИНСТРУКЦИЯ ДЛЯ ВКОНТАКТЕ:
 
@@ -834,7 +893,7 @@ namespace TERMINAL.Windows
 8. ОБЯЗАТЕЛЬНО: Напишите любое сообщение в эту группу от своего личного профиля. Бот создаст диалог с вами (выглядит как беседа с ID, начинающимся на 2000000000). После этого он сможет отвечать вам.";
                     break;
 
-                case 3:
+                case 3: // MAX
                     instruction =
         @"🤖 ИНСТРУКЦИЯ ДЛЯ МАКС (max.ru):
 
@@ -845,7 +904,7 @@ namespace TERMINAL.Windows
 3. Вставьте токен в поле 'Токен бота MAX', укажите Chat ID и нажмите 'Тест'.";
                     break;
 
-                case 4:
+                case 4: // SMS
                     instruction =
         @"📱 ИНСТРУКЦИЯ ДЛЯ SMS (SMSC.ru):
 
@@ -919,6 +978,10 @@ namespace TERMINAL.Windows
             helpWindow.Content = grid;
             helpWindow.ShowDialog();
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Вспомогательное
+        // ═══════════════════════════════════════════════════════════════════
 
         private void NotifyCheckBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
