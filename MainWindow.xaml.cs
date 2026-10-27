@@ -1603,6 +1603,37 @@ namespace TERMINAL
 
             UpdateNotificationStatus(_notificationsEnabled);
             AppendLog($"Уведомления: сервисы = {NotificationManager.DumpServices()}", Brushes.Blue);
+
+            // ★ Если пакет идёт и Telegram только что включили —
+            //   сразу отправляем текущее состояние (таблицу или таймер стабилизации).
+            if (_batchRunning && _notifyTgEnabled && _selectedTargetPressure != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(500); // Даём NotificationManager время добавить сервис
+
+                        if (_currentStepIndexForNotify >= 0)
+                        {
+                            // ★ Градуировка идёт — отправляем таблицу
+                            await UpdatePressureTableInTelegramAsync();
+                        }
+                        else
+                        {
+                            // ★ Стабилизация идёт — отправляем сообщение с таймером
+                            // (или «проверка допуска», если стабилизация 0 мин)
+                            string status = _lastStabStatus ?? "Ожидание стабилизации...";
+                            await _batchProgress.UpdateProgressAsync(status);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"Уведомления: не удалось отправить состояние — {ex.Message}", Brushes.OrangeRed);
+                    }
+                });
+            }
+
             SaveSettings();
         }
 
