@@ -5,8 +5,43 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+
+    <UserControl.Resources>
+        <!-- ★ ПРИНУДИТЕЛЬНО ДЕЛАЕМ ТАБЛИЦЫ СВЕТЛЫМИ И ЧИТАЕМЫМИ ★ -->
+        <!-- Мы переопределяем стили ListView, чтобы MahApps не перекрашивал их в белый текст на белом фоне -->
+        <Style TargetType="ListView">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="Black"/>
+        </Style>
+
+        <Style TargetType="ListViewItem">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="#FFDDDDDD" 
+                                BorderThickness="0,0,0,1" 
+                                Padding="5,2">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#FFF0F0F0"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#FFCCE5FF"/>
+                                <Setter Property="Foreground" Value="Black"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
-        <!-- Сюда мы вставим содержимое MainWindow -->
         <ContentControl x:Name="ContentHost" />
     </Grid>
 </UserControl>
