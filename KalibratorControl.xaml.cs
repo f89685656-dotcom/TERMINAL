@@ -83,84 +83,84 @@ namespace TERMINAL
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
-        // ★ ОБРАБОТЧИКИ ДЛЯ НАШЕЙ НОВОЙ КНОПКИ ЯЗЫКА ★
-        // ★ ОБРАБОТЧИКИ ДЛЯ НАШЕЙ НОВОЙ КНОПКИ ЯЗЫКА ★
         private void Lang_Russian_Click(object sender, RoutedEventArgs e)
         {
-            // 1. Меняем язык (App.Language внутри KalibratorGUI обновит lang.xaml)
             KalibratorGUI_WPF.App.Language = new System.Globalization.CultureInfo("ru-RU");
-
-            // 2. Принудительно перезагружаем контент (создаем MainWindow заново)
-            ReloadKalibratorContent();
-
+            RefreshLanguage();
             if (sender is MenuItem mi && mi.Parent is ContextMenu cm) cm.IsOpen = false;
         }
 
         private void Lang_English_Click(object sender, RoutedEventArgs e)
         {
             KalibratorGUI_WPF.App.Language = new System.Globalization.CultureInfo("en-US");
-            ReloadKalibratorContent();
+            RefreshLanguage();
             if (sender is MenuItem mi && mi.Parent is ContextMenu cm) cm.IsOpen = false;
         }
 
-        // ★ НОВЫЙ МЕТОД: Перезагружает контент, чтобы обновить StaticResource
-        private void ReloadKalibratorContent()
+        // ★ НОВЫЙ МЕТОД: Перезагружает ТОЛЬКО словарь, без пересоздания окна ★
+        private void RefreshLanguage()
         {
-            // ★ 1. ОТПИСЫВАЕМ СТАРОЕ ОКНО ОТ ВСЕХ СОБЫТИЙ ★
-            if (_kalibratorWindow != null)
+            try
             {
-                try
+                // 1. Формируем правильный путь к словарю
+                string langFileName;
+                if (KalibratorGUI_WPF.App.Language.Name == "ru-RU")
                 {
-                    // Находим метод, который вызывается при изменении коллекции
-                    var method = typeof(KalibratorGUI_WPF.MainWindow.MainWindow).GetMethod(
-                        "AbstractDevicesCollection_CollectionChanged",
-                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    langFileName = "lang.ru-RU.xaml";
+                }
+                else
+                {
+                    langFileName = "lang.xaml";
+                }
 
-                    if (method != null)
+                var langDict = new ResourceDictionary
+                {
+                    Source = new Uri("pack://application:,,,/KalibratorGUI_WPF;component/Res/i18n/" + langFileName)
+                };
+
+                // 2. Удаляем старый и добавляем новый словарь
+                var oldDict = Application.Current.Resources.MergedDictionaries
+                    .FirstOrDefault(d => d.Source != null && d.Source.OriginalString.Contains("i18n/lang"));
+
+                if (oldDict != null)
+                {
+                    int index = Application.Current.Resources.MergedDictionaries.IndexOf(oldDict);
+                    Application.Current.Resources.MergedDictionaries.Remove(oldDict);
+                    Application.Current.Resources.MergedDictionaries.Insert(index, langDict);
+                }
+                else
+                {
+                    Application.Current.Resources.MergedDictionaries.Add(langDict);
+                }
+
+                // 3. Обновляем визуальное дерево
+                ContentHost.UpdateLayout();
+
+                // 4. Пересоздаем OprosTabContent, чтобы обновить StaticResource (Devices/Expressions)
+                var oprosTab = _kalibratorWindow.FindName("OprosTab") as TabItem;
+                if (oprosTab != null)
+                {
+                    // Запоминаем текущую вкладку
+                    var tabControl = FindChild<TabControl>(_kalibratorWindow, "WorkModeSelectionTabControl");
+                    int savedIndex = tabControl?.SelectedIndex ?? 0;
+
+                    // Пересоздаем контент
+                    var newContent = new KalibratorGUI_WPF.MainWindow.resources.Tabs.OprosTabContent();
+                    oprosTab.Content = newContent;
+
+                    // Возвращаем вкладку на место
+                    if (tabControl != null)
                     {
-                        var handler = (System.Collections.Specialized.NotifyCollectionChangedEventHandler)
-                            Delegate.CreateDelegate(
-                                typeof(System.Collections.Specialized.NotifyCollectionChangedEventHandler),
-                                _kalibratorWindow,
-                                method);
-
-                        // Отписываем от CollectionChanged
-                        KalibratorGUI_WPF.General.DevicesCollection.CollectionChanged -= handler;
+                        tabControl.SelectedIndex = savedIndex;
                     }
                 }
-                catch { /* Игнорируем ошибки отписки */ }
-
-                // Закрываем окно (разрешаем закрытие)
-                _kalibratorWindow.Closing -= (s, ev) => { ev.Cancel = true; };
-                _kalibratorWindow.Close();
-                _kalibratorWindow = null;
             }
-
-            // ★ 2. ОЧИЩАЕМ КОЛЛЕКЦИЮ УСТРОЙСТВ, ЧТОБЫ НОВОЕ ОКНО НАЧАЛО С ЧИСТОГО ЛИСТА ★
-            KalibratorGUI_WPF.General.DevicesCollection.Clear();
-
-            // ★ 3. СОЗДАЕМ НОВОЕ ОКНО ★
-            _kalibratorWindow = new KalibratorGUI_WPF.MainWindow.MainWindow();
-            _kalibratorWindow.Closing += (s, ev) => { ev.Cancel = true; }; // Запрещаем закрытие
-            _kalibratorWindow.Width = 800;
-            _kalibratorWindow.Height = 600;
-            _kalibratorWindow.WindowStartupLocation = WindowStartupLocation.Manual;
-            _kalibratorWindow.Left = -10000;
-            _kalibratorWindow.Top = -10000;
-            _kalibratorWindow.ShowInTaskbar = false;
-            _kalibratorWindow.Show();
-
-            ContentHost.Content = _kalibratorWindow.Content;
-            ContentHost.UpdateLayout();
-
-            // ★ 4. ПРИНУДИТЕЛЬНО ПЕРЕКЛЮЧАЕМСЯ НА ВКЛАДКУ "ОПРОС" (ИЛИ ТУ, ЧТО НУЖНО) ★
-            // Находим TabControl в новом окне и ставим индекс 2 (Опрос)
-            var tabControl = FindChild<TabControl>(_kalibratorWindow, "WorkModeSelectionTabControl");
-            if (tabControl != null)
+            catch (Exception ex)
             {
-                tabControl.SelectedIndex = 2; // 0 - Edit, 1 - Calibration, 2 - Opros
+                MessageBox.Show("Ошибка обновления языка: " + ex.Message);
             }
         }
+
 
         private static T FindChild<T>(DependencyObject parent, string childName) where T : DependencyObject
         {
