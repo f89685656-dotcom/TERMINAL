@@ -42,6 +42,34 @@
     </UserControl.Resources>
 
     <Grid>
-        <ContentControl x:Name="ContentHost" />
+        <Grid>
+            <ContentControl x:Name="ContentHost" />
+
+            <!-- ★ НАША КНОПКА ДЛЯ ЯЗЫКА (ПОВЕРХ ОРИГИНАЛЬНОЙ) ★ -->
+            <Button x:Name="FakeLangButton" 
+        Width="34" Height="34" 
+        HorizontalAlignment="Right" VerticalAlignment="Top" 
+        Margin="0,45,15,0" 
+        Background="Transparent" 
+        BorderThickness="0" 
+        Cursor="Hand"
+        ToolTip="Переключить язык"
+        Click="FakeLangButton_Click">
+
+                <!-- Используем стандартный символ Юникода (Глобус) -->
+                <TextBlock Text="🌐" 
+               FontSize="18" 
+               Foreground="Gray" 
+               HorizontalAlignment="Center" 
+               VerticalAlignment="Center"/>
+
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Русский" Click="Lang_Russian_Click"/>
+                        <MenuItem Header="English" Click="Lang_English_Click"/>
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
+        </Grid>
     </Grid>
 </UserControl>

@@ -16,7 +16,7 @@ namespace TERMINAL
         {
             InitializeComponent();
 
-            // 1. Загружаем ресурсы
+            // 1. Загружаем ресурсы KalibratorGUI
             try
             {
                 var appResources = Application.Current.Resources;
@@ -27,12 +27,9 @@ namespace TERMINAL
                         appResources.MergedDictionaries.Add(dict);
                 }
 
-                // Стили MahApps
                 AddDict("pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml");
                 AddDict("pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml");
                 AddDict("pack://application:,,,/MahApps.Metro;component/Styles/Themes/Light.Blue.xaml");
-
-                // Локализация и стили KalibratorGUI
                 AddDict("pack://application:,,,/KalibratorGUI_WPF;component/Res/i18n/lang.xaml");
                 AddDict("pack://application:,,,/KalibratorGUI_WPF;component/Res/common.xaml");
                 AddDict("pack://application:,,,/KalibratorGUI_WPF;component/Styles/FlatComboBox.xaml");
@@ -41,9 +38,6 @@ namespace TERMINAL
                 AddDict("pack://application:,,,/KalibratorGUI_WPF;component/Styles/CheckBoxStyle.xaml");
                 AddDict("pack://application:,,,/KalibratorGUI_WPF;component/Styles/TabControlFontSize18.xaml");
 
-                // ИСПРАВЛЕНИЕ ДЛЯ ИКОНОК
-                var fontAwesomeFamily = new FontFamily("pack://application:,,,/FontAwesome.WPF;component/#FontAwesome");
-                appResources.Add("FontAwesome", fontAwesomeFamily);
             }
             catch (Exception ex)
             {
@@ -65,25 +59,108 @@ namespace TERMINAL
             _kalibratorWindow.ShowInTaskbar = false;
             _kalibratorWindow.Show();
 
-            // 4. Забираем контент
+            // 4. Забираем контент (КАК ЕСТЬ)
             ContentHost.Content = _kalibratorWindow.Content;
 
-            // 5. Оживляем кнопку языка (перебиваем DropDownButtonBehavior)
-            var langButton = FindChild<Button>(_kalibratorWindow, "Language_selector");
-            if (langButton != null)
+            // 5. Оживляем кнопку поиска и скрываем оригинальную кнопку языка
+            this.Dispatcher.BeginInvoke(new Action(() =>
             {
-                var contextMenu = langButton.ContextMenu;
-                if (contextMenu != null)
+                var searchButton = FindChild<Button>(_kalibratorWindow, "BeginSearchOnBusButton");
+                if (searchButton != null)
                 {
-                    langButton.Click += (s, e) =>
-                    {
-                        contextMenu.PlacementTarget = langButton;
-                        contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-                        contextMenu.IsOpen = true;
-                    };
+                    searchButton.Command = ApplicationCommands.Find;
+                    this.CommandBindings.Add(new CommandBinding(ApplicationCommands.Find,
+                        (s, e) => SearchBus(),
+                        (s, e) => { e.CanExecute = true; }));
                 }
+
+                // Скрываем оригинальную кнопку языка (она все равно глючит)
+                var originalLangButton = FindChild<Button>(_kalibratorWindow, "Language_selector");
+                if (originalLangButton != null)
+                {
+                    originalLangButton.Visibility = Visibility.Collapsed;
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        // ★ ОБРАБОТЧИКИ ДЛЯ НАШЕЙ НОВОЙ КНОПКИ ЯЗЫКА ★
+        // ★ ОБРАБОТЧИКИ ДЛЯ НАШЕЙ НОВОЙ КНОПКИ ЯЗЫКА ★
+        private void Lang_Russian_Click(object sender, RoutedEventArgs e)
+        {
+            // 1. Меняем язык (App.Language внутри KalibratorGUI обновит lang.xaml)
+            KalibratorGUI_WPF.App.Language = new System.Globalization.CultureInfo("ru-RU");
+
+            // 2. Принудительно перезагружаем контент (создаем MainWindow заново)
+            ReloadKalibratorContent();
+
+            if (sender is MenuItem mi && mi.Parent is ContextMenu cm) cm.IsOpen = false;
+        }
+
+        private void Lang_English_Click(object sender, RoutedEventArgs e)
+        {
+            KalibratorGUI_WPF.App.Language = new System.Globalization.CultureInfo("en-US");
+            ReloadKalibratorContent();
+            if (sender is MenuItem mi && mi.Parent is ContextMenu cm) cm.IsOpen = false;
+        }
+
+        // ★ НОВЫЙ МЕТОД: Перезагружает контент, чтобы обновить StaticResource
+        private void ReloadKalibratorContent()
+        {
+            // ★ 1. ОТПИСЫВАЕМ СТАРОЕ ОКНО ОТ ВСЕХ СОБЫТИЙ ★
+            if (_kalibratorWindow != null)
+            {
+                try
+                {
+                    // Находим метод, который вызывается при изменении коллекции
+                    var method = typeof(KalibratorGUI_WPF.MainWindow.MainWindow).GetMethod(
+                        "AbstractDevicesCollection_CollectionChanged",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (method != null)
+                    {
+                        var handler = (System.Collections.Specialized.NotifyCollectionChangedEventHandler)
+                            Delegate.CreateDelegate(
+                                typeof(System.Collections.Specialized.NotifyCollectionChangedEventHandler),
+                                _kalibratorWindow,
+                                method);
+
+                        // Отписываем от CollectionChanged
+                        KalibratorGUI_WPF.General.DevicesCollection.CollectionChanged -= handler;
+                    }
+                }
+                catch { /* Игнорируем ошибки отписки */ }
+
+                // Закрываем окно (разрешаем закрытие)
+                _kalibratorWindow.Closing -= (s, ev) => { ev.Cancel = true; };
+                _kalibratorWindow.Close();
+                _kalibratorWindow = null;
             }
-        } // <-- ЗДЕСЬ ЗАКРЫВАЕТСЯ КОНСТРУКТОР
+
+            // ★ 2. ОЧИЩАЕМ КОЛЛЕКЦИЮ УСТРОЙСТВ, ЧТОБЫ НОВОЕ ОКНО НАЧАЛО С ЧИСТОГО ЛИСТА ★
+            KalibratorGUI_WPF.General.DevicesCollection.Clear();
+
+            // ★ 3. СОЗДАЕМ НОВОЕ ОКНО ★
+            _kalibratorWindow = new KalibratorGUI_WPF.MainWindow.MainWindow();
+            _kalibratorWindow.Closing += (s, ev) => { ev.Cancel = true; }; // Запрещаем закрытие
+            _kalibratorWindow.Width = 800;
+            _kalibratorWindow.Height = 600;
+            _kalibratorWindow.WindowStartupLocation = WindowStartupLocation.Manual;
+            _kalibratorWindow.Left = -10000;
+            _kalibratorWindow.Top = -10000;
+            _kalibratorWindow.ShowInTaskbar = false;
+            _kalibratorWindow.Show();
+
+            ContentHost.Content = _kalibratorWindow.Content;
+            ContentHost.UpdateLayout();
+
+            // ★ 4. ПРИНУДИТЕЛЬНО ПЕРЕКЛЮЧАЕМСЯ НА ВКЛАДКУ "ОПРОС" (ИЛИ ТУ, ЧТО НУЖНО) ★
+            // Находим TabControl в новом окне и ставим индекс 2 (Опрос)
+            var tabControl = FindChild<TabControl>(_kalibratorWindow, "WorkModeSelectionTabControl");
+            if (tabControl != null)
+            {
+                tabControl.SelectedIndex = 2; // 0 - Edit, 1 - Calibration, 2 - Opros
+            }
+        }
 
         private static T FindChild<T>(DependencyObject parent, string childName) where T : DependencyObject
         {
@@ -117,11 +194,20 @@ namespace TERMINAL
             return foundChild;
         }
 
-        // --- Методы для управления ---
         public void SearchBus()
         {
             var scanMethod = typeof(KalibratorGUI_WPF.MainWindow.MainWindow).GetMethod("ScanBus", BindingFlags.NonPublic | BindingFlags.Instance);
             scanMethod?.Invoke(_kalibratorWindow, null);
+        }
+
+        private void FakeLangButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.ContextMenu != null)
+            {
+                btn.ContextMenu.PlacementTarget = btn;
+                btn.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+                btn.ContextMenu.IsOpen = true;
+            }
         }
 
         public void StartPolling()
@@ -143,5 +229,5 @@ namespace TERMINAL
                 stopMethod?.Invoke(rtpTab, new object[] { null, null });
             }
         }
-    } // <-- ЗДЕСЬ ЗАКРЫВАЕТСЯ КЛАСС
-} // <-- ЗДЕСЬ ЗАКРЫВАЕТСЯ ПРОСТРАНСТВО ИМЕН
+    }
+}

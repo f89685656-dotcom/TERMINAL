@@ -1,16 +1,8 @@
-﻿using System.Configuration;
-using System.Data;
+﻿using System;
 using System.Windows;
-using System.Reflection;
 
 namespace TERMINAL
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
-    public partial class App : Application
-    {
-    }
     public partial class App : Application
     {
         protected override void OnStartup(StartupEventArgs e)
@@ -42,5 +34,4 @@ namespace TERMINAL
             System.IO.File.AppendAllText(logPath, logText);
         }
     }
-
 }
