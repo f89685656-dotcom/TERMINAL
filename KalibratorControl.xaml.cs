@@ -38,14 +38,27 @@ namespace TERMINAL
                 AddDict("pack://application:,,,/KalibratorGUI_WPF;component/Styles/CheckBoxStyle.xaml");
                 AddDict("pack://application:,,,/KalibratorGUI_WPF;component/Styles/TabControlFontSize18.xaml");
 
+                var fontAwesomeFamily = new FontFamily("pack://application:,,,/FontAwesome.WPF;component/#FontAwesome");
+                appResources.Add("FontAwesome", fontAwesomeFamily);
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Ошибка загрузки ресурсов: " + ex.Message);
             }
 
-            // 2. Конфигурация
-            try { Kalibrator.Core.Configuration.OpenConfig(); } catch { }
+            // 2. Открываем конфигурацию и применяем сохраненный язык
+            try
+            {
+                Kalibrator.Core.Configuration.OpenConfig();
+
+                // ★ ПРИМЕНЯЕМ СОХРАНЕННЫЙ ЯЗЫК ★
+                string savedLang = Kalibrator.Core.Configuration.Get("DefaultLanguage");
+                if (!string.IsNullOrEmpty(savedLang))
+                {
+                    KalibratorGUI_WPF.App.Language = new System.Globalization.CultureInfo(savedLang);
+                }
+            }
+            catch { }
 
             // 3. Создаем окно
             _kalibratorWindow = new KalibratorGUI_WPF.MainWindow.MainWindow();
@@ -59,10 +72,9 @@ namespace TERMINAL
             _kalibratorWindow.ShowInTaskbar = false;
             _kalibratorWindow.Show();
 
-            // 4. Забираем контент (КАК ЕСТЬ)
             ContentHost.Content = _kalibratorWindow.Content;
 
-            // 5. Оживляем кнопку поиска и скрываем оригинальную кнопку языка
+            // 4. Оживляем кнопки (поиск)
             this.Dispatcher.BeginInvoke(new Action(() =>
             {
                 var searchButton = FindChild<Button>(_kalibratorWindow, "BeginSearchOnBusButton");
@@ -85,16 +97,38 @@ namespace TERMINAL
 
         private void Lang_Russian_Click(object sender, RoutedEventArgs e)
         {
-            KalibratorGUI_WPF.App.Language = new System.Globalization.CultureInfo("ru-RU");
-            RefreshLanguage();
+            // Сохраняем язык
+            try
+            {
+                Kalibrator.Core.Configuration.Set("DefaultLanguage", "ru-RU");
+                Kalibrator.Core.Configuration.SaveConfig();
+            }
+            catch { }
+
+            // Закрываем меню
             if (sender is MenuItem mi && mi.Parent is ContextMenu cm) cm.IsOpen = false;
+
+            // ★ ПЕРЕЗАПУСКАЕМ ПРИЛОЖЕНИЕ ★
+            System.Windows.Application.Current.Shutdown();
+            System.Diagnostics.Process.Start(System.Reflection.Assembly.GetExecutingAssembly().Location);
         }
 
         private void Lang_English_Click(object sender, RoutedEventArgs e)
         {
-            KalibratorGUI_WPF.App.Language = new System.Globalization.CultureInfo("en-US");
-            RefreshLanguage();
+            // Сохраняем язык
+            try
+            {
+                Kalibrator.Core.Configuration.Set("DefaultLanguage", "en-US");
+                Kalibrator.Core.Configuration.SaveConfig();
+            }
+            catch { }
+
+            // Закрываем меню
             if (sender is MenuItem mi && mi.Parent is ContextMenu cm) cm.IsOpen = false;
+
+            // ★ ПЕРЕЗАПУСКАЕМ ПРИЛОЖЕНИЕ ★
+            System.Windows.Application.Current.Shutdown();
+            System.Diagnostics.Process.Start(System.Reflection.Assembly.GetExecutingAssembly().Location);
         }
 
         // ★ НОВЫЙ МЕТОД: Перезагружает ТОЛЬКО словарь, без пересоздания окна ★
@@ -102,26 +136,19 @@ namespace TERMINAL
         {
             try
             {
-                // 1. Формируем правильный путь к словарю
-                string langFileName;
-                if (KalibratorGUI_WPF.App.Language.Name == "ru-RU")
-                {
-                    langFileName = "lang.ru-RU.xaml";
-                }
-                else
-                {
-                    langFileName = "lang.xaml";
-                }
+                // 1. Загружаем словарь
+                string langFileName = KalibratorGUI_WPF.App.Language.Name == "ru-RU"
+                    ? "lang.ru-RU.xaml"
+                    : "lang.xaml";
 
                 var langDict = new ResourceDictionary
                 {
                     Source = new Uri("pack://application:,,,/KalibratorGUI_WPF;component/Res/i18n/" + langFileName)
                 };
 
-                // 2. Удаляем старый и добавляем новый словарь
+                // 2. Обновляем словарь
                 var oldDict = Application.Current.Resources.MergedDictionaries
                     .FirstOrDefault(d => d.Source != null && d.Source.OriginalString.Contains("i18n/lang"));
-
                 if (oldDict != null)
                 {
                     int index = Application.Current.Resources.MergedDictionaries.IndexOf(oldDict);
@@ -136,23 +163,26 @@ namespace TERMINAL
                 // 3. Обновляем визуальное дерево
                 ContentHost.UpdateLayout();
 
-                // 4. Пересоздаем OprosTabContent, чтобы обновить StaticResource (Devices/Expressions)
-                var oprosTab = _kalibratorWindow.FindName("OprosTab") as TabItem;
-                if (oprosTab != null)
+                // 4. Пересоздаем TreeViewModule в OprosTabContent и CalibrationTabContent
+                try
                 {
-                    // Запоминаем текущую вкладку
-                    var tabControl = FindChild<TabControl>(_kalibratorWindow, "WorkModeSelectionTabControl");
-                    int savedIndex = tabControl?.SelectedIndex ?? 0;
-
-                    // Пересоздаем контент
-                    var newContent = new KalibratorGUI_WPF.MainWindow.resources.Tabs.OprosTabContent();
-                    oprosTab.Content = newContent;
-
-                    // Возвращаем вкладку на место
-                    if (tabControl != null)
+                    var oprosTab = _kalibratorWindow.FindName("OprosTab") as TabItem;
+                    if (oprosTab?.Content is KalibratorGUI_WPF.MainWindow.resources.Tabs.OprosTabContent oprosContent)
                     {
-                        tabControl.SelectedIndex = savedIndex;
+                        var reloadMethod = oprosContent.GetType().GetMethod("ReloadTreeModule");
+                        reloadMethod?.Invoke(oprosContent, null);
                     }
+
+                    var calibTab = _kalibratorWindow.FindName("CalibrationTab") as TabItem;
+                    if (calibTab?.Content is KalibratorGUI_WPF.MainWindow.resources.Tabs.CalibrationTabContent calibContent)
+                    {
+                        var reloadMethod = calibContent.GetType().GetMethod("ReloadTreeModule");
+                        reloadMethod?.Invoke(calibContent, null);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("Ошибка перезагрузки дерева: " + ex.Message);
                 }
             }
             catch (Exception ex)

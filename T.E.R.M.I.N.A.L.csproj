@@ -44,7 +44,7 @@
 		<PackageReference Include="HidSharp" Version="2.6.4" />
 		<PackageReference Include="LibUsbDotNet" Version="2.2.29" />
 		<PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.1.0-dev-798" />
-		<PackageReference Include="System.IO.Ports" Version="11.0.0-rc.3.26522.148" />
+		<PackageReference Include="System.IO.Ports" Version="8.0.0" />
 	</ItemGroup>
 
 	<!-- Ссылки на проекты (должны быть отдельно от PackageReference!) -->
@@ -59,13 +59,4 @@
 			<SubType>Designer</SubType>
 		</Page>
 	</ItemGroup>
-
-	<!-- ★ ПРИНУДИТЕЛЬНО КОПИРУЕМ ПРАВИЛЬНУЮ System.IO.Ports.dll ПОСЛЕ СБОРКИ ★ -->
-	<Target Name="CopyIoPortsDll" AfterTargets="Build">
-		<ItemGroup>
-			<PortsDll Include="$(ProjectDir)runtimes\win\lib\net8.0\System.IO.Ports.dll" />
-		</ItemGroup>
-		<Copy SourceFiles="@(PortsDll)" DestinationFolder="$(OutputPath)" OverwriteReadOnlyFiles="true" />
-	</Target>
-
 </Project>
