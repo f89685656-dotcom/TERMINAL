@@ -8,6 +8,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace TERMINAL.DeviceHub
@@ -15,7 +16,7 @@ namespace TERMINAL.DeviceHub
     public partial class PollingTabView : UserControl
     {
         private PollingEngine _engine = new PollingEngine();
-        private DispatcherTimer _uiQueueTimer; // Единый таймер для UI и графика
+        private DispatcherTimer _uiQueueTimer;
         private PlotModel _plotModel;
         private Dictionary<ChannelNode, LineSeries> _seriesMap = new Dictionary<ChannelNode, LineSeries>();
 
@@ -28,34 +29,96 @@ namespace TERMINAL.DeviceHub
         };
         private bool _isI2CEnabled = true;
 
+        private bool _isRecording = false;
+
+        // ★ Текущий выбранный канал для графика ★
+        private ChannelNode _selectedChannelForPlot = null;
+
         public PollingTabView()
         {
             InitializeComponent();
             DataContext = this;
 
-            InitializeTestTree();
             InitializePlot();
 
-            // Единый таймер для обработки очереди, обновления UI и отрисовки графика
-            _uiQueueTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _uiQueueTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _uiQueueTimer.Tick += UiQueueTimer_Tick;
             _uiQueueTimer.Start();
 
             UpdateStatusText();
         }
 
+        // ★ ОБРАБОТЧИК КЛИКА ПО КАНАЛУ В ДЕРЕВЕ (ДЛЯ ВЫБОРА ГРАФИКА) ★
+        private void ChannelRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement element && element.DataContext is ChannelNode channel)
+            {
+                // Снимаем выделение со всех каналов
+                foreach (var iface in Interfaces)
+                    foreach (var dev in iface.Devices)
+                        foreach (var ch in dev.Channels)
+                            ch.IsVisibleOnPlot = false;
+
+                // Выделяем текущий
+                channel.IsVisibleOnPlot = true;
+                _selectedChannelForPlot = channel;
+
+                // Обновляем видимость серий
+                UpdatePlotVisibility();
+            }
+        }
+
+        // ★ ОБНОВЛЕНИЕ ВИДИМОСТИ СЕРИЙ НА ГРАФИКЕ ★
+        private void UpdatePlotVisibility()
+        {
+            foreach (var kvp in _seriesMap)
+            {
+                var channel = kvp.Key;
+                var series = kvp.Value;
+                series.IsVisible = (channel == _selectedChannelForPlot);
+            }
+            _plotModel.InvalidatePlot(true);
+        }
+
+        private void RecordButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isRecording)
+            {
+                if (!Interfaces.Any(i => i.Devices.Any(d => d.IsSelected)))
+                {
+                    LogListView.Items.Add("Нет выбранных устройств для опроса. Сначала выполните поиск.");
+                    return;
+                }
+
+                // ★ ИСПОЛЬЗУЕМ ПЕРИОД ИЗ ПОЛЗУНКА ★
+                int interval = (int)IntervalSlider.Value;
+                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, interval);
+                _isRecording = true;
+
+                RecordIcon.Text = "\uE71A"; // Stop
+                RecordIcon.Foreground = new SolidColorBrush(Colors.Red);
+                LogListView.Items.Add($"Запись графика запущена. Период: {interval} мс");
+            }
+            else
+            {
+                _engine.Stop();
+                _isRecording = false;
+
+                RecordIcon.Text = "\uE768"; // Play
+                RecordIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50"));
+                LogListView.Items.Add("Запись графика остановлена.");
+            }
+        }
+
         private void UiQueueTimer_Tick(object sender, EventArgs e)
         {
-            bool needRedraw = false;
-
-            // 1. Применяем обновления данных из очереди
+            // 1. Применяем обновления UI
             while (_engine.UiUpdates.TryDequeue(out var action))
             {
                 action.Invoke();
-                needRedraw = true;
             }
 
-            // 2. Выводим логи
+            // 2. Логи
             while (_engine.LogQueue.TryDequeue(out var msg))
             {
                 LogListView.Items.Add(msg);
@@ -63,30 +126,37 @@ namespace TERMINAL.DeviceHub
                     LogListView.ScrollIntoView(LogListView.Items[LogListView.Items.Count - 1]);
             }
 
-            // 3. Добавляем точки на график для выбранных каналов
-            if (needRedraw)
-            {
-                foreach (var iface in Interfaces)
-                {
-                    foreach (var dev in iface.Devices)
-                    {
-                        foreach (var ch in dev.Channels)
-                        {
-                            // Добавляем точку только если канал выбран и для него есть серия
-                            if (ch.IsSelected && _seriesMap.TryGetValue(ch, out var series))
-                            {
-                                // Если это заглушка I2C и значение не менялось (0), можно пропустить,
-                                // но пока просто добавляем. Если линия не нужна — снимите галочку.
-                                series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(DateTime.Now), ch.Value));
+            // 3. Рисуем график (только если идет запись)
+            if (!_isRecording) return;
 
-                                if (series.Points.Count > 1000)
-                                    series.Points.RemoveAt(0);
-                            }
+            bool needRedraw = false;
+            foreach (var iface in Interfaces)
+            {
+                foreach (var dev in iface.Devices)
+                {
+                    foreach (var ch in dev.Channels)
+                    {
+                        // ★ ДОБАВЛЯЕМ ТОЧКИ ВО ВСЕ СЕРИИ (ИСТОРИЯ КОПИТСЯ) ★
+                        if (_seriesMap.TryGetValue(ch, out var series))
+                        {
+                            series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(DateTime.Now), ch.Value));
+                            if (series.Points.Count > 1000) series.Points.RemoveAt(0);
+                            needRedraw = true;
                         }
                     }
                 }
+            }
+
+            if (needRedraw)
+            {
                 _plotModel.InvalidatePlot(true);
             }
+        }
+
+        private void IntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (IntervalText != null)
+                IntervalText.Text = $"{e.NewValue / 1000.0:F2} с";
         }
 
         private void UpdateStatusText()
@@ -98,68 +168,22 @@ namespace TERMINAL.DeviceHub
             StatusText.Text = $"RS-485: {rs485Str} | I2C: {(_isI2CEnabled ? "Вкл" : "Выкл")}";
         }
 
-        private void InitializeTestTree()
-        {
-            var rs485 = new InterfaceNode { Name = "RS-485 (Modbus)" };
-            var dev1 = new DeviceNode { Name = "Датчик давления", Address = "001" };
-            dev1.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар" });
-            dev1.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C" });
-            rs485.Devices.Add(dev1);
-
-            var i2c = new InterfaceNode { Name = "I2C (FT260)" };
-            var dev2 = new DeviceNode { Name = "Датчик температуры", Address = "017" };
-            dev2.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C" });
-            i2c.Devices.Add(dev2);
-
-            Interfaces.Add(rs485);
-            Interfaces.Add(i2c);
-
-            // Подписка на события для тестовых каналов
-            foreach (var iface in Interfaces)
-                foreach (var dev in iface.Devices)
-                    foreach (var ch in dev.Channels)
-                        ch.PropertyChanged += Channel_PropertyChanged;
-        }
-
         private void InitializePlot()
         {
             _plotModel = new PlotModel { Title = "Показания датчиков", Background = OxyColors.Transparent, TitleColor = OxyColors.White };
             _plotModel.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", Title = "Время", TextColor = OxyColors.White, TitleColor = OxyColors.White });
             _plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Значение", TextColor = OxyColors.White, TitleColor = OxyColors.White });
-
-            var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
-            int colorIndex = 0;
-
-            foreach (var iface in Interfaces)
-            {
-                foreach (var dev in iface.Devices)
-                {
-                    foreach (var ch in dev.Channels)
-                    {
-                        var series = new LineSeries
-                        {
-                            Title = $"{dev.Name} - {ch.Name}",
-                            Color = colors[colorIndex % colors.Length],
-                            StrokeThickness = 2,
-                            IsVisible = ch.IsSelected // Видимость по галочке
-                        };
-                        _plotModel.Series.Add(series);
-                        _seriesMap[ch] = series;
-                        colorIndex++;
-                    }
-                }
-            }
             PlotView.Model = _plotModel;
         }
 
         private void Channel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(ChannelNode.IsSelected))
+            if (e.PropertyName == nameof(ChannelNode.IsVisibleOnPlot))
             {
                 var channel = (ChannelNode)sender;
                 if (_seriesMap.TryGetValue(channel, out var series))
                 {
-                    series.IsVisible = channel.IsSelected;
+                    series.IsVisible = channel.IsVisibleOnPlot;
                     _plotModel.InvalidatePlot(false);
                 }
             }
@@ -187,17 +211,39 @@ namespace TERMINAL.DeviceHub
 
             try
             {
-                foreach (var iface in Interfaces)
-                    iface.Devices.Clear();
+                // 1. Очистка
+                Interfaces.Clear();
+                Interfaces.Add(new InterfaceNode { Name = "RS-485 (Modbus)" });
+                Interfaces.Add(new InterfaceNode { Name = "I2C (FT260)" });
 
                 _plotModel.Series.Clear();
                 _seriesMap.Clear();
                 _plotModel.InvalidatePlot(true);
+                _selectedChannelForPlot = null;
 
-                await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
+                // 2. Сканирование
+                var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
 
+                LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
+
+                // 3. Добавление устройств
+                var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
+                if (rs485Iface != null)
+                {
+                    foreach (var dev in foundDevices)
+                    {
+                        if (!rs485Iface.Devices.Any(d => d.Address == dev.Address))
+                        {
+                            rs485Iface.Devices.Add(dev);
+                            LogListView.Items.Add($"[Scan] Устройство {dev.Address} добавлено в дерево.");
+                        }
+                    }
+                }
+
+                // 4. Создание серий
                 var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
                 int colorIndex = 0;
+                int createdCount = 0;
 
                 foreach (var iface in Interfaces)
                 {
@@ -205,6 +251,7 @@ namespace TERMINAL.DeviceHub
                     {
                         foreach (var ch in dev.Channels)
                         {
+                            ch.PropertyChanged -= Channel_PropertyChanged;
                             ch.PropertyChanged += Channel_PropertyChanged;
 
                             var series = new LineSeries
@@ -212,15 +259,17 @@ namespace TERMINAL.DeviceHub
                                 Title = $"{dev.Name} - {ch.Name}",
                                 Color = colors[colorIndex % colors.Length],
                                 StrokeThickness = 2,
-                                IsVisible = ch.IsSelected
+                                IsVisible = false // ★ По умолчанию скрыта ★
                             };
                             _plotModel.Series.Add(series);
                             _seriesMap[ch] = series;
                             colorIndex++;
+                            createdCount++;
                         }
                     }
                 }
 
+                LogListView.Items.Add($"[Scan] Создано серий для графика: {createdCount}");
                 _plotModel.InvalidatePlot(true);
                 LogListView.Items.Add("Сканирование завершено.");
             }
@@ -233,30 +282,6 @@ namespace TERMINAL.DeviceHub
                 ScanButton.IsEnabled = true;
                 LogListView.Items.Add("Кнопка 'Поиск' снова активна.");
             }
-        }
-
-        private void StartButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (!Interfaces.Any(i => i.Devices.Any(d => d.IsSelected)))
-            {
-                LogListView.Items.Add("Нет выбранных устройств для опроса. Сначала выполните поиск.");
-                return;
-            }
-
-            _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, 500);
-
-            StartButton.IsEnabled = false;
-            StopButton.IsEnabled = true;
-            LogListView.Items.Add("Запущен параллельный опрос.");
-        }
-
-        private void StopButton_Click(object sender, RoutedEventArgs e)
-        {
-            _engine.Stop();
-
-            StartButton.IsEnabled = true;
-            StopButton.IsEnabled = false;
-            LogListView.Items.Add("Остановлено.");
         }
 
         public void ClosePort()

@@ -41,15 +41,57 @@ namespace TERMINAL.DeviceHub
         private bool _isSelected = true;
         private double _value;
         private string _unit;
-        public string Name { get; set; }
-        public string Unit { get => _unit; set { _unit = value; OnPropertyChanged(); } }
-        public double Value { get => _value; set { _value = value; OnPropertyChanged(); } }
-        public bool IsSelected { get => _isSelected; set { _isSelected = value; OnPropertyChanged(); } }
-        public bool Is32Bit { get; set; } = true;
-        public bool IsInt32 { get; set; } = false; // ★ ДЛЯ FIXED POINT ★
 
-        // Свойства для чтения
+        public string Name { get; set; }
+
+        public string Unit
+        {
+            get => _unit;
+            set { _unit = value; OnPropertyChanged(); }
+        }
+
+        public double Value
+        {
+            get => _value;
+            set
+            {
+                if (Math.Abs(_value - value) > 0.0001)
+                {
+                    _value = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set { _isSelected = value; OnPropertyChanged(); }
+        }
+
+        // ★ НОВОЕ СВОЙСТВО: Выбран ли канал для отображения на графике ★
+        private bool _isVisibleOnPlot = false;
+        public bool IsVisibleOnPlot
+        {
+            get => _isVisibleOnPlot;
+            set
+            {
+                if (_isVisibleOnPlot != value)
+                {
+                    _isVisibleOnPlot = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool Is32Bit { get; set; } = true;
+        public bool IsInt32 { get; set; } = false;
+        public double LastValue { get; set; }
+
         public ushort RegisterAddress { get; set; }
         public double Multiplier { get; set; } = 1.0;
+
+        // ★ ДОБАВЛЕНО: Событие для графика ★
+        public event Action<ChannelNode, double> ValueUpdated;
     }
 }

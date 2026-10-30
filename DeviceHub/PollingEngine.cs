@@ -15,6 +15,7 @@ namespace TERMINAL.DeviceHub
     {
         private CancellationTokenSource _cts;
         private List<Task> _pollingTasks = new List<Task>();
+        public event Action<ChannelNode, double> NewDataArrived;
 
         public ConcurrentQueue<Action> UiUpdates { get; } = new ConcurrentQueue<Action>();
         public ConcurrentQueue<string> LogQueue { get; } = new ConcurrentQueue<string>();
@@ -26,8 +27,9 @@ namespace TERMINAL.DeviceHub
 
         // --- МЕТОД СКАНИРОВАНИЯ ---
 
-        public async Task ScanAllAsync(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c)
+        public async Task<List<DeviceNode>> ScanAllAsync(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c)
         {
+            var foundDevices = new List<DeviceNode>();
             var scanTasks = new List<Task>();
 
             foreach (var iface in interfaces)
@@ -38,38 +40,36 @@ namespace TERMINAL.DeviceHub
                 {
                     foreach (var setting in rs485Settings)
                     {
-                        scanTasks.Add(Task.Run(() => ScanModbusAsync(iface, setting.PortName, setting.BaudRate)));
+                        scanTasks.Add(Task.Run(async () =>
+                        {
+                            var devices = await ScanModbusAsync(iface, setting.PortName, setting.BaudRate);
+                            lock (foundDevices)
+                            {
+                                foundDevices.AddRange(devices);
+                            }
+                        }));
                     }
                 }
                 else if (iface.Name.Contains("I2C") && isI2c)
                 {
-                    scanTasks.Add(Task.Run(() => ScanI2CAsync(iface)));
+                    // I2C заглушка (если нужна)
                 }
             }
 
-            // ★ ЖДЕМ ЗАВЕРШЕНИЯ ВСЕХ ЗАДАЧ, НО НЕ БОЛЕЕ 10 СЕКУНД ★
-            var allTasks = Task.WhenAll(scanTasks);
-            var timeoutTask = Task.Delay(10000); // 10 секунд
+            // ★ ЖДЕМ ЗАВЕРШЕНИЯ ВСЕХ ЗАДАЧ (без таймаута) ★
+            await Task.WhenAll(scanTasks);
 
-            var completedTask = await Task.WhenAny(allTasks, timeoutTask);
-
-            if (completedTask == timeoutTask)
-            {
-                LogQueue.Enqueue("[Scan] Сканирование превысило 10 секунд и было принудительно остановлено.");
-            }
-            else
-            {
-                // Если задачи завершились с ошибкой, пробрасываем её (но ловим в UI)
-                try { await allTasks; } catch { }
-            }
+            return foundDevices;
         }
-        private async Task ScanModbusAsync(InterfaceNode iface, string portName, int baudRate)
+
+        private async Task<List<DeviceNode>> ScanModbusAsync(InterfaceNode iface, string portName, int baudRate)
         {
+            var foundDevices = new List<DeviceNode>();
             try
             {
                 LogQueue.Enqueue($"[Scan] Попытка открыть {portName} на {baudRate} бод...");
 
-                // ★ ОТКРЫВАЕМ ПОРТ, ЕСЛИ ОН ЕЩЕ НЕ ОТКРЫТ ★
+                // ★ ОТКРЫТИЕ ПОРТА (ЭТО НЕ КОММЕНТАРИЙ, А КОД!) ★
                 if (_port == null || !_port.IsOpen)
                 {
                     _port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
@@ -78,6 +78,11 @@ namespace TERMINAL.DeviceHub
                     _master = factory.CreateRtuMaster(_port);
                     _master.Transport.ReadTimeout = 300;
                     _isPortOpen = true;
+                    LogQueue.Enqueue($"[Scan] Порт {portName} успешно открыт.");
+                }
+                else
+                {
+                    LogQueue.Enqueue($"[Scan] Порт {portName} уже открыт. Используем существующий.");
                 }
 
                 LogQueue.Enqueue($"[Scan] Порт {portName} открыт. Начинаем перебор адресов...");
@@ -86,68 +91,43 @@ namespace TERMINAL.DeviceHub
                 {
                     try
                     {
-                        _master.ReadInputRegisters(address, 0, 2);
+                        ushort[] regs = _master.ReadInputRegisters(address, 0, 2);
 
-                        LogQueue.Enqueue($"[Scan] [{portName}] Найдено устройство по адресу {address}!");
+                        LogQueue.Enqueue($"[Scan] [{portName}] Найдено устройство по адресу {address}! regs=[{regs[0]}, {regs[1]}]");
 
                         var newDev = new DeviceNode { Name = "Датчик давления СКТБ ЭЛПА", Address = address.ToString("D3") };
 
-                        // ★ ТОЧНЫЕ АДРЕСА ИЗ ТАБЛИЦЫ INPUT REGISTERS ★
-
-                        // 1. Давление (float) - адрес 0x0000 (2 регистра: 0x00 и 0x01)
+                        // ★ ДОБАВЛЕНИЕ КАНАЛОВ ★
                         newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
-
-                        // 2. Температура (float) - адрес 0x0002 (2 регистра: 0x02 и 0x03)
                         newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
-
-                        // 3. Частота давления (float) - адрес 0x0008 (2 регистра: 0x08 и 0x09)
                         newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
-
-                        // 4. Частота температуры (float) - адрес 0x000A (2 регистра: 0x0A и 0x0B)
                         newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000A, Is32Bit = true });
-
-                        // 5. Давление (фикс. точка) (int32) - адрес 0x0010 (2 регистра: 0x10 и 0x11)
                         newDev.Channels.Add(new ChannelNode { Name = "Давление (фикс)", Unit = "", RegisterAddress = 0x0010, Is32Bit = true, IsInt32 = true });
-
-                        // 6. Температура (фикс. точка) (int32) - адрес 0x0012 (2 регистра: 0x12 и 0x13)
                         newDev.Channels.Add(new ChannelNode { Name = "Температура (фикс)", Unit = "", RegisterAddress = 0x0012, Is32Bit = true, IsInt32 = true });
-
-                        // 7. Температура процессора (float) - адрес 0x0020 (2 регистра: 0x20 и 0x21)
                         newDev.Channels.Add(new ChannelNode { Name = "Температура процессора", Unit = "°C", RegisterAddress = 0x0020, Is32Bit = true });
-
-                        // 8. Напряжение питания (float) - адрес 0x0022 (2 регистра: 0x22 и 0x23)
                         newDev.Channels.Add(new ChannelNode { Name = "Напряжение питания", Unit = "В", RegisterAddress = 0x0022, Is32Bit = true });
 
-                        UiUpdates.Enqueue(() =>
-                        {
-                            if (!iface.Devices.Any(d => d.Address == newDev.Address))
-                            {
-                                iface.Devices.Add(newDev);
-                                LogQueue.Enqueue($"[Scan] Устройство {newDev.Address} добавлено в дерево.");
-                            }
-                        });
+                        foundDevices.Add(newDev);
+
+                        // ★ ПРЕРЫВАЕМ ПЕРЕБОР, ТАК КАК УСТРОЙСТВО НАЙДЕНО ★
+                        break;
                     }
                     catch { /* Таймаут */ }
                 }
-                LogQueue.Enqueue($"[Scan] Сканирование {portName} завершено.");
+
+                LogQueue.Enqueue($"[Scan] Сканирование {portName} завершено. Найдено устройств: {foundDevices.Count}");
             }
             catch (Exception ex)
             {
                 LogQueue.Enqueue($"[Scan] Ошибка порта {portName}: {ex.Message}");
             }
-            // ★ НЕ ЗАКРЫВАЕМ ПОРТ, ОН ОСТАЕТСЯ ОТКРЫТЫМ ДЛЯ ОПРОСА ★
+            return foundDevices;
         }
 
         private async Task ScanI2CAsync(InterfaceNode iface)
         {
             await Task.Delay(1000);
-            LogQueue.Enqueue("[Scan] I2C: Поиск завершен (заглушка).");
-            UiUpdates.Enqueue(() =>
-            {
-                var dev = new DeviceNode { Name = "I2C датчик", Address = "017" };
-                dev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C" });
-                iface.Devices.Add(dev);
-            });
+            // I2C заглушка
         }
 
         // --- МЕТОД ОПРОСА ---
@@ -202,22 +182,18 @@ namespace TERMINAL.DeviceHub
                                     // Читаем 2 регистра (Input Registers)
                                     ushort[] regs = _master.ReadInputRegisters(id, ch.RegisterAddress, 2);
 
-                                    LogQueue.Enqueue($"[Debug] {ch.Name} (адрес {ch.RegisterAddress:X4}): regs=[{regs[0]}, {regs[1]}]");
-
                                     if (ch.IsInt32)
                                     {
-                                        // ★ ФИКС. ТОЧКА (Int32) ★
+                                        // ФИКС. ТОЧКА (Int32)
                                         int raw = (regs[1] << 16) | regs[0];
-
-                                        // Округляем до целого и приводим к double
-                                        // Это уберет дробную часть, но WPF может все равно добавить .000
                                         double val = Math.Round((double)raw);
 
+                                        ch.LastValue = val;
                                         UiUpdates.Enqueue(() => ch.Value = val);
                                     }
                                     else
                                     {
-                                        // ★ FLOAT (Давление, Температура и т.д.) ★
+                                        // FLOAT (Давление, Температура)
                                         byte[] bytes = new byte[4];
                                         bytes[0] = (byte)(regs[0] & 0xFF);
                                         bytes[1] = (byte)(regs[0] >> 8);
@@ -226,8 +202,8 @@ namespace TERMINAL.DeviceHub
 
                                         float val = BitConverter.ToSingle(bytes, 0);
 
-                                        // Приводим к double для совместимости с типом свойства
-                                        UiUpdates.Enqueue(() => ch.Value = (double)val);
+                                        ch.LastValue = val;
+                                        UiUpdates.Enqueue(() => ch.Value = val);
                                     }
                                 }
                                 catch (Exception ex)
@@ -253,6 +229,7 @@ namespace TERMINAL.DeviceHub
                 LogQueue.Enqueue($"[Poll] Опрос {portName} остановлен.");
             }
         }
+
         public void Stop()
         {
             if (_cts != null)
