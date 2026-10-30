@@ -1,10 +1,9 @@
 ﻿<Window x:Class="TERMINAL.DeviceHub.HubSettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Настройка интерфейсов" Height="450" Width="500"
+        Title="Настройка интерфейсов" Height="550" Width="550"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource WindowBackground}"
-        Foreground="{DynamicResource TextForeground}">
+        Background="#1E1E1E" Foreground="White">
     <Grid Margin="15">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -12,44 +11,61 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Выберите активные интерфейсы:" FontSize="16" FontWeight="Bold" Margin="0,0,0,15" Foreground="{DynamicResource TextForeground}"/>
+        <TextBlock Text="Выберите активные интерфейсы:" FontSize="16" FontWeight="Bold" Margin="0,0,0,15" Foreground="White"/>
 
         <StackPanel Grid.Row="1">
             <!-- RS-485 -->
-            <GroupBox Header="RS-485 (Modbus)" Margin="0,0,0,15" Foreground="{DynamicResource TextForeground}" BorderBrush="{DynamicResource PanelBorder}">
+            <GroupBox Header="RS-485 (Modbus)" Margin="0,0,0,10" Foreground="White" BorderBrush="#555555">
                 <StackPanel Margin="5">
-                    <CheckBox x:Name="Rs485CheckBox" Content="Включить RS-485" IsChecked="True" FontWeight="Bold" Margin="0,0,0,10" Foreground="{DynamicResource TextForeground}"/>
-                    <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-                        <TextBlock Text="Порт:" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{DynamicResource TextForeground}"/>
-                        <ComboBox x:Name="Rs485PortComboBox" Width="120" Margin="0,0,20,0"/>
+                    <CheckBox x:Name="Rs485CheckBox" Content="Включить RS-485" IsChecked="True" 
+                  FontWeight="Bold" Margin="0,0,0,5" Foreground="White"/>
 
-                        <TextBlock Text="Скорость:" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{DynamicResource TextForeground}"/>
-                        <ComboBox x:Name="Rs485BaudComboBox" Width="100" SelectionChanged="Rs485BaudComboBox_SelectionChanged">
-                            <ComboBoxItem Content="9600"/>
-                            <ComboBoxItem Content="19200"/>
-                            <ComboBoxItem Content="38400"/>
-                            <ComboBoxItem Content="57600" IsSelected="True"/>
-                            <ComboBoxItem Content="115200"/>
-                        </ComboBox>
-                    </StackPanel>
+                    <!-- Список портов с индивидуальными скоростями -->
+                    <Border BorderBrush="#555555" BorderThickness="1" Height="150" Margin="20,0,0,0" Background="#2D2D30">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="Rs485PortsList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="5,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="120"/>
+                                                <!-- Галочка и имя -->
+                                                <ColumnDefinition Width="Auto"/>
+                                                <!-- Выбор скорости -->
+                                            </Grid.ColumnDefinitions>
+
+                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Foreground="White" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}" Foreground="White" FontSize="13"/>
+                                            </CheckBox>
+
+                                            <!-- ★ ВЫБОР СКОРОСТИ (привязан к BaudRate) ★ -->
+                                            <ComboBox Grid.Column="1" Width="100" 
+                                          ItemsSource="{Binding AvailableBaudRates}"
+                                          SelectedItem="{Binding BaudRate, Mode=TwoWay}" 
+                                          Margin="10,0,0,0" Foreground="Black"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
                 </StackPanel>
             </GroupBox>
 
             <!-- I2C -->
-            <GroupBox Header="I2C (FT260)" Margin="0,0,0,15" Foreground="{DynamicResource TextForeground}" BorderBrush="{DynamicResource PanelBorder}">
+            <GroupBox Header="I2C (FT260)" Margin="0,0,0,15" Foreground="White" BorderBrush="#555555">
                 <StackPanel Margin="5">
-                    <CheckBox x:Name="I2CCheckBox" Content="Включить I2C" IsChecked="True" FontWeight="Bold" Margin="0,0,0,10" Foreground="{DynamicResource TextForeground}"/>
-                    <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-                        <TextBlock Text="Переходник:" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{DynamicResource TextForeground}"/>
-                        <ComboBox x:Name="I2CAdapterComboBox" Width="250"/>
-                    </StackPanel>
+                    <CheckBox x:Name="I2CCheckBox" Content="Включить I2C" IsChecked="True" FontWeight="Bold" Margin="0,0,0,10" Foreground="White"/>
+                    <TextBlock Text="Выбор I2C переходников (заглушка):" Margin="20,0,0,5" Foreground="White"/>
+                    <TextBox Text="FT260 [7&amp;5fcd268&amp;0&amp;0000]" IsReadOnly="True" Margin="20,0,0,0" Width="250" HorizontalAlignment="Left" 
+                             Background="#2D2D30" Foreground="White" BorderBrush="#555555"/>
                 </StackPanel>
             </GroupBox>
         </StackPanel>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-            <Button Content="OK" Width="90" Height="30" Margin="0,0,10,0" Click="OkButton_Click"/>
-            <Button Content="Отмена" Width="90" Height="30" Click="CancelButton_Click"/>
+            <Button Content="OK" Width="90" Height="30" Margin="0,0,10,0" Click="OkButton_Click" Background="#2D2D30" Foreground="White"/>
+            <Button Content="Отмена" Width="90" Height="30" Click="CancelButton_Click" Background="#2D2D30" Foreground="White"/>
         </StackPanel>
     </Grid>
 </Window>

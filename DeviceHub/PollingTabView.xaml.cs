@@ -5,9 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace TERMINAL.DeviceHub
@@ -15,17 +15,17 @@ namespace TERMINAL.DeviceHub
     public partial class PollingTabView : UserControl
     {
         private PollingEngine _engine = new PollingEngine();
-        private DispatcherTimer _uiTimer;
-        private DispatcherTimer _uiQueueTimer;
+        private DispatcherTimer _uiQueueTimer; // Единый таймер для UI и графика
         private PlotModel _plotModel;
         private Dictionary<ChannelNode, LineSeries> _seriesMap = new Dictionary<ChannelNode, LineSeries>();
 
         public ObservableCollection<InterfaceNode> Interfaces { get; set; } = new ObservableCollection<InterfaceNode>();
 
-        // Настройки
         private bool _isRs485Enabled = true;
-        private string _rs485Port = "COM4";
-        private int _rs485Baud = 9600;
+        private List<PortSetting> _rs485Ports = new List<PortSetting>
+        {
+            new PortSetting { PortName = "COM9", BaudRate = 57600 }
+        };
         private bool _isI2CEnabled = true;
 
         public PollingTabView()
@@ -36,35 +36,66 @@ namespace TERMINAL.DeviceHub
             InitializeTestTree();
             InitializePlot();
 
-            // Таймер для обновления графика
-            _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-            _uiTimer.Tick += UpdateUiFromQueue;
-
-            // Таймер для обработки очереди UiUpdates из движка
-            // В конструкторе, где настраивается _uiQueueTimer:
-            _uiQueueTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-            _uiQueueTimer.Tick += (s, e) =>
-            {
-                while (_engine.UiUpdates.TryDequeue(out var action))
-                {
-                    action.Invoke();
-                }
-                while (_engine.LogQueue.TryDequeue(out var msg))
-                {
-                    LogListView.Items.Add(msg);
-                    if (LogListView.Items.Count > 0)
-                        LogListView.ScrollIntoView(LogListView.Items[LogListView.Items.Count - 1]);
-                }
-            };
+            // Единый таймер для обработки очереди, обновления UI и отрисовки графика
+            _uiQueueTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _uiQueueTimer.Tick += UiQueueTimer_Tick;
             _uiQueueTimer.Start();
 
-            // Инициализация статуса
             UpdateStatusText();
+        }
+
+        private void UiQueueTimer_Tick(object sender, EventArgs e)
+        {
+            bool needRedraw = false;
+
+            // 1. Применяем обновления данных из очереди
+            while (_engine.UiUpdates.TryDequeue(out var action))
+            {
+                action.Invoke();
+                needRedraw = true;
+            }
+
+            // 2. Выводим логи
+            while (_engine.LogQueue.TryDequeue(out var msg))
+            {
+                LogListView.Items.Add(msg);
+                if (LogListView.Items.Count > 0)
+                    LogListView.ScrollIntoView(LogListView.Items[LogListView.Items.Count - 1]);
+            }
+
+            // 3. Добавляем точки на график для выбранных каналов
+            if (needRedraw)
+            {
+                foreach (var iface in Interfaces)
+                {
+                    foreach (var dev in iface.Devices)
+                    {
+                        foreach (var ch in dev.Channels)
+                        {
+                            // Добавляем точку только если канал выбран и для него есть серия
+                            if (ch.IsSelected && _seriesMap.TryGetValue(ch, out var series))
+                            {
+                                // Если это заглушка I2C и значение не менялось (0), можно пропустить,
+                                // но пока просто добавляем. Если линия не нужна — снимите галочку.
+                                series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(DateTime.Now), ch.Value));
+
+                                if (series.Points.Count > 1000)
+                                    series.Points.RemoveAt(0);
+                            }
+                        }
+                    }
+                }
+                _plotModel.InvalidatePlot(true);
+            }
         }
 
         private void UpdateStatusText()
         {
-            StatusText.Text = $"RS-485: {(_isRs485Enabled ? _rs485Port : "Выкл")} | I2C: {(_isI2CEnabled ? "Вкл" : "Выкл")}";
+            var rs485Str = _isRs485Enabled
+                ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))
+                : "Выкл";
+
+            StatusText.Text = $"RS-485: {rs485Str} | I2C: {(_isI2CEnabled ? "Вкл" : "Выкл")}";
         }
 
         private void InitializeTestTree()
@@ -83,6 +114,7 @@ namespace TERMINAL.DeviceHub
             Interfaces.Add(rs485);
             Interfaces.Add(i2c);
 
+            // Подписка на события для тестовых каналов
             foreach (var iface in Interfaces)
                 foreach (var dev in iface.Devices)
                     foreach (var ch in dev.Channels)
@@ -95,7 +127,7 @@ namespace TERMINAL.DeviceHub
             _plotModel.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", Title = "Время", TextColor = OxyColors.White, TitleColor = OxyColors.White });
             _plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Значение", TextColor = OxyColors.White, TitleColor = OxyColors.White });
 
-            var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange };
+            var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
             int colorIndex = 0;
 
             foreach (var iface in Interfaces)
@@ -108,7 +140,8 @@ namespace TERMINAL.DeviceHub
                         {
                             Title = $"{dev.Name} - {ch.Name}",
                             Color = colors[colorIndex % colors.Length],
-                            StrokeThickness = 2
+                            StrokeThickness = 2,
+                            IsVisible = ch.IsSelected // Видимость по галочке
                         };
                         _plotModel.Series.Add(series);
                         _seriesMap[ch] = series;
@@ -139,12 +172,11 @@ namespace TERMINAL.DeviceHub
             if (settingsWindow.ShowDialog() == true)
             {
                 _isRs485Enabled = settingsWindow.IsRs485Enabled;
-                _rs485Port = settingsWindow.SelectedPort;
-                _rs485Baud = settingsWindow.SelectedBaud; // <-- Вот здесь берется 57600
+                _rs485Ports = settingsWindow.SelectedPortsWithBaud;
                 _isI2CEnabled = settingsWindow.IsI2CEnabled;
 
                 UpdateStatusText();
-                LogListView.Items.Add($"Настройки: Порт={_rs485Port}, Скорость={_rs485Baud}");
+                LogListView.Items.Add($"Настройки: Порты={string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))}");
             }
         }
 
@@ -153,14 +185,54 @@ namespace TERMINAL.DeviceHub
             ScanButton.IsEnabled = false;
             LogListView.Items.Add("Запуск параллельного сканирования...");
 
-            // Очищаем дерево перед поиском
-            foreach (var iface in Interfaces)
-                iface.Devices.Clear();
+            try
+            {
+                foreach (var iface in Interfaces)
+                    iface.Devices.Clear();
 
-            await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Port, _rs485Baud, _isI2CEnabled);
+                _plotModel.Series.Clear();
+                _seriesMap.Clear();
+                _plotModel.InvalidatePlot(true);
 
-            LogListView.Items.Add("Сканирование завершено.");
-            ScanButton.IsEnabled = true;
+                await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
+
+                var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
+                int colorIndex = 0;
+
+                foreach (var iface in Interfaces)
+                {
+                    foreach (var dev in iface.Devices)
+                    {
+                        foreach (var ch in dev.Channels)
+                        {
+                            ch.PropertyChanged += Channel_PropertyChanged;
+
+                            var series = new LineSeries
+                            {
+                                Title = $"{dev.Name} - {ch.Name}",
+                                Color = colors[colorIndex % colors.Length],
+                                StrokeThickness = 2,
+                                IsVisible = ch.IsSelected
+                            };
+                            _plotModel.Series.Add(series);
+                            _seriesMap[ch] = series;
+                            colorIndex++;
+                        }
+                    }
+                }
+
+                _plotModel.InvalidatePlot(true);
+                LogListView.Items.Add("Сканирование завершено.");
+            }
+            catch (Exception ex)
+            {
+                LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}");
+            }
+            finally
+            {
+                ScanButton.IsEnabled = true;
+                LogListView.Items.Add("Кнопка 'Поиск' снова активна.");
+            }
         }
 
         private void StartButton_Click(object sender, RoutedEventArgs e)
@@ -171,11 +243,7 @@ namespace TERMINAL.DeviceHub
                 return;
             }
 
-            // Запускаем опрос
-            _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Port, _rs485Baud, _isI2CEnabled, 500);
-
-            // Таймер для обновления графика
-            _uiTimer.Start();
+            _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, 500);
 
             StartButton.IsEnabled = false;
             StopButton.IsEnabled = true;
@@ -185,30 +253,42 @@ namespace TERMINAL.DeviceHub
         private void StopButton_Click(object sender, RoutedEventArgs e)
         {
             _engine.Stop();
-            _uiTimer.Stop();
 
             StartButton.IsEnabled = true;
             StopButton.IsEnabled = false;
             LogListView.Items.Add("Остановлено.");
         }
 
-        private void UpdateUiFromQueue(object sender, EventArgs e)
+        public void ClosePort()
         {
-            foreach (var iface in Interfaces)
+            _engine.ClosePort();
+        }
+
+        private void CopyLogMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            CopySelectedLogs();
+        }
+
+        private void CopyLogCommand_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            CopySelectedLogs();
+        }
+
+        private void CopySelectedLogs()
+        {
+            if (LogListView.SelectedItems.Count == 0) return;
+
+            var sb = new System.Text.StringBuilder();
+            foreach (var item in LogListView.SelectedItems)
             {
-                foreach (var dev in iface.Devices)
-                {
-                    foreach (var ch in dev.Channels)
-                    {
-                        if (ch.IsSelected && _seriesMap.TryGetValue(ch, out var series))
-                        {
-                            series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(DateTime.Now), ch.Value));
-                            if (series.Points.Count > 1000) series.Points.RemoveAt(0);
-                        }
-                    }
-                }
+                sb.AppendLine(item.ToString());
             }
-            _plotModel.InvalidatePlot(true);
+
+            try
+            {
+                Clipboard.SetText(sb.ToString());
+            }
+            catch { }
         }
     }
 }

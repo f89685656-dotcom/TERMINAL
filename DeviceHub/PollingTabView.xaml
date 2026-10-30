@@ -18,15 +18,10 @@
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10">
             <Button x:Name="StartButton" Content="Старт" Width="80" Height="30" Margin="0,0,10,0" Click="StartButton_Click"/>
             <Button x:Name="StopButton" Content="Стоп" Width="80" Height="30" IsEnabled="False" Click="StopButton_Click"/>
-
-            <!-- ★ КНОПКА ПОИСКА ★ -->
             <Button x:Name="ScanButton" Content="Поиск" Width="80" Height="30" Margin="10,0,0,0" 
-                    Click="ScanButton_Click" 
-                    Background="#33adff" Foreground="White"/>
-
+                    Click="ScanButton_Click" Background="#33adff" Foreground="White"/>
             <Button x:Name="SettingsButton" Content="Настройки" Width="100" Height="30" Margin="10,0,0,0" 
                     Click="SettingsButton_Click"/>
-
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="20,0,0,0" 
                        Foreground="{DynamicResource TextForeground}" Text="Не настроено"/>
         </StackPanel>
@@ -35,27 +30,22 @@
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="350"/>
-                <!-- Дерево устройств -->
                 <ColumnDefinition Width="*"/>
-                <!-- График -->
             </Grid.ColumnDefinitions>
 
             <!-- ДЕРЕВО УСТРОЙСТВ -->
             <Border Grid.Column="0" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,0,1,0" Margin="10">
                 <TreeView x:Name="DevicesTree" Background="Transparent" ItemsSource="{Binding Interfaces}">
-
-                    <!-- Шаблон для Интерфейса (RS-485, I2C) -->
-                    <TreeView.ItemTemplate>
+                    <TreeView.Resources>
+                        <!-- 1. Шаблон для Интерфейса (RS-485, I2C) -->
                         <HierarchicalDataTemplate DataType="{x:Type local:InterfaceNode}" ItemsSource="{Binding Devices}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextForeground}"/>
                             </StackPanel>
                         </HierarchicalDataTemplate>
-                    </TreeView.ItemTemplate>
 
-                    <!-- Шаблон для Устройства -->
-                    <TreeView.Resources>
+                        <!-- 2. Шаблон для Устройства (DeviceNode) -->
                         <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding Channels}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
@@ -64,37 +54,61 @@
                             </StackPanel>
                         </HierarchicalDataTemplate>
 
-                        <!-- Шаблон для Канала (Температура, Давление) -->
+                        <!-- 3. Шаблон для Канала (ChannelNode) С ИСПРАВЛЕННОЙ КОСМЕТИКОЙ -->
                         <DataTemplate DataType="{x:Type local:ChannelNode}">
                             <Grid Margin="0,2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
-                                    <!-- Галочка -->
                                     <ColumnDefinition Width="*"/>
-                                    <!-- Название -->
                                     <ColumnDefinition Width="Auto"/>
-                                    <!-- Значение -->
                                 </Grid.ColumnDefinitions>
 
                                 <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource TextForeground}"/>
-                                <TextBlock Grid.Column="2" Text="{Binding Value, StringFormat=\{0:F3\}}" 
-                                           FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{DynamicResource TextForeground}"/>
+
+                                <!-- ★ ИСПРАВЛЕННЫЙ TEXTBLOCK С ТРИГГЕРОМ ★ -->
+                                <TextBlock Grid.Column="2" 
+                                           FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0" 
+                                           Foreground="{DynamicResource TextForeground}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <!-- По умолчанию (для float) — 3 знака -->
+                                            <Setter Property="Text" Value="{Binding Value, StringFormat=\{0:F3\}}"/>
+                                            <Style.Triggers>
+                                                <!-- Если IsInt32 = true, показываем без дробной части -->
+                                                <DataTrigger Binding="{Binding IsInt32}" Value="True">
+                                                    <Setter Property="Text" Value="{Binding Value, StringFormat=\{0:F0\}}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </Grid>
                         </DataTemplate>
                     </TreeView.Resources>
-
                 </TreeView>
             </Border>
 
             <!-- ГРАФИК -->
-            <oxy:PlotView Grid.Column="1" x:Name="PlotView" Margin="10" 
-                          Background="{DynamicResource PanelBackground}"/>
+            <oxy:PlotView Grid.Column="1" x:Name="PlotView" Margin="10" Background="{DynamicResource PanelBackground}"/>
         </Grid>
 
         <!-- ЛОГ -->
         <ListView Grid.Row="2" x:Name="LogListView" Margin="10" 
-                  Background="{DynamicResource PanelBackground}" 
-                  Foreground="{DynamicResource TextForeground}"/>
+          Background="{DynamicResource PanelBackground}" 
+          Foreground="{DynamicResource TextForeground}"
+          SelectionMode="Extended">
+            <ListView.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Копировать" Click="CopyLogMenuItem_Click" InputGestureText="Ctrl+C"/>
+                </ContextMenu>
+            </ListView.ContextMenu>
+            <ListView.InputBindings>
+                <KeyBinding Key="C" Modifiers="Control" Command="ApplicationCommands.Copy"/>
+            </ListView.InputBindings>
+            <ListView.CommandBindings>
+                <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyLogCommand_Executed"/>
+            </ListView.CommandBindings>
+        </ListView>
     </Grid>
 </UserControl>
