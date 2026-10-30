@@ -4,6 +4,7 @@
         xmlns:conv="clr-namespace:TERMINAL.Converters"
         xmlns:local="clr-namespace:TERMINAL"
         xmlns:models="clr-namespace:TERMINAL.Models"
+        xmlns:deviceHub="clr-namespace:TERMINAL.DeviceHub"
         Title="T.E.R.M.I.N.A.L."
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
@@ -774,9 +775,9 @@
             </Grid>
         </TabItem>
 
-
-        <TabItem Header="KalibratorGUI">
-            <local:KalibratorControl />
+        <TabItem Header="DeviceHub">
+            <deviceHub:DeviceHubControl />
         </TabItem>
+
     </TabControl>
 </Window>

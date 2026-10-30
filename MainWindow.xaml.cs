@@ -1132,7 +1132,7 @@ namespace TERMINAL
 
                     // ★ ЗАПУСК С ТАЙМАУТОМ (2 минуты)
                     var runTask1 = Task.Run(() => xl.Run(filterMacro));
-                    if (await Task.WhenAny(runTask1, Task.Delay(10000)) != runTask1)
+                    if (await Task.WhenAny(runTask1, Task.Delay(120000)) != runTask1)
                     {
                         throw new TimeoutException($"Макрос «{filterMacro}» не завершился за 2 минуты. Возможно, он завис.");
                     }

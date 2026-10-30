@@ -1,0 +1,9 @@
+﻿<UserControl x:Class="TERMINAL.DeviceHub.FirmwareTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="{DynamicResource PanelBackground}">
+        <TextBlock Text="Здесь будет настройка коэффициентов и прошивка датчиков" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="18" Foreground="{DynamicResource TextForeground}"/>
+    </Grid>
+</UserControl>

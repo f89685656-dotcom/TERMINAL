@@ -1,0 +1,100 @@
+﻿<UserControl x:Class="TERMINAL.DeviceHub.PollingTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:oxy="http://oxyplot.org/wpf"
+             xmlns:local="clr-namespace:TERMINAL.DeviceHub"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="1000">
+    <Grid Background="{DynamicResource WindowBackground}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="150"/>
+        </Grid.RowDefinitions>
+
+        <!-- ПАНЕЛЬ УПРАВЛЕНИЯ -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10">
+            <Button x:Name="StartButton" Content="Старт" Width="80" Height="30" Margin="0,0,10,0" Click="StartButton_Click"/>
+            <Button x:Name="StopButton" Content="Стоп" Width="80" Height="30" IsEnabled="False" Click="StopButton_Click"/>
+
+            <!-- ★ КНОПКА ПОИСКА ★ -->
+            <Button x:Name="ScanButton" Content="Поиск" Width="80" Height="30" Margin="10,0,0,0" 
+                    Click="ScanButton_Click" 
+                    Background="#33adff" Foreground="White"/>
+
+            <Button x:Name="SettingsButton" Content="Настройки" Width="100" Height="30" Margin="10,0,0,0" 
+                    Click="SettingsButton_Click"/>
+
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="20,0,0,0" 
+                       Foreground="{DynamicResource TextForeground}" Text="Не настроено"/>
+        </StackPanel>
+
+        <!-- ОСНОВНАЯ ЗОНА -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="350"/>
+                <!-- Дерево устройств -->
+                <ColumnDefinition Width="*"/>
+                <!-- График -->
+            </Grid.ColumnDefinitions>
+
+            <!-- ДЕРЕВО УСТРОЙСТВ -->
+            <Border Grid.Column="0" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,0,1,0" Margin="10">
+                <TreeView x:Name="DevicesTree" Background="Transparent" ItemsSource="{Binding Interfaces}">
+
+                    <!-- Шаблон для Интерфейса (RS-485, I2C) -->
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate DataType="{x:Type local:InterfaceNode}" ItemsSource="{Binding Devices}">
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextForeground}"/>
+                            </StackPanel>
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+
+                    <!-- Шаблон для Устройства -->
+                    <TreeView.Resources>
+                        <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding Channels}">
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextForeground}"/>
+                                <TextBlock Text="{Binding Address}" Foreground="Gray" Margin="5,0,0,0"/>
+                            </StackPanel>
+                        </HierarchicalDataTemplate>
+
+                        <!-- Шаблон для Канала (Температура, Давление) -->
+                        <DataTemplate DataType="{x:Type local:ChannelNode}">
+                            <Grid Margin="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <!-- Галочка -->
+                                    <ColumnDefinition Width="*"/>
+                                    <!-- Название -->
+                                    <ColumnDefinition Width="Auto"/>
+                                    <!-- Значение -->
+                                </Grid.ColumnDefinitions>
+
+                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource TextForeground}"/>
+                                <TextBlock Grid.Column="2" Text="{Binding Value, StringFormat=\{0:F3\}}" 
+                                           FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{DynamicResource TextForeground}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </TreeView.Resources>
+
+                </TreeView>
+            </Border>
+
+            <!-- ГРАФИК -->
+            <oxy:PlotView Grid.Column="1" x:Name="PlotView" Margin="10" 
+                          Background="{DynamicResource PanelBackground}"/>
+        </Grid>
+
+        <!-- ЛОГ -->
+        <ListView Grid.Row="2" x:Name="LogListView" Margin="10" 
+                  Background="{DynamicResource PanelBackground}" 
+                  Foreground="{DynamicResource TextForeground}"/>
+    </Grid>
+</UserControl>
