@@ -7,6 +7,61 @@
              xmlns:local="clr-namespace:TERMINAL.DeviceHub"
              mc:Ignorable="d" 
              d:DesignHeight="600" d:DesignWidth="1000">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <!-- ★ СТИЛЬ ДЛЯ TreeViewItem (ЧЁРНЫЙ ТРЕУГОЛЬНИК, СКРЫТ У КАНАЛОВ) ★ -->
+        <Style TargetType="TreeViewItem">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeViewItem">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- ★ ЧЁРНЫЙ ТРЕУГОЛЬНИК СЛЕВА ★ -->
+                                <ToggleButton x:Name="Expander" 
+                                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
+                                              ClickMode="Press"
+                                              Width="16" Height="16"
+                                              Background="Transparent" BorderThickness="0">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Path x:Name="Arrow" Fill="Black" Data="M 0 0 L 4 4 L 0 8 Z" 
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Arrow" Property="Data" Value="M 0 0 L 4 4 L 8 0 Z"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
+                                <!-- ★ КОНТЕНТ ★ -->
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" Margin="5,0,0,0"/>
+                            </Grid>
+                            <!-- ★ ДЕТИ ★ -->
+                            <ItemsPresenter x:Name="ItemsHost" Margin="20,0,0,0"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="False">
+                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <!-- ★ СКРЫВАЕМ ТРЕУГОЛЬНИК, ЕСЛИ НЕТ ДЕТЕЙ (КАНАЛЫ) ★ -->
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="Expander" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid Background="{DynamicResource WindowBackground}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -16,8 +71,6 @@
 
         <!-- ПАНЕЛЬ УПРАВЛЕНИЯ -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10">
-
-            <!-- ★ НОВАЯ КРУГЛАЯ КНОПКА ЗАПИСИ (Play/Stop) ★ -->
             <Button x:Name="RecordButton" Width="40" Height="40" Margin="0,0,15,0"
                     Click="RecordButton_Click"
                     Background="Transparent" BorderThickness="0"
@@ -28,15 +81,20 @@
                 </Button.Content>
             </Button>
 
-            <!-- Кнопка ПОИСК -->
             <Button x:Name="ScanButton" Content="Поиск" Width="80" Height="30" Margin="0,0,10,0" 
                     Click="ScanButton_Click" Background="#33adff" Foreground="White"/>
 
-            <!-- Кнопка НАСТРОЙКИ -->
             <Button x:Name="SettingsButton" Content="Настройки" Width="100" Height="30" Margin="0,0,0,0" 
                     Click="SettingsButton_Click"/>
 
-            <!-- ★ ПОЛЗУНОК ПЕРИОДА (внутри той же панели) ★ -->
+            <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+                <ProgressBar x:Name="ScanProgressBar" Width="150" Height="15" 
+                             Minimum="0" Maximum="10" Value="0" 
+                             Foreground="#33adff" Background="#222222"/>
+                <TextBlock x:Name="ScanProgressText" Text="" VerticalAlignment="Center" 
+                           Margin="10,0,0,0" Foreground="{DynamicResource TextForeground}"/>
+            </StackPanel>
+
             <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
                 <TextBlock Text="Период:" VerticalAlignment="Center" Margin="0,0,10,0" 
                            Foreground="{DynamicResource TextForeground}"/>
@@ -47,16 +105,6 @@
                            Margin="10,0,0,0" Width="50" Foreground="{DynamicResource TextForeground}"/>
             </StackPanel>
 
-            <!-- ★ ПРОГРЕСС-БАР ДЛЯ СКАНИРОВАНИЯ ★ -->
-            <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
-                <ProgressBar x:Name="ScanProgressBar" Width="150" Height="15" 
-                 Minimum="0" Maximum="10" Value="0" 
-                 Foreground="#33adff" Background="#222222"/>
-                <TextBlock x:Name="ScanProgressText" Text="" VerticalAlignment="Center" 
-               Margin="10,0,0,0" Foreground="{DynamicResource TextForeground}"/>
-            </StackPanel>
-
-            <!-- Статус -->
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="20,0,0,0" 
                        Foreground="{DynamicResource TextForeground}" Text="Не настроено"/>
         </StackPanel>
@@ -72,7 +120,7 @@
             <Border Grid.Column="0" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,0,1,0" Margin="10">
                 <TreeView x:Name="DevicesTree" Background="Transparent" ItemsSource="{Binding Interfaces}">
                     <TreeView.Resources>
-                        <!-- 1. Шаблон для Интерфейса (RS-485, I2C) -->
+                        <!-- 1. Интерфейс -->
                         <HierarchicalDataTemplate DataType="{x:Type local:InterfaceNode}" ItemsSource="{Binding Devices}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
@@ -80,18 +128,41 @@
                             </StackPanel>
                         </HierarchicalDataTemplate>
 
-                        <!-- 2. Шаблон для Устройства (DeviceNode) -->
-                        <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding Channels}">
+                        <!-- 2. Устройство (привязка к ChannelsView + треугольник справа) -->
+                        <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding ChannelsView}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextForeground}"/>
                                 <TextBlock Text="{Binding Address}" Foreground="Gray" Margin="5,0,0,0"/>
+                                <!-- ★ ТРЕУГОЛЬНИК СПРАВА (ПЕРЕВЁРНУТЫЙ) ★ -->
+                                <ToggleButton IsChecked="{Binding ShowOnlySelected, Mode=TwoWay}" 
+                                              Width="16" Height="16" Margin="5,0,0,0" Background="Transparent" BorderThickness="0"
+                                              ToolTip="Скрыть/показать неотмеченные каналы">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Grid>
+                                                <!-- ★ СТРЕЛКА ВВЕРХ (по умолчанию, все каналы видны) ★ -->
+                                                <Path x:Name="ArrowUp" Fill="Black" Data="M 0 4 L 8 4 L 4 0 Z" 
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <!-- ★ СТРЕЛКА ВНИЗ (когда неотмеченные скрыты) ★ -->
+                                                <Path x:Name="ArrowDown" Fill="Black" Data="M 0 0 L 8 0 L 4 4 Z" 
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="ArrowUp" Property="Visibility" Value="Collapsed"/>
+                                                    <Setter TargetName="ArrowDown" Property="Visibility" Value="Visible"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
                             </StackPanel>
                         </HierarchicalDataTemplate>
 
-                        <!-- 3. Шаблон для Канала (ChannelNode) С КОСМЕТИКОЙ -->
+                        <!-- 3. Канал -->
                         <DataTemplate DataType="{x:Type local:ChannelNode}">
-                            <Grid Margin="0,2" MouseLeftButtonDown="ChannelRow_MouseLeftButtonDown">
+                            <Grid Margin="0,2" Background="Transparent" Focusable="True" MouseLeftButtonDown="ChannelRow_MouseLeftButtonDown">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -101,16 +172,13 @@
                                 <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource TextForeground}"/>
 
-                                <!-- ★ ИСПРАВЛЕННЫЙ TEXTBLOCK С ТРИГГЕРОМ (F3 для float, F0 для int) ★ -->
                                 <TextBlock Grid.Column="2" 
                                            FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0" 
                                            Foreground="{DynamicResource TextForeground}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <!-- По умолчанию (для float) — 3 знака -->
                                             <Setter Property="Text" Value="{Binding Value, StringFormat=\{0:F3\}}"/>
                                             <Style.Triggers>
-                                                <!-- Если IsInt32 = true, показываем без дробной части -->
                                                 <DataTrigger Binding="{Binding IsInt32}" Value="True">
                                                     <Setter Property="Text" Value="{Binding Value, StringFormat=\{0:F0\}}"/>
                                                 </DataTrigger>

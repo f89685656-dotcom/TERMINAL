@@ -126,7 +126,18 @@ namespace TERMINAL.DeviceHub
                     return;
                 }
 
-                // ★ ИСПОЛЬЗУЕМ ПЕРИОД ИЗ ПОЛЗУНКА ★
+                // ★ СБРАСЫВАЕМ ФЛАГ IsValueSet У ВСЕХ КАНАЛОВ (ЧТОБЫ НЕ РИСОВАТЬ 0) ★
+                foreach (var iface in Interfaces)
+                {
+                    foreach (var dev in iface.Devices)
+                    {
+                        foreach (var ch in dev.Channels)
+                        {
+                            ch.IsValueSet = false;
+                        }
+                    }
+                }
+
                 int interval = (int)IntervalSlider.Value;
                 _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, interval);
                 _isRecording = true;
@@ -145,7 +156,38 @@ namespace TERMINAL.DeviceHub
                 LogListView.Items.Add("Запись графика остановлена.");
             }
         }
+        private void CreateSeriesForAllChannels()
+        {
+            _plotModel.Series.Clear();
+            _seriesMap.Clear();
 
+            var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
+            int colorIndex = 0;
+
+            foreach (var iface in Interfaces)
+            {
+                foreach (var dev in iface.Devices)
+                {
+                    foreach (var ch in dev.Channels)
+                    {
+                        ch.PropertyChanged -= Channel_PropertyChanged;
+                        ch.PropertyChanged += Channel_PropertyChanged;
+
+                        var series = new LineSeries
+                        {
+                            Title = $"{dev.Name} - {ch.Name}",
+                            Color = colors[colorIndex % colors.Length],
+                            StrokeThickness = 2,
+                            IsVisible = false // По умолчанию скрыта
+                        };
+                        _plotModel.Series.Add(series);
+                        _seriesMap[ch] = series;
+                        colorIndex++;
+                    }
+                }
+            }
+            _plotModel.InvalidatePlot(true);
+        }
         private void UiQueueTimer_Tick(object sender, EventArgs e)
         {
             // 1. Применяем обновления UI
@@ -176,6 +218,9 @@ namespace TERMINAL.DeviceHub
 
                         if (_seriesMap.TryGetValue(ch, out var series))
                         {
+                            // ★ НЕ ДОБАВЛЯЕМ ТОЧКУ, ЕСЛИ ЗНАЧЕНИЕ ЕЩЕ НЕ ПОЛУЧЕНО (IsValueSet = false) ★
+                            if (!ch.IsValueSet) continue;
+
                             series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(DateTime.Now), ch.Value));
                             if (series.Points.Count > 1000) series.Points.RemoveAt(0);
                             needRedraw = true;
@@ -208,12 +253,27 @@ namespace TERMINAL.DeviceHub
 
         private void InitializePlot()
         {
-            _plotModel = new PlotModel { Title = "Показания датчиков", Background = OxyColors.Transparent, TitleColor = OxyColors.White };
-            _plotModel.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", Title = "Время", TextColor = OxyColors.White, TitleColor = OxyColors.White });
-            _plotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Значение", TextColor = OxyColors.White, TitleColor = OxyColors.White });
+            _plotModel = new PlotModel { Title = "Показания датчиков", Background = OxyColors.Transparent, TitleColor = OxyColors.Black };
+
+            _plotModel.Axes.Add(new DateTimeAxis
+            {
+                Position = AxisPosition.Bottom,
+                StringFormat = "HH:mm:ss",
+                Title = "Время",
+                TextColor = OxyColors.Black,
+                TitleColor = OxyColors.Black
+            });
+
+            _plotModel.Axes.Add(new LinearAxis
+            {
+                Position = AxisPosition.Left,
+                Title = "Значение",
+                TextColor = OxyColors.Black,
+                TitleColor = OxyColors.Black,
+            });
+
             PlotView.Model = _plotModel;
         }
-
         private void Channel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(ChannelNode.IsVisibleOnPlot))
@@ -251,14 +311,15 @@ namespace TERMINAL.DeviceHub
 
             try
             {
-                // ★ ИЗМЕНЯЕМ НАЗВАНИЯ ИНТЕРФЕЙСОВ ★
+                // ★ СОЗДАЕМ ИНТЕРФЕЙСЫ ТОЛЬКО ЕСЛИ ОНИ ВКЛЮЧЕНЫ ★
                 Interfaces.Clear();
-                Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
-                Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
+                if (_isRs485Enabled)
+                    Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
+                if (_isI2CEnabled)
+                    Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
 
                 _plotModel.Series.Clear();
                 _seriesMap.Clear();
-                _plotModel.InvalidatePlot(true);
 
                 var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
 

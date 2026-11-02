@@ -37,7 +37,7 @@ namespace TERMINAL.DeviceHub
 
             foreach (var iface in interfaces)
             {
-                if (!iface.IsSelected) continue;
+                if (!iface.IsSelected) continue; // ★ ПРОВЕРКА ГАЛОЧКИ ★
 
                 if (iface.Name.Contains("RS-485") && isRs485)
                 {
@@ -52,7 +52,6 @@ namespace TERMINAL.DeviceHub
                 }
                 else if (iface.Name.Contains("I2C") && isI2c)
                 {
-                    // ★ ДОБАВЛЯЕМ СКАНИРОВАНИЕ I2C ★
                     scanTasks.Add(Task.Run(async () =>
                     {
                         var devices = await ScanI2CAsync(iface);

@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Data;
 
 namespace TERMINAL.DeviceHub
 {
@@ -12,36 +13,99 @@ namespace TERMINAL.DeviceHub
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    // ★ ИНТЕРФЕЙС (RS-485, I2C) ★
     public class InterfaceNode : ViewModelBase
     {
         private bool _isExpanded = true;
         private bool _isSelected = true;
+
         public string Name { get; set; }
         public ObservableCollection<DeviceNode> Devices { get; set; } = new ObservableCollection<DeviceNode>();
-        public bool IsExpanded { get => _isExpanded; set { _isExpanded = value; OnPropertyChanged(); } }
-        public bool IsSelected { get => _isSelected; set { _isSelected = value; OnPropertyChanged(); } }
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set { _isExpanded = value; OnPropertyChanged(); }
+        }
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set { _isSelected = value; OnPropertyChanged(); }
+        }
     }
 
+    // ★ УСТРОЙСТВО (C002, DBA0, DBA2, I2C) ★
     public class DeviceNode : ViewModelBase
     {
         private bool _isExpanded = true;
         private bool _isSelected = true;
+        private bool _showOnlySelected = false;
+
         public string PortName { get; set; }
         public string Name { get; set; }
         public string Address { get; set; }
 
-        // ОЧЕНЬ ВАЖНО: Именно ObservableCollection
         public ObservableCollection<ChannelNode> Channels { get; set; } = new ObservableCollection<ChannelNode>();
 
-        public bool IsExpanded { get => _isExpanded; set { _isExpanded = value; OnPropertyChanged(); } }
-        public bool IsSelected { get => _isSelected; set { _isSelected = value; OnPropertyChanged(); } }
+        // ★ ФИЛЬТРУЕМОЕ ПРЕДСТАВЛЕНИЕ КАНАЛОВ ★
+        private ICollectionView _channelsView;
+        public ICollectionView ChannelsView
+        {
+            get
+            {
+                if (_channelsView == null)
+                {
+                    _channelsView = CollectionViewSource.GetDefaultView(Channels);
+                    _channelsView.Filter = FilterChannels;
+                }
+                return _channelsView;
+            }
+        }
+
+        private bool FilterChannels(object item)
+        {
+            if (item is ChannelNode channel)
+            {
+                if (ShowOnlySelected)
+                    return channel.IsSelected;
+                return true;
+            }
+            return false;
+        }
+
+        public bool ShowOnlySelected
+        {
+            get => _showOnlySelected;
+            set
+            {
+                _showOnlySelected = value;
+                OnPropertyChanged();
+                ChannelsView.Refresh();
+            }
+        }
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set { _isExpanded = value; OnPropertyChanged(); }
+        }
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set { _isSelected = value; OnPropertyChanged(); }
+        }
     }
 
+    // ★ КАНАЛ (Давление, Температура и т.д.) ★
     public class ChannelNode : ViewModelBase
     {
         private bool _isSelected = true;
         private double _value;
         private string _unit;
+        private bool _isVisibleOnPlot = false;
+        private bool _isValueSet = false; // ★ ФЛАГ: ПОЛУЧЕНО ЛИ ЗНАЧЕНИЕ ★
 
         public string Name { get; set; }
 
@@ -59,9 +123,16 @@ namespace TERMINAL.DeviceHub
                 if (Math.Abs(_value - value) > 0.0001)
                 {
                     _value = value;
+                    _isValueSet = true;
                     OnPropertyChanged();
                 }
             }
+        }
+
+        public bool IsValueSet
+        {
+            get => _isValueSet;
+            set { _isValueSet = value; OnPropertyChanged(); }
         }
 
         public bool IsSelected
@@ -70,8 +141,6 @@ namespace TERMINAL.DeviceHub
             set { _isSelected = value; OnPropertyChanged(); }
         }
 
-        // ★ НОВОЕ СВОЙСТВО: Выбран ли канал для отображения на графике ★
-        private bool _isVisibleOnPlot = false;
         public bool IsVisibleOnPlot
         {
             get => _isVisibleOnPlot;
@@ -92,7 +161,6 @@ namespace TERMINAL.DeviceHub
         public ushort RegisterAddress { get; set; }
         public double Multiplier { get; set; } = 1.0;
 
-        // ★ ДОБАВЛЕНО: Событие для графика ★
         public event Action<ChannelNode, double> ValueUpdated;
     }
 }

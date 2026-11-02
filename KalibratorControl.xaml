@@ -7,6 +7,7 @@
              d:DesignHeight="450" d:DesignWidth="800">
 
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <!-- ★ ПРИНУДИТЕЛЬНО ДЕЛАЕМ ТАБЛИЦЫ СВЕТЛЫМИ И ЧИТАЕМЫМИ ★ -->
         <!-- Мы переопределяем стили ListView, чтобы MahApps не перекрашивал их в белый текст на белом фоне -->
         <Style TargetType="ListView">
