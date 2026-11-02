@@ -23,6 +23,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Reference Include="FT260_I2CDotNet">
+			<HintPath>Libs\FT260_I2CDotNet.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
 		<Content Include="6.ico" />
 		<Content Include="Images\AGK.png">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

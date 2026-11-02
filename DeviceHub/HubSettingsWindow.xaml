@@ -56,9 +56,8 @@
             <GroupBox Header="I2C (FT260)" Margin="0,0,0,15" Foreground="White" BorderBrush="#555555">
                 <StackPanel Margin="5">
                     <CheckBox x:Name="I2CCheckBox" Content="Включить I2C" IsChecked="True" FontWeight="Bold" Margin="0,0,0,10" Foreground="White"/>
-                    <TextBlock Text="Выбор I2C переходников (заглушка):" Margin="20,0,0,5" Foreground="White"/>
-                    <TextBox Text="FT260 [7&amp;5fcd268&amp;0&amp;0000]" IsReadOnly="True" Margin="20,0,0,0" Width="250" HorizontalAlignment="Left" 
-                             Background="#2D2D30" Foreground="White" BorderBrush="#555555"/>
+                    <TextBlock Text="Выбор I2C переходников:" Margin="20,0,0,5" Foreground="White"/>
+                    <ComboBox x:Name="I2CDeviceComboBox" Width="300" Margin="5" HorizontalAlignment="Left"/>
                 </StackPanel>
             </GroupBox>
         </StackPanel>

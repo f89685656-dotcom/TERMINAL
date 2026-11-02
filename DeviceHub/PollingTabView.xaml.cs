@@ -41,7 +41,6 @@ namespace TERMINAL.DeviceHub
 
             InitializePlot();
 
-            // ★ ПОДПИСКИ НА СОБЫТИЯ ★
             _engine.ScanProgressChanged += (port, current, total) =>
             {
                 Dispatcher.Invoke(() =>
@@ -52,15 +51,29 @@ namespace TERMINAL.DeviceHub
                 });
             };
 
+            // ★ ПОДПИСКА НА НАЙДЕННОЕ УСТРОЙСТВО (ДОБАВЛЯЕМ СРАЗУ) ★
             _engine.DeviceFound += (dev) =>
             {
                 Dispatcher.Invoke(() =>
                 {
                     var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
-                    if (rs485Iface != null && !rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                    var i2cIface = Interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
+
+                    if (dev.PortName == "I2C" && i2cIface != null)
                     {
-                        rs485Iface.Devices.Add(dev);
-                        LogListView.Items.Add($"[Scan] Устройство {dev.Address} ({dev.PortName}) добавлено в дерево.");
+                        if (!i2cIface.Devices.Any(d => d.Address == dev.Address))
+                        {
+                            i2cIface.Devices.Add(dev);
+                            LogListView.Items.Add($"[Scan] I2C устройство {dev.Address} добавлено в дерево.");
+                        }
+                    }
+                    else if (rs485Iface != null)
+                    {
+                        if (!rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                        {
+                            rs485Iface.Devices.Add(dev);
+                            LogListView.Items.Add($"[Scan] RS-485 устройство {dev.Address} добавлено в дерево.");
+                        }
                     }
                 });
             };
@@ -159,7 +172,8 @@ namespace TERMINAL.DeviceHub
                 {
                     foreach (var ch in dev.Channels)
                     {
-                        // ★ ДОБАВЛЯЕМ ТОЧКИ ВО ВСЕ СЕРИИ (ИСТОРИЯ КОПИТСЯ) ★
+                        if (!ch.IsSelected) continue;
+
                         if (_seriesMap.TryGetValue(ch, out var series))
                         {
                             series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(DateTime.Now), ch.Value));
@@ -188,7 +202,8 @@ namespace TERMINAL.DeviceHub
                 ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))
                 : "Выкл";
 
-            StatusText.Text = $"RS-485: {rs485Str} | I2C: {(_isI2CEnabled ? "Вкл" : "Выкл")}";
+            // ★ ОБНОВЛЯЕМ СТАТУС С НОВЫМИ НАЗВАНИЯМИ ★
+            StatusText.Text = $"RS-485 (Ц1): {rs485Str} | I2C (Ц4): {(_isI2CEnabled ? "Вкл" : "Выкл")}";
         }
 
         private void InitializePlot()
@@ -236,20 +251,44 @@ namespace TERMINAL.DeviceHub
 
             try
             {
+                // ★ ИЗМЕНЯЕМ НАЗВАНИЯ ИНТЕРФЕЙСОВ ★
                 Interfaces.Clear();
-                Interfaces.Add(new InterfaceNode { Name = "RS-485 (Modbus)" });
-                Interfaces.Add(new InterfaceNode { Name = "I2C (FT260)" });
+                Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
+                Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
 
                 _plotModel.Series.Clear();
                 _seriesMap.Clear();
                 _plotModel.InvalidatePlot(true);
 
-                // ★ Запускаем сканирование (устройства добавляются сами через DeviceFound) ★
                 var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
 
-                LogListView.Items.Add($"[Scan] Сканирование завершено. Всего найдено: {foundDevices.Count}");
+                LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
 
-                // Создаем серии для всех найденных каналов
+                // ★ РАСПРЕДЕЛЯЕМ ПО ИНТЕРФЕЙСАМ ★
+                var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
+                var i2cIface = Interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
+
+                foreach (var dev in foundDevices)
+                {
+                    if (dev.PortName == "I2C" && i2cIface != null)
+                    {
+                        if (!i2cIface.Devices.Any(d => d.Address == dev.Address))
+                        {
+                            i2cIface.Devices.Add(dev);
+                            LogListView.Items.Add($"[Scan] I2C устройство {dev.Name} добавлено в дерево.");
+                        }
+                    }
+                    else if (rs485Iface != null)
+                    {
+                        if (!rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                        {
+                            rs485Iface.Devices.Add(dev);
+                            LogListView.Items.Add($"[Scan] RS-485 устройство {dev.Name} добавлено в дерево.");
+                        }
+                    }
+                }
+
+                // ★ СОЗДАЕМ СЕРИИ ДЛЯ ВСЕХ КАНАЛОВ ★
                 var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
                 int colorIndex = 0;
                 int createdCount = 0;
@@ -280,6 +319,7 @@ namespace TERMINAL.DeviceHub
 
                 LogListView.Items.Add($"[Scan] Создано серий для графика: {createdCount}");
                 _plotModel.InvalidatePlot(true);
+                LogListView.Items.Add("Сканирование завершено.");
             }
             catch (Exception ex)
             {
