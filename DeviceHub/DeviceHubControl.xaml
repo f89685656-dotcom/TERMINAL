@@ -10,7 +10,7 @@
         <TabControl Margin="5">
             <!-- Вкладка 1: Опрос -->
             <TabItem Header="Опрос">
-                <local:PollingTabView />
+                <local:PollingTabView x:Name="PollingTabViewControl" />
             </TabItem>
 
             <!-- Вкладка 2: Съём данных -->

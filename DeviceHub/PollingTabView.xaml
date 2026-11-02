@@ -44,8 +44,8 @@
                                 <!-- ★ КОНТЕНТ ★ -->
                                 <ContentPresenter Grid.Column="1" ContentSource="Header" Margin="5,0,0,0"/>
                             </Grid>
-                            <!-- ★ ДЕТИ ★ -->
-                            <ItemsPresenter x:Name="ItemsHost" Margin="20,0,0,0"/>
+                            <!-- ★ ДЕТИ (С ОТСТУПОМ 40) ★ -->
+                            <ItemsPresenter x:Name="ItemsHost" Margin="40,0,0,0"/>
                         </StackPanel>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsExpanded" Value="False">
@@ -92,12 +92,14 @@
 
             <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
                 <TextBlock Text="Период:" VerticalAlignment="Center" Margin="0,0,10,0" 
-                           Foreground="{DynamicResource TextForeground}"/>
-                <Slider x:Name="IntervalSlider" Minimum="100" Maximum="5000" Value="500" 
-                        Width="150" TickFrequency="100" IsSnapToTickEnabled="True"
-                        ValueChanged="IntervalSlider_ValueChanged"/>
-                <TextBlock x:Name="IntervalText" Text="0.50 с" VerticalAlignment="Center" 
-                           Margin="10,0,0,0" Width="50" Foreground="{DynamicResource TextForeground}"/>
+               Foreground="{DynamicResource TextForeground}"/>
+                <Slider x:Name="IntervalSlider" Minimum="0.1" Maximum="30" Value="1" 
+            Width="150" TickFrequency="0.1" IsSnapToTickEnabled="True"
+            ValueChanged="IntervalSlider_ValueChanged"/>
+                <TextBox x:Name="IntervalTextBox" Text="0.5" Width="50" Margin="10,0,0,0"
+             VerticalAlignment="Center" TextChanged="IntervalTextBox_TextChanged"/>
+                <TextBlock Text="с" VerticalAlignment="Center" Margin="5,0,0,0"
+               Foreground="{DynamicResource TextForeground}"/>
             </StackPanel>
 
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="20,0,0,0" 
@@ -115,6 +117,7 @@
             <Border Grid.Column="0" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,0,1,0" Margin="10">
                 <TreeView x:Name="DevicesTree" Background="Transparent" ItemsSource="{Binding Interfaces}">
                     <TreeView.Resources>
+                        <!-- 1. Интерфейс -->
                         <HierarchicalDataTemplate DataType="{x:Type local:InterfaceNode}" ItemsSource="{Binding Devices}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
@@ -122,19 +125,23 @@
                             </StackPanel>
                         </HierarchicalDataTemplate>
 
-                        <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding Channels}">
+                        <!-- 2. Устройство (привязка к ChannelsView + треугольник справа) -->
+                        <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding ChannelsView}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextForeground}"/>
                                 <TextBlock Text="{Binding Address}" Foreground="Gray" Margin="5,0,0,0"/>
+                                <!-- ★ ТРЕУГОЛЬНИК СПРАВА (ПЕРЕВЁРНУТЫЙ) ★ -->
                                 <ToggleButton IsChecked="{Binding ShowOnlySelected, Mode=TwoWay}" 
                                               Width="16" Height="16" Margin="5,0,0,0" Background="Transparent" BorderThickness="0"
                                               ToolTip="Скрыть/показать неотмеченные каналы">
                                     <ToggleButton.Template>
                                         <ControlTemplate TargetType="ToggleButton">
                                             <Grid>
+                                                <!-- ★ СТРЕЛКА ВВЕРХ (по умолчанию, все каналы видны) ★ -->
                                                 <Path x:Name="ArrowUp" Fill="Black" Data="M 0 4 L 8 4 L 4 0 Z" 
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <!-- ★ СТРЕЛКА ВНИЗ (когда неотмеченные скрыты) ★ -->
                                                 <Path x:Name="ArrowDown" Fill="Black" Data="M 0 0 L 8 0 L 4 4 Z" 
                                                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                                             </Grid>
@@ -150,6 +157,7 @@
                             </StackPanel>
                         </HierarchicalDataTemplate>
 
+                        <!-- 3. Канал -->
                         <DataTemplate DataType="{x:Type local:ChannelNode}">
                             <Grid Margin="0,2" Background="Transparent" Focusable="True" MouseLeftButtonDown="ChannelRow_MouseLeftButtonDown">
                                 <Grid.ColumnDefinitions>

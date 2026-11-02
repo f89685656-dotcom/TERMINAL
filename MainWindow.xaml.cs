@@ -5,12 +5,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Net.Http;
 using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -24,6 +24,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using TERMINAL.DeviceHub;
 using TERMINAL.Models;
 using TERMINAL.Notifications;
 
@@ -116,6 +117,9 @@ namespace TERMINAL
         private const int PlatinaVid = 0xFFFF;
         private const int PlatinaPid = 0x0009;
 
+
+        private PollingTabView _pollingView;
+
         private double _platinaLastValue = double.NaN;
         private DateTime _platinaLastSuccess = DateTime.MinValue;
         private int _platinaFailCount = 0;
@@ -136,6 +140,8 @@ namespace TERMINAL
         private const double SktbAllDeadSeconds = 5.0;
 
         private int BroadcastPort = 9990;
+
+        private double _pollingInterval = 1.0;
 
         private DateTime _stabilizationTimerStart = DateTime.MinValue;
         private bool _stabilizationTimerActive = false;

@@ -20,24 +20,28 @@ namespace TERMINAL.DeviceHub
         public ConcurrentQueue<Action> UiUpdates { get; } = new ConcurrentQueue<Action>();
         public ConcurrentQueue<string> LogQueue { get; } = new ConcurrentQueue<string>();
 
-        public event Action<string, int, int> ScanProgressChanged; // portName, current, total
-        public event Action<DeviceNode> DeviceFound; // устройство найдено
+        public event Action<string, int, int> ScanProgressChanged;
+        public event Action<DeviceNode> DeviceFound;
 
-        // ★ ДОЛГОЖИВУЩИЙ ПОРТ ★
         private SerialPort _port;
         private IModbusMaster _master;
         private bool _isPortOpen = false;
 
         // --- МЕТОД СКАНИРОВАНИЯ ---
 
-        public async Task<List<DeviceNode>> ScanAllAsync(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c)
+        public async Task<List<DeviceNode>> ScanAllAsync(
+            ObservableCollection<InterfaceNode> interfaces,
+            bool isRs485,
+            List<PortSetting> rs485Settings,
+            bool isI2c,
+            CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
             var scanTasks = new List<Task>();
 
             foreach (var iface in interfaces)
             {
-                if (!iface.IsSelected) continue; // ★ ПРОВЕРКА ГАЛОЧКИ ★
+                if (!iface.IsSelected) continue;
 
                 if (iface.Name.Contains("RS-485") && isRs485)
                 {
@@ -45,25 +49,26 @@ namespace TERMINAL.DeviceHub
                     {
                         scanTasks.Add(Task.Run(async () =>
                         {
-                            var devices = await ScanModbusAsync(iface, setting.PortName, setting.BaudRate);
+                            var devices = await ScanModbusAsync(iface, setting.PortName, setting.BaudRate, token);
                             lock (foundDevices) { foundDevices.AddRange(devices); }
-                        }));
+                        }, token));
                     }
                 }
                 else if (iface.Name.Contains("I2C") && isI2c)
                 {
                     scanTasks.Add(Task.Run(async () =>
                     {
-                        var devices = await ScanI2CAsync(iface);
+                        var devices = await ScanI2CAsync(iface, token);
                         lock (foundDevices) { foundDevices.AddRange(devices); }
-                    }));
+                    }, token));
                 }
             }
 
             await Task.WhenAll(scanTasks);
             return foundDevices;
         }
-        private async Task<List<DeviceNode>> ScanModbusAsync(InterfaceNode iface, string portName, int baudRate)
+
+        private async Task<List<DeviceNode>> ScanModbusAsync(InterfaceNode iface, string portName, int baudRate, CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
             SerialPort port = null;
@@ -73,17 +78,19 @@ namespace TERMINAL.DeviceHub
                 LogQueue.Enqueue($"[Scan] {portName}: Попытка открыть на {baudRate} бод...");
 
                 port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                port.ReadTimeout = 200;
+                port.ReadTimeout = 100;
                 port.Open();
                 var factory = new ModbusFactory();
                 var master = factory.CreateRtuMaster(port);
-                master.Transport.ReadTimeout = 200;
+                master.Transport.ReadTimeout = 100;
 
                 LogQueue.Enqueue($"[Scan] {portName}: Порт открыт. Начинаем перебор адресов...");
 
                 int maxAddress = 10;
                 for (byte address = 1; address <= maxAddress; address++)
                 {
+                    if (token.IsCancellationRequested) break;
+
                     ScanProgressChanged?.Invoke("RS-485", address, maxAddress);
 
                     try
@@ -97,7 +104,6 @@ namespace TERMINAL.DeviceHub
                             PortName = portName
                         };
 
-                        // ★ ОПРЕДЕЛЯЕМ ТИП ПО ОТВЕТУ РЕГИСТРОВ ★
                         bool isDBA = false;
                         bool isC002 = false;
 
@@ -126,14 +132,12 @@ namespace TERMINAL.DeviceHub
                         {
                             if (address == 1)
                             {
-                                // ★ DBA2: [COM4|DBA2] ★
                                 newDev.Name = $"[{portName}|DBA2]";
                                 newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
                                 newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x0006, Is32Bit = true });
                             }
                             else if (address == 2)
                             {
-                                // ★ DBA0: [COM4|DBA0] ★
                                 newDev.Name = $"[{portName}|DBA0]";
                                 newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
                                 newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
@@ -148,7 +152,6 @@ namespace TERMINAL.DeviceHub
                         }
                         else if (isC002)
                         {
-                            // ★ C002: [COM9|C002] ★
                             newDev.Name = $"[{portName}|C002]";
                             newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
                             newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
@@ -163,7 +166,7 @@ namespace TERMINAL.DeviceHub
                         foundDevices.Add(newDev);
                         DeviceFound?.Invoke(newDev);
                     }
-                    catch { /* Таймаут */ }
+                    catch { }
                 }
 
                 LogQueue.Enqueue($"[Scan] {portName}: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
@@ -184,7 +187,72 @@ namespace TERMINAL.DeviceHub
 
             return foundDevices;
         }
-        // --- МЕТОД ОПРОСА ---
+
+        private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface, CancellationToken token)
+        {
+            var foundDevices = new List<DeviceNode>();
+            FT260_I2CDotNet.FT260 i2cMaster = null;
+
+            try
+            {
+                LogQueue.Enqueue("[Scan] I2C: Поиск устройств...");
+
+                i2cMaster = new FT260_I2CDotNet.FT260();
+                if (!i2cMaster.TryOpen())
+                {
+                    LogQueue.Enqueue("[Scan] I2C: Не удалось открыть FT260.");
+                    return foundDevices;
+                }
+
+                int maxAddress = 0x77;
+                int startAddress = 0x08;
+
+                for (byte address = 0x08; address <= 0x77; address++)
+                {
+                    if (token.IsCancellationRequested) break;
+
+                    ScanProgressChanged?.Invoke("I2C", address - startAddress + 1, maxAddress - startAddress + 1);
+
+                    try
+                    {
+                        if (!i2cMaster.I2C_Detect(address)) continue;
+
+                        LogQueue.Enqueue($"[Scan] I2C: ★ НАЙДЕНО ★ по адресу 0x{address:X2} (dec {address})");
+
+                        var newDev = new DeviceNode
+                        {
+                            Name = $"[I2C|0x{address:X2}]",
+                            Address = $"0x{address:X2}",
+                            PortName = "I2C"
+                        };
+
+                        newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
+                        newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0004, Is32Bit = true });
+                        newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
+                        newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000C, Is32Bit = true });
+                        newDev.Channels.Add(new ChannelNode { Name = "Температура процессора", Unit = "°C", RegisterAddress = 0x0026, Is32Bit = true });
+                        newDev.Channels.Add(new ChannelNode { Name = "Напряжение питания", Unit = "В", RegisterAddress = 0x0027, Is32Bit = true });
+
+                        foundDevices.Add(newDev);
+                        DeviceFound?.Invoke(newDev);
+                    }
+                    catch { }
+                }
+
+                LogQueue.Enqueue($"[Scan] I2C: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
+            }
+            catch (Exception ex)
+            {
+                LogQueue.Enqueue($"[Scan] I2C: Ошибка: {ex.Message}");
+            }
+            finally
+            {
+                // ★ ВСЕГДА ЗАКРЫВАЕМ FT260 ★
+                i2cMaster?.Close();
+            }
+
+            return foundDevices;
+        }        // --- МЕТОД ОПРОСА ---
 
         public void StartPolling(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c, int intervalMs = 500)
         {
@@ -210,7 +278,6 @@ namespace TERMINAL.DeviceHub
                 }
             }
 
-            // ★ ЗАПУСК ОПРОСА I2C ★
             if (isI2c)
             {
                 var i2cIface = interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
@@ -224,6 +291,7 @@ namespace TERMINAL.DeviceHub
                 }
             }
         }
+
         private async Task PollModbusLoop(string portName, int baudRate, List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
             SerialPort port = null;
@@ -238,7 +306,7 @@ namespace TERMINAL.DeviceHub
                 master = factory.CreateRtuMaster(port);
                 master.Transport.ReadTimeout = 100;
 
-                LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут 250 мс, период {intervalMs} мс)...");
+                LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут 100 мс, период {intervalMs} мс)...");
 
                 while (!token.IsCancellationRequested)
                 {
@@ -260,15 +328,13 @@ namespace TERMINAL.DeviceHub
 
                                     if (ch.IsInt32)
                                     {
-                                        // Фикс-точка (только C002) — Word Swap
                                         int raw = (regs[1] << 16) | regs[0];
                                         double val = Math.Round((double)raw);
-                                        ch.LastValue = val;
-                                        UiUpdates.Enqueue(() => ch.Value = val);
+                                        ch.LastValue = val; // ★ Только LastValue ★
+                                                            // UiUpdates.Enqueue(() => ch.Value = val); // ★ УБРАЛИ ★
                                     }
                                     else
                                     {
-                                        // ★ ЕДИНЫЙ ПОРЯДОК СЛОВ (WORD SWAP) ДЛЯ ВСЕХ ★
                                         byte[] bytes = new byte[4];
                                         bytes[0] = (byte)(regs[0] & 0xFF);
                                         bytes[1] = (byte)(regs[0] >> 8);
@@ -276,8 +342,8 @@ namespace TERMINAL.DeviceHub
                                         bytes[3] = (byte)(regs[1] >> 8);
 
                                         float val = BitConverter.ToSingle(bytes, 0);
-                                        ch.LastValue = val;
-                                        UiUpdates.Enqueue(() => ch.Value = val);
+                                        ch.LastValue = val; // ★ Только LastValue ★
+                                                            // UiUpdates.Enqueue(() => ch.Value = val); // ★ УБРАЛИ ★
                                     }
                                 }
                                 catch (Exception ex)
@@ -314,103 +380,15 @@ namespace TERMINAL.DeviceHub
                 LogQueue.Enqueue($"[Poll] {portName}: Опрос остановлен.");
             }
         }
-        public void Stop()
-        {
-            if (_cts != null)
-            {
-                _cts.Cancel();
-                try { Task.WaitAll(_pollingTasks.ToArray(), 3000); } catch { }
-                _cts.Dispose();
-                _cts = null;
-            }
-            _pollingTasks.Clear();
-            Thread.Sleep(200);
-        }
-
-        // ★ МЕТОД ЗАКРЫТИЯ ПОРТА (ВЫЗЫВАТЬ ПРИ ВЫХОДЕ) ★
-        public void ClosePort()
-        {
-            if (_port != null)
-            {
-                _master?.Dispose();
-                if (_port.IsOpen)
-                {
-                    try { _port.DiscardInBuffer(); _port.DiscardOutBuffer(); } catch { }
-                    _port.Close();
-                }
-                _port.Dispose();
-                _port = null;
-                _isPortOpen = false;
-            }
-        }
-
-        // В PollingEngine.cs
-
-        // ★ ДЛЯ I2C (FT260) ★
-        private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface)
-        {
-            var foundDevices = new List<DeviceNode>();
-            try
-            {
-                LogQueue.Enqueue("[Scan] I2C: Поиск устройств...");
-
-                var i2cMaster = new FT260_I2CDotNet.FT260();
-                if (!i2cMaster.TryOpen())
-                {
-                    LogQueue.Enqueue("[Scan] I2C: Не удалось открыть FT260.");
-                    return foundDevices;
-                }
-
-                int maxAddress = 0x77;
-                int startAddress = 0x08;
-
-                for (byte address = 0x08; address <= 0x77; address++)
-                {
-                    ScanProgressChanged?.Invoke("I2C", address - startAddress + 1, maxAddress - startAddress + 1);
-
-                    try
-                    {
-                        if (!i2cMaster.I2C_Detect(address)) continue;
-
-                        LogQueue.Enqueue($"[Scan] I2C: ★ НАЙДЕНО ★ по адресу 0x{address:X2} (dec {address})");
-
-                        var newDev = new DeviceNode
-                        {
-                            Name = $"[I2C|0x{address:X2}]",
-                            Address = $"0x{address:X2}",
-                            PortName = "I2C"
-                        };
-
-                        // ★ ДОБАВЛЯЕМ КАНАЛЫ (ПДС Ц4) ★
-                        newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0004, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000C, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Температура процессора", Unit = "°C", RegisterAddress = 0x0026, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Напряжение питания", Unit = "В", RegisterAddress = 0x0027, Is32Bit = true });
-
-                        foundDevices.Add(newDev);
-                        DeviceFound?.Invoke(newDev);
-                    }
-                    catch { }
-                }
-
-                i2cMaster.Close();
-                LogQueue.Enqueue($"[Scan] I2C: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
-            }
-            catch (Exception ex)
-            {
-                LogQueue.Enqueue($"[Scan] I2C: Ошибка: {ex.Message}");
-            }
-            return foundDevices;
-        }
         private async Task PollI2CLoop(List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
+            FT260_I2CDotNet.FT260 i2cMaster = null;
+
             try
             {
                 LogQueue.Enqueue("[Poll] I2C: Опрос запущен...");
 
-                var i2cMaster = new FT260_I2CDotNet.FT260();
+                i2cMaster = new FT260_I2CDotNet.FT260();
                 if (!i2cMaster.TryOpen())
                 {
                     LogQueue.Enqueue("[Poll] I2C: Не удалось открыть FT260.");
@@ -434,11 +412,9 @@ namespace TERMINAL.DeviceHub
 
                                 try
                                 {
-                                    // ★ ПЫТАЕМСЯ ПРОЧИТАТЬ ★
                                     i2cMaster.Write(address, new byte[] { (byte)(ch.RegisterAddress & 0xFF) }, Start: true, Stop: false);
                                     i2cMaster.Read(address, out byte[] data, 4, RepStart: true, Stop: true);
 
-                                    // Сборка float (Word Swap)
                                     byte[] bytes = new byte[4];
                                     bytes[0] = data[0];
                                     bytes[1] = data[1];
@@ -446,25 +422,22 @@ namespace TERMINAL.DeviceHub
                                     bytes[3] = data[3];
                                     float val = BitConverter.ToSingle(bytes, 0);
 
-                                    ch.LastValue = val;
-                                    UiUpdates.Enqueue(() => ch.Value = val);
+                                    ch.LastValue = val; // ★ Только LastValue ★
+                                                        // UiUpdates.Enqueue(() => ch.Value = val); // ★ УБРАЛИ ★
                                 }
                                 catch
                                 {
-                                    // ★ ЕСЛИ ОШИБКА — ОСТАВЛЯЕМ 0 (или предыдущее значение) ★
-                                    // Ничего не делаем, значение останется 0.0
+                                    // Игнорируем ошибки чтения
                                 }
                             }
                         }
-                        catch (Exception ex)
+                        catch
                         {
-                            // Игнорируем ошибки устройства (не забиваем лог)
+                            // Игнорируем ошибки устройства
                         }
                     }
                     await Task.Delay(intervalMs, token);
                 }
-
-                i2cMaster.Close();
             }
             catch (Exception ex)
             {
@@ -472,7 +445,36 @@ namespace TERMINAL.DeviceHub
             }
             finally
             {
+                // ★ ВСЕГДА ЗАКРЫВАЕМ FT260 ★
+                i2cMaster?.Close();
                 LogQueue.Enqueue("[Poll] I2C: Опрос остановлен.");
+            }
+        }
+        public void Stop()
+        {
+            if (_cts != null)
+            {
+                _cts.Cancel();
+                _cts.Dispose();
+                _cts = null;
+            }
+            _pollingTasks.Clear();
+            // ★ УБРАЛИ Task.WaitAll и Thread.Sleep ★
+        }
+
+        public void ClosePort()
+        {
+            if (_port != null)
+            {
+                _master?.Dispose();
+                if (_port.IsOpen)
+                {
+                    try { _port.DiscardInBuffer(); _port.DiscardOutBuffer(); } catch { }
+                    _port.Close();
+                }
+                _port.Dispose();
+                _port = null;
+                _isPortOpen = false;
             }
         }
     }

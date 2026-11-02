@@ -22,6 +22,7 @@ namespace TERMINAL.DeviceHub
         private DateTime _lastPlotUpdate = DateTime.MinValue;
         public ObservableCollection<InterfaceNode> Interfaces { get; set; } = new ObservableCollection<InterfaceNode>();
         private bool _isScanning = false;
+        private CancellationTokenSource _scanCts;
         private bool _isRs485Enabled = true;
         private List<PortSetting> _rs485Ports = new List<PortSetting>
         {
@@ -152,6 +153,9 @@ namespace TERMINAL.DeviceHub
                 // ★ ПРЕРЫВАЕМ ПОИСК, ЕСЛИ ОН ИДЁТ ★
                 if (_isScanning)
                 {
+                    _scanCts?.Cancel();
+                    _scanCts?.Dispose();
+                    _scanCts = null;
                     _isScanning = false;
                     ScanButtonIcon.Text = "\uE721";
                     ScanButton.ToolTip = "Поиск";
@@ -170,20 +174,21 @@ namespace TERMINAL.DeviceHub
                     }
                 }
 
-                int interval = (int)IntervalSlider.Value;
-                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, interval);
+                // ★ ПЕРЕВОДИМ СЕКУНДЫ В МИЛЛИСЕКУНДЫ ★
+                int intervalMs = (int)(IntervalSlider.Value * 1000);
+                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, intervalMs);
                 _isRecording = true;
 
-                RecordIcon.Text = "\uE71A"; // Stop
+                RecordIcon.Text = "\uE71A";
                 RecordIcon.Foreground = new SolidColorBrush(Colors.Red);
-                LogListView.Items.Add($"Запись графика запущена. Период: {interval} мс");
+                LogListView.Items.Add($"Запись графика запущена. Период: {intervalMs} мс");
             }
             else
             {
                 _engine.Stop();
                 _isRecording = false;
 
-                RecordIcon.Text = "\uE768"; // Play
+                RecordIcon.Text = "\uE768";
                 RecordIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50"));
                 LogListView.Items.Add("Запись графика остановлена.");
             }
@@ -221,6 +226,7 @@ namespace TERMINAL.DeviceHub
             _plotModel.InvalidatePlot(true);
         }
 
+
         private void UiQueueTimer_Tick(object sender, EventArgs e)
         {
             // 1. Применяем обновления UI
@@ -237,11 +243,11 @@ namespace TERMINAL.DeviceHub
                     LogListView.ScrollIntoView(LogListView.Items[LogListView.Items.Count - 1]);
             }
 
-            // 3. График (не чаще, чем раз в interval мс)
+            // 3. График (раз в intervalMs)
             if (!_isRecording) return;
 
-            int interval = (int)IntervalSlider.Value;
-            if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < interval)
+            int intervalMs = (int)(IntervalSlider.Value * 1000);
+            if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < intervalMs)
                 return;
 
             _lastPlotUpdate = DateTime.Now;
@@ -254,6 +260,9 @@ namespace TERMINAL.DeviceHub
                     foreach (var ch in dev.Channels)
                     {
                         if (!ch.IsSelected) continue;
+
+                        // ★ ОБНОВЛЯЕМ ch.Value ИЗ ch.LastValue ★
+                        ch.Value = ch.LastValue;
 
                         if (_seriesMap.TryGetValue(ch, out var series))
                         {
@@ -274,8 +283,21 @@ namespace TERMINAL.DeviceHub
         }
         private void IntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (IntervalText != null)
-                IntervalText.Text = $"{e.NewValue / 1000.0:F2} с";
+            if (IntervalTextBox != null)
+            {
+                IntervalTextBox.Text = e.NewValue.ToString("F2"); // ★ Обновляем TextBox ★
+            }
+        }
+
+        private void IntervalTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (double.TryParse(IntervalTextBox.Text, out double value))
+            {
+                if (value >= IntervalSlider.Minimum && value <= IntervalSlider.Maximum)
+                {
+                    IntervalSlider.Value = value; // ★ Обновляем Slider ★
+                }
+            }
         }
 
         private void UpdateStatusText()
@@ -366,8 +388,22 @@ namespace TERMINAL.DeviceHub
 
         private async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
+            // ★ ЕСЛИ ИДЁТ ЗАПИСЬ — ОСТАНАВЛИВАЕМ ОПРОС ★
+            if (_isRecording)
+            {
+                _engine.Stop();
+                _isRecording = false;
+                RecordIcon.Text = "\uE768";
+                RecordIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50"));
+                LogListView.Items.Add("Опрос остановлен (запущен поиск).");
+            }
+
             if (_isScanning)
             {
+                _engine.Stop(); // на всякий случай
+                _scanCts?.Cancel();
+                _scanCts?.Dispose();
+                _scanCts = null;
                 _isScanning = false;
                 ScanButtonIcon.Text = "\uE721";
                 ScanButton.ToolTip = "Поиск";
@@ -376,6 +412,7 @@ namespace TERMINAL.DeviceHub
             }
 
             _isScanning = true;
+            _scanCts = new CancellationTokenSource();
             ScanButtonIcon.Text = "\uE711";
             ScanButton.ToolTip = "Отмена";
             LogListView.Items.Add("Запуск параллельного сканирования...");
@@ -401,7 +438,8 @@ namespace TERMINAL.DeviceHub
                 _seriesMap.Clear();
                 _plotModel.InvalidatePlot(true);
 
-                var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
+                var foundDevices = await _engine.ScanAllAsync(
+                    Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, _scanCts.Token);
 
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
 
@@ -460,6 +498,10 @@ namespace TERMINAL.DeviceHub
                 _plotModel.InvalidatePlot(true);
                 LogListView.Items.Add("Сканирование завершено.");
             }
+            catch (OperationCanceledException)
+            {
+                LogListView.Items.Add("Поиск отменён.");
+            }
             catch (Exception ex)
             {
                 LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}");
@@ -467,6 +509,8 @@ namespace TERMINAL.DeviceHub
             finally
             {
                 _isScanning = false;
+                _scanCts?.Dispose();
+                _scanCts = null;
                 ScanButtonIcon.Text = "\uE721";
                 ScanButton.ToolTip = "Поиск";
 
@@ -510,6 +554,20 @@ namespace TERMINAL.DeviceHub
                 Clipboard.SetText(sb.ToString());
             }
             catch { }
+        }
+
+        public void SetPollingInterval(double seconds)
+        {
+            if (seconds >= IntervalSlider.Minimum && seconds <= IntervalSlider.Maximum)
+            {
+                IntervalSlider.Value = seconds;
+                IntervalTextBox.Text = seconds.ToString("F2");
+            }
+        }
+
+        public double GetPollingInterval()
+        {
+            return IntervalSlider.Value;
         }
     }
 }

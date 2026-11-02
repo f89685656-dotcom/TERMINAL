@@ -31,7 +31,18 @@ namespace TERMINAL.DeviceHub
         public bool IsSelected
         {
             get => _isSelected;
-            set { _isSelected = value; OnPropertyChanged(); }
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged();
+
+                    // ★ КАСКАДНОЕ ОБНОВЛЕНИЕ УСТРОЙСТВ ★
+                    foreach (var dev in Devices)
+                        dev.IsSelected = value;
+                }
+            }
         }
     }
 
@@ -48,7 +59,37 @@ namespace TERMINAL.DeviceHub
 
         public ObservableCollection<ChannelNode> Channels { get; set; } = new ObservableCollection<ChannelNode>();
 
-        // ★ ФИЛЬТРУЕМОЕ ПРЕДСТАВЛЕНИЕ КАНАЛОВ ★
+        public DeviceNode()
+        {
+            // ★ ПОДПИСКА НА ИЗМЕНЕНИЯ КАНАЛОВ ★
+            Channels.CollectionChanged += (s, e) =>
+            {
+                if (e.NewItems != null)
+                {
+                    foreach (ChannelNode ch in e.NewItems)
+                    {
+                        ch.PropertyChanged += Channel_PropertyChanged;
+                    }
+                }
+                if (e.OldItems != null)
+                {
+                    foreach (ChannelNode ch in e.OldItems)
+                    {
+                        ch.PropertyChanged -= Channel_PropertyChanged;
+                    }
+                }
+            };
+        }
+
+        private void Channel_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ChannelNode.IsSelected))
+            {
+                // ★ ОБНОВЛЯЕМ ФИЛЬТР, ЧТОБЫ СКРЫТЬ/ПОКАЗАТЬ КАНАЛ ★
+                ChannelsView.Refresh();
+            }
+        }
+
         private ICollectionView _channelsView;
         public ICollectionView ChannelsView
         {
@@ -94,7 +135,18 @@ namespace TERMINAL.DeviceHub
         public bool IsSelected
         {
             get => _isSelected;
-            set { _isSelected = value; OnPropertyChanged(); }
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged();
+
+                    // ★ КАСКАДНОЕ ОБНОВЛЕНИЕ КАНАЛОВ ★
+                    foreach (var ch in Channels)
+                        ch.IsSelected = value;
+                }
+            }
         }
     }
 
@@ -105,7 +157,7 @@ namespace TERMINAL.DeviceHub
         private double _value;
         private string _unit;
         private bool _isVisibleOnPlot = false;
-        private bool _isValueSet = false; // ★ ФЛАГ: ПОЛУЧЕНО ЛИ ЗНАЧЕНИЕ ★
+        private bool _isValueSet = false;
 
         public string Name { get; set; }
 
