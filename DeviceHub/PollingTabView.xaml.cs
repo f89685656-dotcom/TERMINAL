@@ -21,7 +21,7 @@ namespace TERMINAL.DeviceHub
         private Dictionary<ChannelNode, LineSeries> _seriesMap = new Dictionary<ChannelNode, LineSeries>();
 
         public ObservableCollection<InterfaceNode> Interfaces { get; set; } = new ObservableCollection<InterfaceNode>();
-
+        private bool _isScanning = false;
         private bool _isRs485Enabled = true;
         private List<PortSetting> _rs485Ports = new List<PortSetting>
         {
@@ -126,7 +126,16 @@ namespace TERMINAL.DeviceHub
                     return;
                 }
 
-                // ★ СБРАСЫВАЕМ ФЛАГ IsValueSet У ВСЕХ КАНАЛОВ (ЧТОБЫ НЕ РИСОВАТЬ 0) ★
+                // ★ ПРЕРЫВАЕМ ПОИСК, ЕСЛИ ОН ИДЁТ ★
+                if (_isScanning)
+                {
+                    _isScanning = false;
+                    ScanButtonIcon.Text = "\uE721"; // Лупа
+                    ScanButton.ToolTip = "Поиск";
+                    LogListView.Items.Add("Поиск прерван (запущен опрос).");
+                }
+
+                // ★ СБРАСЫВАЕМ ФЛАГ IsValueSet У ВСЕХ КАНАЛОВ ★
                 foreach (var iface in Interfaces)
                 {
                     foreach (var dev in iface.Devices)
@@ -253,7 +262,7 @@ namespace TERMINAL.DeviceHub
 
         private void InitializePlot()
         {
-            _plotModel = new PlotModel { Title = "Показания датчиков", Background = OxyColors.Transparent, TitleColor = OxyColors.Black };
+            _plotModel = new PlotModel { Title = "Показания датчиков", Background = OxyColors.White, TitleColor = OxyColors.Black };
 
             _plotModel.Axes.Add(new DateTimeAxis
             {
@@ -261,7 +270,11 @@ namespace TERMINAL.DeviceHub
                 StringFormat = "HH:mm:ss",
                 Title = "Время",
                 TextColor = OxyColors.Black,
-                TitleColor = OxyColors.Black
+                TitleColor = OxyColors.Black,
+                MajorGridlineStyle = LineStyle.Solid,
+                MinorGridlineStyle = LineStyle.Dot,
+                MajorGridlineColor = OxyColors.LightGray,
+                MinorGridlineColor = OxyColors.Gainsboro
             });
 
             _plotModel.Axes.Add(new LinearAxis
@@ -270,6 +283,10 @@ namespace TERMINAL.DeviceHub
                 Title = "Значение",
                 TextColor = OxyColors.Black,
                 TitleColor = OxyColors.Black,
+                MajorGridlineStyle = LineStyle.Solid,
+                MinorGridlineStyle = LineStyle.Dot,
+                MajorGridlineColor = OxyColors.LightGray,
+                MinorGridlineColor = OxyColors.Gainsboro
             });
 
             PlotView.Model = _plotModel;
@@ -304,14 +321,27 @@ namespace TERMINAL.DeviceHub
 
         private async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
-            ScanButton.IsEnabled = false;
+            if (_isScanning)
+            {
+                // ★ ОТМЕНА ПОИСКА ★
+                _isScanning = false;
+                ScanButtonIcon.Text = "\uE721"; // Лупа
+                ScanButton.ToolTip = "Поиск";
+                LogListView.Items.Add("Поиск отменён.");
+                return;
+            }
+
+            // ★ ЗАПУСК ПОИСКА ★
+            _isScanning = true;
+            ScanButtonIcon.Text = "\uE711"; // Крестик
+            ScanButton.ToolTip = "Отмена";
             LogListView.Items.Add("Запуск параллельного сканирования...");
             ScanProgressBar.Value = 0;
             ScanProgressText.Text = "";
 
             try
             {
-                // ★ СОЗДАЕМ ИНТЕРФЕЙСЫ ТОЛЬКО ЕСЛИ ОНИ ВКЛЮЧЕНЫ ★
+                // ★ ОЧИЩАЕМ ДЕРЕВО ★
                 Interfaces.Clear();
                 if (_isRs485Enabled)
                     Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
@@ -320,7 +350,9 @@ namespace TERMINAL.DeviceHub
 
                 _plotModel.Series.Clear();
                 _seriesMap.Clear();
+                _plotModel.InvalidatePlot(true);
 
+                // ★ ЗАПУСКАЕМ СКАНИРОВАНИЕ ★
                 var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
 
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
@@ -388,8 +420,9 @@ namespace TERMINAL.DeviceHub
             }
             finally
             {
-                ScanButton.IsEnabled = true;
-                LogListView.Items.Add("Кнопка 'Поиск' снова активна.");
+                _isScanning = false;
+                ScanButtonIcon.Text = "\uE721"; // Лупа
+                ScanButton.ToolTip = "Поиск";
                 ScanProgressBar.Value = 0;
                 ScanProgressText.Text = "";
             }

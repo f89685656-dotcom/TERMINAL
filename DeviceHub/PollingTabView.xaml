@@ -81,8 +81,11 @@
                 </Button.Content>
             </Button>
 
-            <Button x:Name="ScanButton" Content="Поиск" Width="80" Height="30" Margin="0,0,10,0" 
-                    Click="ScanButton_Click" Background="#33adff" Foreground="White"/>
+            <Button x:Name="ScanButton" Width="40" Height="30" Margin="0,0,10,0" Click="ScanButton_Click" ToolTip="Поиск">
+                <Button.Content>
+                    <TextBlock x:Name="ScanButtonIcon" Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="16"/>
+                </Button.Content>
+            </Button>
 
             <Button x:Name="SettingsButton" Content="Настройки" Width="100" Height="30" Margin="0,0,0,0" 
                     Click="SettingsButton_Click"/>
@@ -129,7 +132,7 @@
                         </HierarchicalDataTemplate>
 
                         <!-- 2. Устройство (привязка к ChannelsView + треугольник справа) -->
-                        <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding ChannelsView}">
+                        <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding Channels}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextForeground}"/>

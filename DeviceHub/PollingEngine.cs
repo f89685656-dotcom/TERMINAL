@@ -361,8 +361,13 @@ namespace TERMINAL.DeviceHub
                     return foundDevices;
                 }
 
+                int maxAddress = 0x77;
+                int startAddress = 0x08;
+
                 for (byte address = 0x08; address <= 0x77; address++)
                 {
+                    ScanProgressChanged?.Invoke("I2C", address - startAddress + 1, maxAddress - startAddress + 1);
+
                     try
                     {
                         if (!i2cMaster.I2C_Detect(address)) continue;
@@ -371,14 +376,13 @@ namespace TERMINAL.DeviceHub
 
                         var newDev = new DeviceNode
                         {
-                            // ★ НОВОЕ ИМЯ: [I2C|0x11] ★
                             Name = $"[I2C|0x{address:X2}]",
                             Address = $"0x{address:X2}",
                             PortName = "I2C"
                         };
 
-                        // ★ ДОБАВЛЯЕМ ВСЕ КАНАЛЫ (ПДС Ц4) ★
-                        newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "", RegisterAddress = 0x0000, Is32Bit = true });
+                        // ★ ДОБАВЛЯЕМ КАНАЛЫ (ПДС Ц4) ★
+                        newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
                         newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0004, Is32Bit = true });
                         newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
                         newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000C, Is32Bit = true });
@@ -388,7 +392,7 @@ namespace TERMINAL.DeviceHub
                         foundDevices.Add(newDev);
                         DeviceFound?.Invoke(newDev);
                     }
-                    catch { /* Устройство не отвечает */ }
+                    catch { }
                 }
 
                 i2cMaster.Close();
