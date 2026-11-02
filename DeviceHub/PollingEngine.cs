@@ -65,45 +65,106 @@ namespace TERMINAL.DeviceHub
                 LogQueue.Enqueue($"[Scan] {portName}: Попытка открыть на {baudRate} бод...");
 
                 port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                port.ReadTimeout = 500;
+                port.ReadTimeout = 200;
                 port.Open();
                 var factory = new ModbusFactory();
                 var master = factory.CreateRtuMaster(port);
-                master.Transport.ReadTimeout = 500;
+                master.Transport.ReadTimeout = 200;
 
                 LogQueue.Enqueue($"[Scan] {portName}: Порт открыт. Начинаем перебор адресов...");
 
-                int maxAddress = 10; // Можно вынести в настройки
+                int maxAddress = 10;
                 for (byte address = 1; address <= maxAddress; address++)
                 {
-                    // ★ ОТПРАВЛЯЕМ ПРОГРЕСС ★
                     ScanProgressChanged?.Invoke(portName, address, maxAddress);
 
                     try
                     {
                         ushort[] regs = master.ReadInputRegisters(address, 0, 2);
-                        LogQueue.Enqueue($"[Scan] {portName}: Найдено устройство по адресу {address}! regs=[{regs[0]}, {regs[1]}]");
+
+                        // ★ ЧИТАЕМ PRODUCT ID ★
+                        uint productId = 0;
+                        try
+                        {
+                            ushort[] idRegs = master.ReadHoldingRegisters(address, 0x0004, 2);
+                            productId = ((uint)idRegs[1] << 16) | idRegs[0];
+                            LogQueue.Enqueue($"[Scan] {portName}: Адрес {address}, Product ID = 0x{productId:X8}");
+                        }
+                        catch
+                        {
+                            LogQueue.Enqueue($"[Scan] {portName}: Адрес {address}, Product ID не прочитан.");
+                        }
+
+                        // ★ ФОРМИРУЕМ ИМЯ УСТРОЙСТВА С ПОРТОМ И ТИПОМ ★
+                        string deviceType = "";
+                        string deviceName = "";
+
+                        if (productId == 0xC002 || productId == 0x0000C002)
+                        {
+                            deviceType = "C002";
+                            deviceName = $"Датчик давления СКТБ ЭЛПА [COM9|C002]";
+                        }
+                        else if (productId == 0xDBA0 || productId == 0x0000DBA0)
+                        {
+                            deviceType = "DBA0";
+                            deviceName = $"Датчик давления SPI/I2C [{portName}|DBA0]";
+                        }
+                        else if (productId == 0xDBA2 || productId == 0x0000DBA2)
+                        {
+                            deviceType = "DBA2";
+                            deviceName = $"Датчик температуры SPI/I2C [{portName}|DBA2]";
+                        }
+                        else
+                        {
+                            deviceType = "Unknown";
+                            deviceName = $"Неизвестное устройство [{portName}]";
+                        }
 
                         var newDev = new DeviceNode
                         {
-                            Name = $"Датчик давления СКТБ ЭЛПА [{portName}]",
+                            Name = deviceName,
                             Address = address.ToString("D3"),
                             PortName = portName
                         };
 
-                        // ... добавление каналов ...
-                        newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000A, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Давление (фикс)", Unit = "", RegisterAddress = 0x0010, Is32Bit = true, IsInt32 = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Температура (фикс)", Unit = "", RegisterAddress = 0x0012, Is32Bit = true, IsInt32 = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Температура процессора", Unit = "°C", RegisterAddress = 0x0020, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Напряжение питания", Unit = "В", RegisterAddress = 0x0022, Is32Bit = true });
+                        // ★ ВЫБИРАЕМ КАРТУ ПО PRODUCT ID ★
+                        if (productId == 0xC002 || productId == 0x0000C002)
+                        {
+                            // --- КАРТА ДЛЯ C002 ---
+                            newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000A, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Давление (фикс)", Unit = "", RegisterAddress = 0x0010, Is32Bit = true, IsInt32 = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура (фикс)", Unit = "", RegisterAddress = 0x0012, Is32Bit = true, IsInt32 = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура процессора", Unit = "°C", RegisterAddress = 0x0020, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Напряжение питания", Unit = "В", RegisterAddress = 0x0022, Is32Bit = true });
+                        }
+                        else if (productId == 0xDBA0 || productId == 0x0000DBA0)
+                        {
+                            // --- КАРТА ДЛЯ DBA0 (ДАТЧИК ДАВЛЕНИЯ) ---
+                            newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000A, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Давление (фикс)", Unit = "", RegisterAddress = 0x0010, Is32Bit = true, IsInt32 = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура (фикс)", Unit = "", RegisterAddress = 0x0012, Is32Bit = true, IsInt32 = true });
+                        }
+                        else if (productId == 0xDBA2 || productId == 0x0000DBA2)
+                        {
+                            // --- КАРТА ДЛЯ DBA2 (ДАТЧИК ТЕМПЕРАТУРЫ) ---
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000A, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура (фикс)", Unit = "", RegisterAddress = 0x0012, Is32Bit = true, IsInt32 = true });
+                        }
+                        else
+                        {
+                            // --- НЕИЗВЕСТНОЕ УСТРОЙСТВО ---
+                            newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
+                        }
 
                         foundDevices.Add(newDev);
-
-                        // ★ МГНОВЕННО СООБЩАЕМ О НАЙДЕННОМ УСТРОЙСТВЕ ★
                         DeviceFound?.Invoke(newDev);
                     }
                     catch { /* Таймаут */ }
@@ -138,7 +199,7 @@ namespace TERMINAL.DeviceHub
         public void StartPolling(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c, int intervalMs = 500)
         {
             Stop();
-            Thread.Sleep(1000);
+            Thread.Sleep(500);
             _cts = new CancellationTokenSource();
             _pollingTasks.Clear();
 
@@ -150,11 +211,16 @@ namespace TERMINAL.DeviceHub
                 {
                     foreach (var setting in rs485Settings)
                     {
-                        var devices = iface.Devices.Where(d => d.IsSelected).ToList();
-                        if (devices.Any())
+                        // ★ ГРУППИРУЕМ УСТРОЙСТВА ПО ПОРТУ ★
+                        var devicesOnPort = iface.Devices
+                            .Where(d => d.IsSelected && d.PortName == setting.PortName)
+                            .ToList();
+
+                        if (devicesOnPort.Any())
                         {
-                            // ★ НЕ ОТКРЫВАЕМ ПОРТ ЗДЕСЬ, ЭТО СДЕЛАЕТ PollModbusLoop ★
-                            _pollingTasks.Add(Task.Run(() => PollModbusLoop(setting.PortName, setting.BaudRate, devices, intervalMs, _cts.Token)));
+                            // ★ ЗАПУСКАЕМ ОТДЕЛЬНЫЙ ПОТОК ДЛЯ КАЖДОГО ПОРТА ★
+                            _pollingTasks.Add(Task.Run(() =>
+                                PollModbusLoop(setting.PortName, setting.BaudRate, devicesOnPort, intervalMs, _cts.Token)));
                         }
                     }
                 }
@@ -168,13 +234,18 @@ namespace TERMINAL.DeviceHub
             try
             {
                 port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                port.ReadTimeout = 1000; // ★ УВЕЛИЧИЛИ ТАЙМАУТ ★
+
+                // ★ ТАЙМАУТ ЧТЕНИЯ ЗАВИСИТ ОТ ПЕРИОДА ★
+                // Если период 500 мс, таймаут 200 мс (чтобы успеть прочитать все каналы)
+                int readTimeout = Math.Max(100, intervalMs / 2);
+                port.ReadTimeout = readTimeout;
                 port.Open();
+
                 var factory = new ModbusFactory();
                 master = factory.CreateRtuMaster(port);
-                master.Transport.ReadTimeout = 1000; // ★ УВЕЛИЧИЛИ ТАЙМАУТ ★
+                master.Transport.ReadTimeout = readTimeout;
 
-                LogQueue.Enqueue($"[Poll] Опрос {portName} ({baudRate} бод) запущен...");
+                LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут {readTimeout} мс, период {intervalMs} мс)...");
 
                 while (!token.IsCancellationRequested)
                 {
@@ -215,25 +286,27 @@ namespace TERMINAL.DeviceHub
                                 }
                                 catch (Exception ex)
                                 {
-                                    // ★ ЛОГИРУЕМ ТОЛЬКО ОШИБКИ, НО НЕ СПАМИМ ★
+                                    // Логируем только не-таймауты, чтобы не забивать лог
                                     if (!ex.Message.Contains("timed out"))
                                     {
-                                        LogQueue.Enqueue($"[Debug] Ошибка чтения {ch.Name} (порт {portName}): {ex.Message}");
+                                        LogQueue.Enqueue($"[Debug] {portName}: Ошибка {ch.Name}: {ex.Message}");
                                     }
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
-                            LogQueue.Enqueue($"[Debug] Ошибка устройства {dev.Address} (порт {portName}): {ex.Message}");
+                            LogQueue.Enqueue($"[Debug] {portName}: Ошибка устройства {dev.Address}: {ex.Message}");
                         }
                     }
+
+                    // ★ ЖДЕМ ПЕРИОД ИЗ ПОЛЗУНКА ★
                     await Task.Delay(intervalMs, token);
                 }
             }
             catch (Exception ex)
             {
-                LogQueue.Enqueue($"[Poll] Ошибка {portName}: {ex.Message}");
+                LogQueue.Enqueue($"[Poll] {portName}: Ошибка: {ex.Message}");
             }
             finally
             {
@@ -244,7 +317,7 @@ namespace TERMINAL.DeviceHub
                     port.Close();
                 }
                 port?.Dispose();
-                LogQueue.Enqueue($"[Poll] Опрос {portName} остановлен.");
+                LogQueue.Enqueue($"[Poll] {portName}: Опрос остановлен.");
             }
         }
         public void Stop()
