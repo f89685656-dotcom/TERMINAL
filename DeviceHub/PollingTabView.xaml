@@ -91,14 +91,6 @@
                     Click="SettingsButton_Click"/>
 
             <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
-                <ProgressBar x:Name="ScanProgressBar" Width="150" Height="15" 
-                             Minimum="0" Maximum="10" Value="0" 
-                             Foreground="#33adff" Background="#222222"/>
-                <TextBlock x:Name="ScanProgressText" Text="" VerticalAlignment="Center" 
-                           Margin="10,0,0,0" Foreground="{DynamicResource TextForeground}"/>
-            </StackPanel>
-
-            <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
                 <TextBlock Text="Период:" VerticalAlignment="Center" Margin="0,0,10,0" 
                            Foreground="{DynamicResource TextForeground}"/>
                 <Slider x:Name="IntervalSlider" Minimum="100" Maximum="5000" Value="500" 
@@ -123,7 +115,6 @@
             <Border Grid.Column="0" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,0,1,0" Margin="10">
                 <TreeView x:Name="DevicesTree" Background="Transparent" ItemsSource="{Binding Interfaces}">
                     <TreeView.Resources>
-                        <!-- 1. Интерфейс -->
                         <HierarchicalDataTemplate DataType="{x:Type local:InterfaceNode}" ItemsSource="{Binding Devices}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
@@ -131,23 +122,19 @@
                             </StackPanel>
                         </HierarchicalDataTemplate>
 
-                        <!-- 2. Устройство (привязка к ChannelsView + треугольник справа) -->
                         <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding Channels}">
                             <StackPanel Orientation="Horizontal">
                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextForeground}"/>
                                 <TextBlock Text="{Binding Address}" Foreground="Gray" Margin="5,0,0,0"/>
-                                <!-- ★ ТРЕУГОЛЬНИК СПРАВА (ПЕРЕВЁРНУТЫЙ) ★ -->
                                 <ToggleButton IsChecked="{Binding ShowOnlySelected, Mode=TwoWay}" 
                                               Width="16" Height="16" Margin="5,0,0,0" Background="Transparent" BorderThickness="0"
                                               ToolTip="Скрыть/показать неотмеченные каналы">
                                     <ToggleButton.Template>
                                         <ControlTemplate TargetType="ToggleButton">
                                             <Grid>
-                                                <!-- ★ СТРЕЛКА ВВЕРХ (по умолчанию, все каналы видны) ★ -->
                                                 <Path x:Name="ArrowUp" Fill="Black" Data="M 0 4 L 8 4 L 4 0 Z" 
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                <!-- ★ СТРЕЛКА ВНИЗ (когда неотмеченные скрыты) ★ -->
                                                 <Path x:Name="ArrowDown" Fill="Black" Data="M 0 0 L 8 0 L 4 4 Z" 
                                                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                                             </Grid>
@@ -163,7 +150,6 @@
                             </StackPanel>
                         </HierarchicalDataTemplate>
 
-                        <!-- 3. Канал -->
                         <DataTemplate DataType="{x:Type local:ChannelNode}">
                             <Grid Margin="0,2" Background="Transparent" Focusable="True" MouseLeftButtonDown="ChannelRow_MouseLeftButtonDown">
                                 <Grid.ColumnDefinitions>
@@ -199,22 +185,49 @@
             <oxy:PlotView Grid.Column="1" x:Name="PlotView" Margin="10" Background="{DynamicResource PanelBackground}"/>
         </Grid>
 
-        <!-- ЛОГ -->
-        <ListView Grid.Row="2" x:Name="LogListView" Margin="10" 
-          Background="{DynamicResource PanelBackground}" 
-          Foreground="{DynamicResource TextForeground}"
-          SelectionMode="Extended">
-            <ListView.ContextMenu>
-                <ContextMenu>
-                    <MenuItem Header="Копировать" Click="CopyLogMenuItem_Click" InputGestureText="Ctrl+C"/>
-                </ContextMenu>
-            </ListView.ContextMenu>
-            <ListView.InputBindings>
-                <KeyBinding Key="C" Modifiers="Control" Command="ApplicationCommands.Copy"/>
-            </ListView.InputBindings>
-            <ListView.CommandBindings>
-                <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyLogCommand_Executed"/>
-            </ListView.CommandBindings>
-        </ListView>
+        <!-- ★ ЛОГ + ПРОГРЕСС-БАРЫ (ВНИЗУ) ★ -->
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- ★ ПРОГРЕСС-БАРЫ (НАД ЛОГОМ) ★ -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,5,10,5">
+                <ProgressBar x:Name="ScanProgressBarRS485" Width="150" Height="15" 
+                             Minimum="0" Maximum="10" Value="0" 
+                             Foreground="#33adff" Background="#222222"
+                             Visibility="Collapsed"/>
+                <TextBlock x:Name="ScanProgressTextRS485" Text="" VerticalAlignment="Center" 
+                           Margin="5,0,20,0" Width="100" Foreground="{DynamicResource TextForeground}"
+                           Visibility="Collapsed"/>
+
+                <ProgressBar x:Name="ScanProgressBarI2C" Width="150" Height="15" 
+                             Minimum="0" Maximum="10" Value="0" 
+                             Foreground="#33adff" Background="#222222"
+                             Visibility="Collapsed"/>
+                <TextBlock x:Name="ScanProgressTextI2C" Text="" VerticalAlignment="Center" 
+                           Margin="5,0,0,0" Width="100" Foreground="{DynamicResource TextForeground}"
+                           Visibility="Collapsed"/>
+            </StackPanel>
+
+            <!-- ЛОГ -->
+            <ListView Grid.Row="1" x:Name="LogListView" Margin="10,0,10,10" 
+              Background="{DynamicResource PanelBackground}" 
+              Foreground="{DynamicResource TextForeground}"
+              SelectionMode="Extended">
+                <ListView.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Копировать" Click="CopyLogMenuItem_Click" InputGestureText="Ctrl+C"/>
+                    </ContextMenu>
+                </ListView.ContextMenu>
+                <ListView.InputBindings>
+                    <KeyBinding Key="C" Modifiers="Control" Command="ApplicationCommands.Copy"/>
+                </ListView.InputBindings>
+                <ListView.CommandBindings>
+                    <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyLogCommand_Executed"/>
+                </ListView.CommandBindings>
+            </ListView>
+        </Grid>
     </Grid>
 </UserControl>

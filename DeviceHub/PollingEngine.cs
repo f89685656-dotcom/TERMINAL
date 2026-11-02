@@ -84,7 +84,7 @@ namespace TERMINAL.DeviceHub
                 int maxAddress = 10;
                 for (byte address = 1; address <= maxAddress; address++)
                 {
-                    ScanProgressChanged?.Invoke(portName, address, maxAddress);
+                    ScanProgressChanged?.Invoke("RS-485", address, maxAddress);
 
                     try
                     {
@@ -232,11 +232,11 @@ namespace TERMINAL.DeviceHub
             try
             {
                 port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                port.ReadTimeout = 250;
+                port.ReadTimeout = 100;
                 port.Open();
                 var factory = new ModbusFactory();
                 master = factory.CreateRtuMaster(port);
-                master.Transport.ReadTimeout = 250;
+                master.Transport.ReadTimeout = 100;
 
                 LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут 250 мс, период {intervalMs} мс)...");
 

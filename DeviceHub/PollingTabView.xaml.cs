@@ -19,7 +19,7 @@ namespace TERMINAL.DeviceHub
         private DispatcherTimer _uiQueueTimer;
         private PlotModel _plotModel;
         private Dictionary<ChannelNode, LineSeries> _seriesMap = new Dictionary<ChannelNode, LineSeries>();
-
+        private DateTime _lastPlotUpdate = DateTime.MinValue;
         public ObservableCollection<InterfaceNode> Interfaces { get; set; } = new ObservableCollection<InterfaceNode>();
         private bool _isScanning = false;
         private bool _isRs485Enabled = true;
@@ -45,13 +45,21 @@ namespace TERMINAL.DeviceHub
             {
                 Dispatcher.Invoke(() =>
                 {
-                    ScanProgressBar.Maximum = total;
-                    ScanProgressBar.Value = current;
-                    ScanProgressText.Text = $"{port}: {current}/{total}";
+                    if (port == "RS-485")
+                    {
+                        ScanProgressBarRS485.Maximum = total;
+                        ScanProgressBarRS485.Value = current;
+                        ScanProgressTextRS485.Text = $"RS-485: {current}/{total}";
+                    }
+                    else if (port == "I2C")
+                    {
+                        ScanProgressBarI2C.Maximum = total;
+                        ScanProgressBarI2C.Value = current;
+                        ScanProgressTextI2C.Text = $"I2C: {current}/{total}";
+                    }
                 });
             };
 
-            // ★ ПОДПИСКА НА НАЙДЕННОЕ УСТРОЙСТВО (ДОБАВЛЯЕМ СРАЗУ) ★
             _engine.DeviceFound += (dev) =>
             {
                 Dispatcher.Invoke(() =>
@@ -64,7 +72,7 @@ namespace TERMINAL.DeviceHub
                         if (!i2cIface.Devices.Any(d => d.Address == dev.Address))
                         {
                             i2cIface.Devices.Add(dev);
-                            LogListView.Items.Add($"[Scan] I2C устройство {dev.Address} добавлено в дерево.");
+                            LogListView.Items.Add($"[Scan] I2C устройство {dev.Name} добавлено в дерево.");
                         }
                     }
                     else if (rs485Iface != null)
@@ -72,7 +80,7 @@ namespace TERMINAL.DeviceHub
                         if (!rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
                         {
                             rs485Iface.Devices.Add(dev);
-                            LogListView.Items.Add($"[Scan] RS-485 устройство {dev.Address} добавлено в дерево.");
+                            LogListView.Items.Add($"[Scan] RS-485 устройство {dev.Name} добавлено в дерево.");
                         }
                     }
                 });
@@ -83,8 +91,7 @@ namespace TERMINAL.DeviceHub
             _uiQueueTimer.Start();
 
             UpdateStatusText();
-        }
-        // ★ ОБРАБОТЧИК КЛИКА ПО КАНАЛУ В ДЕРЕВЕ (ДЛЯ ВЫБОРА ГРАФИКА) ★
+        }        // ★ ОБРАБОТЧИК КЛИКА ПО КАНАЛУ В ДЕРЕВЕ (ДЛЯ ВЫБОРА ГРАФИКА) ★
         private void ChannelRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is FrameworkElement element && element.DataContext is ChannelNode channel)
@@ -99,12 +106,28 @@ namespace TERMINAL.DeviceHub
                 channel.IsVisibleOnPlot = true;
                 _selectedChannelForPlot = channel;
 
+                // ★ МЕНЯЕМ ЗАГОЛОВОК ГРАФИКА ★
+                _plotModel.Title = channel.Name;
+
+                // ★ УМНАЯ ПОДПИСЬ ОСИ Y ★
+                string yAxisTitle = "Значение";
+                if (channel.Name.Contains("Частота давления")) yAxisTitle = "Fp, Гц";
+                else if (channel.Name.Contains("Частота температуры")) yAxisTitle = "Ft, Гц";
+                else if (channel.Name.Contains("Давление")) yAxisTitle = "P, кгс/см²";
+                else if (channel.Name.Contains("Температура процессора")) yAxisTitle = "t, °C";
+                else if (channel.Name.Contains("Температура")) yAxisTitle = "t, °C";
+                else if (channel.Name.Contains("Напряжение питания")) yAxisTitle = "U, В";
+
+                var yAxis = _plotModel.Axes.FirstOrDefault(a => a.Position == AxisPosition.Left);
+                if (yAxis != null)
+                    yAxis.Title = yAxisTitle;
+
+                _plotModel.InvalidatePlot(true);
+
                 // Обновляем видимость серий
                 UpdatePlotVisibility();
             }
-        }
-
-        // ★ ОБНОВЛЕНИЕ ВИДИМОСТИ СЕРИЙ НА ГРАФИКЕ ★
+        }        // ★ ОБНОВЛЕНИЕ ВИДИМОСТИ СЕРИЙ НА ГРАФИКЕ ★
         private void UpdatePlotVisibility()
         {
             foreach (var kvp in _seriesMap)
@@ -130,7 +153,7 @@ namespace TERMINAL.DeviceHub
                 if (_isScanning)
                 {
                     _isScanning = false;
-                    ScanButtonIcon.Text = "\uE721"; // Лупа
+                    ScanButtonIcon.Text = "\uE721";
                     ScanButton.ToolTip = "Поиск";
                     LogListView.Items.Add("Поиск прерван (запущен опрос).");
                 }
@@ -197,6 +220,7 @@ namespace TERMINAL.DeviceHub
             }
             _plotModel.InvalidatePlot(true);
         }
+
         private void UiQueueTimer_Tick(object sender, EventArgs e)
         {
             // 1. Применяем обновления UI
@@ -213,8 +237,14 @@ namespace TERMINAL.DeviceHub
                     LogListView.ScrollIntoView(LogListView.Items[LogListView.Items.Count - 1]);
             }
 
-            // 3. Рисуем график (только если идет запись)
+            // 3. График (не чаще, чем раз в interval мс)
             if (!_isRecording) return;
+
+            int interval = (int)IntervalSlider.Value;
+            if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < interval)
+                return;
+
+            _lastPlotUpdate = DateTime.Now;
 
             bool needRedraw = false;
             foreach (var iface in Interfaces)
@@ -227,7 +257,6 @@ namespace TERMINAL.DeviceHub
 
                         if (_seriesMap.TryGetValue(ch, out var series))
                         {
-                            // ★ НЕ ДОБАВЛЯЕМ ТОЧКУ, ЕСЛИ ЗНАЧЕНИЕ ЕЩЕ НЕ ПОЛУЧЕНО (IsValueSet = false) ★
                             if (!ch.IsValueSet) continue;
 
                             series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(DateTime.Now), ch.Value));
@@ -243,7 +272,6 @@ namespace TERMINAL.DeviceHub
                 _plotModel.InvalidatePlot(true);
             }
         }
-
         private void IntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (IntervalText != null)
@@ -262,7 +290,16 @@ namespace TERMINAL.DeviceHub
 
         private void InitializePlot()
         {
-            _plotModel = new PlotModel { Title = "Показания датчиков", Background = OxyColors.White, TitleColor = OxyColors.Black };
+            _plotModel = new PlotModel
+            {
+                Title = "Показания датчиков",
+                Background = OxyColors.White,
+                TitleColor = OxyColors.Black,
+                DefaultFont = "Times New Roman",
+                TitleFont = "Times New Roman",
+                TitleFontSize = 16,
+                TitleFontWeight = OxyPlot.FontWeights.Bold // ★ double, а не FontWeight ★
+            };
 
             _plotModel.Axes.Add(new DateTimeAxis
             {
@@ -274,7 +311,11 @@ namespace TERMINAL.DeviceHub
                 MajorGridlineStyle = LineStyle.Solid,
                 MinorGridlineStyle = LineStyle.Dot,
                 MajorGridlineColor = OxyColors.LightGray,
-                MinorGridlineColor = OxyColors.Gainsboro
+                MinorGridlineColor = OxyColors.Gainsboro,
+                Font = "Times New Roman",
+                TitleFont = "Times New Roman",
+                TitleFontSize = 12,
+                AxisTitleDistance = 15 // ★ Только это, без TitlePadding ★
             });
 
             _plotModel.Axes.Add(new LinearAxis
@@ -286,7 +327,11 @@ namespace TERMINAL.DeviceHub
                 MajorGridlineStyle = LineStyle.Solid,
                 MinorGridlineStyle = LineStyle.Dot,
                 MajorGridlineColor = OxyColors.LightGray,
-                MinorGridlineColor = OxyColors.Gainsboro
+                MinorGridlineColor = OxyColors.Gainsboro,
+                Font = "Times New Roman",
+                TitleFont = "Times New Roman",
+                TitleFontSize = 12,
+                AxisTitleDistance = 25 // ★ Отодвигаем заголовок от чисел ★
             });
 
             PlotView.Model = _plotModel;
@@ -323,25 +368,29 @@ namespace TERMINAL.DeviceHub
         {
             if (_isScanning)
             {
-                // ★ ОТМЕНА ПОИСКА ★
                 _isScanning = false;
-                ScanButtonIcon.Text = "\uE721"; // Лупа
+                ScanButtonIcon.Text = "\uE721";
                 ScanButton.ToolTip = "Поиск";
                 LogListView.Items.Add("Поиск отменён.");
                 return;
             }
 
-            // ★ ЗАПУСК ПОИСКА ★
             _isScanning = true;
-            ScanButtonIcon.Text = "\uE711"; // Крестик
+            ScanButtonIcon.Text = "\uE711";
             ScanButton.ToolTip = "Отмена";
             LogListView.Items.Add("Запуск параллельного сканирования...");
-            ScanProgressBar.Value = 0;
-            ScanProgressText.Text = "";
+
+            ScanProgressBarRS485.Visibility = Visibility.Visible;
+            ScanProgressTextRS485.Visibility = Visibility.Visible;
+            ScanProgressBarI2C.Visibility = Visibility.Visible;
+            ScanProgressTextI2C.Visibility = Visibility.Visible;
+            ScanProgressBarRS485.Value = 0;
+            ScanProgressTextRS485.Text = "";
+            ScanProgressBarI2C.Value = 0;
+            ScanProgressTextI2C.Text = "";
 
             try
             {
-                // ★ ОЧИЩАЕМ ДЕРЕВО ★
                 Interfaces.Clear();
                 if (_isRs485Enabled)
                     Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
@@ -352,12 +401,10 @@ namespace TERMINAL.DeviceHub
                 _seriesMap.Clear();
                 _plotModel.InvalidatePlot(true);
 
-                // ★ ЗАПУСКАЕМ СКАНИРОВАНИЕ ★
                 var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
 
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
 
-                // ★ РАСПРЕДЕЛЯЕМ ПО ИНТЕРФЕЙСАМ ★
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
                 var i2cIface = Interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
 
@@ -381,7 +428,6 @@ namespace TERMINAL.DeviceHub
                     }
                 }
 
-                // ★ СОЗДАЕМ СЕРИИ ДЛЯ ВСЕХ КАНАЛОВ ★
                 var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
                 int colorIndex = 0;
                 int createdCount = 0;
@@ -421,10 +467,17 @@ namespace TERMINAL.DeviceHub
             finally
             {
                 _isScanning = false;
-                ScanButtonIcon.Text = "\uE721"; // Лупа
+                ScanButtonIcon.Text = "\uE721";
                 ScanButton.ToolTip = "Поиск";
-                ScanProgressBar.Value = 0;
-                ScanProgressText.Text = "";
+
+                ScanProgressBarRS485.Visibility = Visibility.Collapsed;
+                ScanProgressTextRS485.Visibility = Visibility.Collapsed;
+                ScanProgressBarI2C.Visibility = Visibility.Collapsed;
+                ScanProgressTextI2C.Visibility = Visibility.Collapsed;
+                ScanProgressBarRS485.Value = 0;
+                ScanProgressTextRS485.Text = "";
+                ScanProgressBarI2C.Value = 0;
+                ScanProgressTextI2C.Text = "";
             }
         }
         public void ClosePort()
