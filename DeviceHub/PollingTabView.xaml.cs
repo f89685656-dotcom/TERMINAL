@@ -41,13 +41,36 @@ namespace TERMINAL.DeviceHub
 
             InitializePlot();
 
+            // ★ ПОДПИСКИ НА СОБЫТИЯ ★
+            _engine.ScanProgressChanged += (port, current, total) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    ScanProgressBar.Maximum = total;
+                    ScanProgressBar.Value = current;
+                    ScanProgressText.Text = $"{port}: {current}/{total}";
+                });
+            };
+
+            _engine.DeviceFound += (dev) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
+                    if (rs485Iface != null && !rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                    {
+                        rs485Iface.Devices.Add(dev);
+                        LogListView.Items.Add($"[Scan] Устройство {dev.Address} ({dev.PortName}) добавлено в дерево.");
+                    }
+                });
+            };
+
             _uiQueueTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _uiQueueTimer.Tick += UiQueueTimer_Tick;
             _uiQueueTimer.Start();
 
             UpdateStatusText();
         }
-
         // ★ ОБРАБОТЧИК КЛИКА ПО КАНАЛУ В ДЕРЕВЕ (ДЛЯ ВЫБОРА ГРАФИКА) ★
         private void ChannelRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
@@ -208,10 +231,11 @@ namespace TERMINAL.DeviceHub
         {
             ScanButton.IsEnabled = false;
             LogListView.Items.Add("Запуск параллельного сканирования...");
+            ScanProgressBar.Value = 0;
+            ScanProgressText.Text = "";
 
             try
             {
-                // 1. Очистка
                 Interfaces.Clear();
                 Interfaces.Add(new InterfaceNode { Name = "RS-485 (Modbus)" });
                 Interfaces.Add(new InterfaceNode { Name = "I2C (FT260)" });
@@ -219,28 +243,13 @@ namespace TERMINAL.DeviceHub
                 _plotModel.Series.Clear();
                 _seriesMap.Clear();
                 _plotModel.InvalidatePlot(true);
-                _selectedChannelForPlot = null;
 
-                // 2. Сканирование
+                // ★ Запускаем сканирование (устройства добавляются сами через DeviceFound) ★
                 var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled);
 
-                LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
+                LogListView.Items.Add($"[Scan] Сканирование завершено. Всего найдено: {foundDevices.Count}");
 
-                // 3. Добавление устройств
-                var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
-                if (rs485Iface != null)
-                {
-                    foreach (var dev in foundDevices)
-                    {
-                        if (!rs485Iface.Devices.Any(d => d.Address == dev.Address))
-                        {
-                            rs485Iface.Devices.Add(dev);
-                            LogListView.Items.Add($"[Scan] Устройство {dev.Address} добавлено в дерево.");
-                        }
-                    }
-                }
-
-                // 4. Создание серий
+                // Создаем серии для всех найденных каналов
                 var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
                 int colorIndex = 0;
                 int createdCount = 0;
@@ -259,7 +268,7 @@ namespace TERMINAL.DeviceHub
                                 Title = $"{dev.Name} - {ch.Name}",
                                 Color = colors[colorIndex % colors.Length],
                                 StrokeThickness = 2,
-                                IsVisible = false // ★ По умолчанию скрыта ★
+                                IsVisible = false
                             };
                             _plotModel.Series.Add(series);
                             _seriesMap[ch] = series;
@@ -271,7 +280,6 @@ namespace TERMINAL.DeviceHub
 
                 LogListView.Items.Add($"[Scan] Создано серий для графика: {createdCount}");
                 _plotModel.InvalidatePlot(true);
-                LogListView.Items.Add("Сканирование завершено.");
             }
             catch (Exception ex)
             {
@@ -281,9 +289,10 @@ namespace TERMINAL.DeviceHub
             {
                 ScanButton.IsEnabled = true;
                 LogListView.Items.Add("Кнопка 'Поиск' снова активна.");
+                ScanProgressBar.Value = 0;
+                ScanProgressText.Text = "";
             }
         }
-
         public void ClosePort()
         {
             _engine.ClosePort();

@@ -47,6 +47,15 @@
                            Margin="10,0,0,0" Width="50" Foreground="{DynamicResource TextForeground}"/>
             </StackPanel>
 
+            <!-- ★ ПРОГРЕСС-БАР ДЛЯ СКАНИРОВАНИЯ ★ -->
+            <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+                <ProgressBar x:Name="ScanProgressBar" Width="150" Height="15" 
+                 Minimum="0" Maximum="10" Value="0" 
+                 Foreground="#33adff" Background="#222222"/>
+                <TextBlock x:Name="ScanProgressText" Text="" VerticalAlignment="Center" 
+               Margin="10,0,0,0" Foreground="{DynamicResource TextForeground}"/>
+            </StackPanel>
+
             <!-- Статус -->
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="20,0,0,0" 
                        Foreground="{DynamicResource TextForeground}" Text="Не настроено"/>

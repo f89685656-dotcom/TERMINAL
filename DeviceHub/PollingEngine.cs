@@ -20,6 +20,9 @@ namespace TERMINAL.DeviceHub
         public ConcurrentQueue<Action> UiUpdates { get; } = new ConcurrentQueue<Action>();
         public ConcurrentQueue<string> LogQueue { get; } = new ConcurrentQueue<string>();
 
+        public event Action<string, int, int> ScanProgressChanged; // portName, current, total
+        public event Action<DeviceNode> DeviceFound; // устройство найдено
+
         // ★ ДОЛГОЖИВУЩИЙ ПОРТ ★
         private SerialPort _port;
         private IModbusMaster _master;
@@ -30,7 +33,6 @@ namespace TERMINAL.DeviceHub
         public async Task<List<DeviceNode>> ScanAllAsync(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c)
         {
             var foundDevices = new List<DeviceNode>();
-            var scanTasks = new List<Task>();
 
             foreach (var iface in interfaces)
             {
@@ -40,64 +42,56 @@ namespace TERMINAL.DeviceHub
                 {
                     foreach (var setting in rs485Settings)
                     {
-                        scanTasks.Add(Task.Run(async () =>
-                        {
-                            var devices = await ScanModbusAsync(iface, setting.PortName, setting.BaudRate);
-                            lock (foundDevices)
-                            {
-                                foundDevices.AddRange(devices);
-                            }
-                        }));
+                        // ★ ЗАПУСКАЕМ В ФОНОВОМ ПОТОКЕ ★
+                        var devices = await Task.Run(() => ScanModbusAsync(iface, setting.PortName, setting.BaudRate));
+                        foundDevices.AddRange(devices);
                     }
                 }
                 else if (iface.Name.Contains("I2C") && isI2c)
                 {
-                    // I2C заглушка (если нужна)
+                    // I2C заглушка
                 }
             }
 
-            // ★ ЖДЕМ ЗАВЕРШЕНИЯ ВСЕХ ЗАДАЧ (без таймаута) ★
-            await Task.WhenAll(scanTasks);
-
             return foundDevices;
         }
-
         private async Task<List<DeviceNode>> ScanModbusAsync(InterfaceNode iface, string portName, int baudRate)
         {
             var foundDevices = new List<DeviceNode>();
+            SerialPort port = null;
+
             try
             {
-                LogQueue.Enqueue($"[Scan] Попытка открыть {portName} на {baudRate} бод...");
+                LogQueue.Enqueue($"[Scan] {portName}: Попытка открыть на {baudRate} бод...");
 
-                // ★ ОТКРЫТИЕ ПОРТА (ЭТО НЕ КОММЕНТАРИЙ, А КОД!) ★
-                if (_port == null || !_port.IsOpen)
-                {
-                    _port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                    _port.Open();
-                    var factory = new ModbusFactory();
-                    _master = factory.CreateRtuMaster(_port);
-                    _master.Transport.ReadTimeout = 300;
-                    _isPortOpen = true;
-                    LogQueue.Enqueue($"[Scan] Порт {portName} успешно открыт.");
-                }
-                else
-                {
-                    LogQueue.Enqueue($"[Scan] Порт {portName} уже открыт. Используем существующий.");
-                }
+                port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
+                port.ReadTimeout = 500;
+                port.Open();
+                var factory = new ModbusFactory();
+                var master = factory.CreateRtuMaster(port);
+                master.Transport.ReadTimeout = 500;
 
-                LogQueue.Enqueue($"[Scan] Порт {portName} открыт. Начинаем перебор адресов...");
+                LogQueue.Enqueue($"[Scan] {portName}: Порт открыт. Начинаем перебор адресов...");
 
-                for (byte address = 1; address < 248; address++)
+                int maxAddress = 10; // Можно вынести в настройки
+                for (byte address = 1; address <= maxAddress; address++)
                 {
+                    // ★ ОТПРАВЛЯЕМ ПРОГРЕСС ★
+                    ScanProgressChanged?.Invoke(portName, address, maxAddress);
+
                     try
                     {
-                        ushort[] regs = _master.ReadInputRegisters(address, 0, 2);
+                        ushort[] regs = master.ReadInputRegisters(address, 0, 2);
+                        LogQueue.Enqueue($"[Scan] {portName}: Найдено устройство по адресу {address}! regs=[{regs[0]}, {regs[1]}]");
 
-                        LogQueue.Enqueue($"[Scan] [{portName}] Найдено устройство по адресу {address}! regs=[{regs[0]}, {regs[1]}]");
+                        var newDev = new DeviceNode
+                        {
+                            Name = $"Датчик давления СКТБ ЭЛПА [{portName}]",
+                            Address = address.ToString("D3"),
+                            PortName = portName
+                        };
 
-                        var newDev = new DeviceNode { Name = "Датчик давления СКТБ ЭЛПА", Address = address.ToString("D3") };
-
-                        // ★ ДОБАВЛЕНИЕ КАНАЛОВ ★
+                        // ... добавление каналов ...
                         newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
                         newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
                         newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
@@ -109,21 +103,30 @@ namespace TERMINAL.DeviceHub
 
                         foundDevices.Add(newDev);
 
-                        // ★ ПРЕРЫВАЕМ ПЕРЕБОР, ТАК КАК УСТРОЙСТВО НАЙДЕНО ★
-                        break;
+                        // ★ МГНОВЕННО СООБЩАЕМ О НАЙДЕННОМ УСТРОЙСТВЕ ★
+                        DeviceFound?.Invoke(newDev);
                     }
                     catch { /* Таймаут */ }
                 }
 
-                LogQueue.Enqueue($"[Scan] Сканирование {portName} завершено. Найдено устройств: {foundDevices.Count}");
+                LogQueue.Enqueue($"[Scan] {portName}: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
             }
             catch (Exception ex)
             {
-                LogQueue.Enqueue($"[Scan] Ошибка порта {portName}: {ex.Message}");
+                LogQueue.Enqueue($"[Scan] {portName}: Ошибка порта: {ex.Message}");
             }
+            finally
+            {
+                if (port != null && port.IsOpen)
+                {
+                    try { port.DiscardInBuffer(); port.DiscardOutBuffer(); } catch { }
+                    port.Close();
+                }
+                port?.Dispose();
+            }
+
             return foundDevices;
         }
-
         private async Task ScanI2CAsync(InterfaceNode iface)
         {
             await Task.Delay(1000);
@@ -150,17 +153,27 @@ namespace TERMINAL.DeviceHub
                         var devices = iface.Devices.Where(d => d.IsSelected).ToList();
                         if (devices.Any())
                         {
+                            // ★ НЕ ОТКРЫВАЕМ ПОРТ ЗДЕСЬ, ЭТО СДЕЛАЕТ PollModbusLoop ★
                             _pollingTasks.Add(Task.Run(() => PollModbusLoop(setting.PortName, setting.BaudRate, devices, intervalMs, _cts.Token)));
                         }
                     }
                 }
             }
         }
-
         private async Task PollModbusLoop(string portName, int baudRate, List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
+            SerialPort port = null;
+            IModbusMaster master = null;
+
             try
             {
+                port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
+                port.ReadTimeout = 1000; // ★ УВЕЛИЧИЛИ ТАЙМАУТ ★
+                port.Open();
+                var factory = new ModbusFactory();
+                master = factory.CreateRtuMaster(port);
+                master.Transport.ReadTimeout = 1000; // ★ УВЕЛИЧИЛИ ТАЙМАУТ ★
+
                 LogQueue.Enqueue($"[Poll] Опрос {portName} ({baudRate} бод) запущен...");
 
                 while (!token.IsCancellationRequested)
@@ -179,42 +192,40 @@ namespace TERMINAL.DeviceHub
 
                                 try
                                 {
-                                    // Читаем 2 регистра (Input Registers)
-                                    ushort[] regs = _master.ReadInputRegisters(id, ch.RegisterAddress, 2);
+                                    ushort[] regs = master.ReadInputRegisters(id, ch.RegisterAddress, 2);
 
                                     if (ch.IsInt32)
                                     {
-                                        // ФИКС. ТОЧКА (Int32)
                                         int raw = (regs[1] << 16) | regs[0];
                                         double val = Math.Round((double)raw);
-
                                         ch.LastValue = val;
                                         UiUpdates.Enqueue(() => ch.Value = val);
                                     }
                                     else
                                     {
-                                        // FLOAT (Давление, Температура)
                                         byte[] bytes = new byte[4];
                                         bytes[0] = (byte)(regs[0] & 0xFF);
                                         bytes[1] = (byte)(regs[0] >> 8);
                                         bytes[2] = (byte)(regs[1] & 0xFF);
                                         bytes[3] = (byte)(regs[1] >> 8);
-
                                         float val = BitConverter.ToSingle(bytes, 0);
-
                                         ch.LastValue = val;
                                         UiUpdates.Enqueue(() => ch.Value = val);
                                     }
                                 }
                                 catch (Exception ex)
                                 {
-                                    LogQueue.Enqueue($"[Debug] Ошибка чтения {ch.Name}: {ex.Message}");
+                                    // ★ ЛОГИРУЕМ ТОЛЬКО ОШИБКИ, НО НЕ СПАМИМ ★
+                                    if (!ex.Message.Contains("timed out"))
+                                    {
+                                        LogQueue.Enqueue($"[Debug] Ошибка чтения {ch.Name} (порт {portName}): {ex.Message}");
+                                    }
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
-                            LogQueue.Enqueue($"[Debug] Ошибка устройства {dev.Address}: {ex.Message}");
+                            LogQueue.Enqueue($"[Debug] Ошибка устройства {dev.Address} (порт {portName}): {ex.Message}");
                         }
                     }
                     await Task.Delay(intervalMs, token);
@@ -226,10 +237,16 @@ namespace TERMINAL.DeviceHub
             }
             finally
             {
+                master?.Dispose();
+                if (port != null && port.IsOpen)
+                {
+                    try { port.DiscardInBuffer(); port.DiscardOutBuffer(); } catch { }
+                    port.Close();
+                }
+                port?.Dispose();
                 LogQueue.Enqueue($"[Poll] Опрос {portName} остановлен.");
             }
         }
-
         public void Stop()
         {
             if (_cts != null)

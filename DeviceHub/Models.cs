@@ -26,6 +26,7 @@ namespace TERMINAL.DeviceHub
     {
         private bool _isExpanded = true;
         private bool _isSelected = true;
+        public string PortName { get; set; }
         public string Name { get; set; }
         public string Address { get; set; }
 
