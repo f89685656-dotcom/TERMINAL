@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -30,13 +31,9 @@ namespace TERMINAL.DeviceHub
             Devices.CollectionChanged += (s, e) =>
             {
                 if (e.NewItems != null)
-                {
                     foreach (DeviceNode dev in e.NewItems) dev.SelectionChanged += Device_SelectionChanged;
-                }
                 if (e.OldItems != null)
-                {
                     foreach (DeviceNode dev in e.OldItems) dev.SelectionChanged -= Device_SelectionChanged;
-                }
             };
         }
 
@@ -58,9 +55,7 @@ namespace TERMINAL.DeviceHub
                     _isSelected = value;
                     OnPropertyChanged();
                     if (value.HasValue)
-                    {
                         foreach (var dev in Devices) dev.SetSelectedSilent(value.Value);
-                    }
                 }
             }
         }
@@ -97,13 +92,9 @@ namespace TERMINAL.DeviceHub
             Channels.CollectionChanged += (s, e) =>
             {
                 if (e.NewItems != null)
-                {
                     foreach (ChannelNode ch in e.NewItems) ch.PropertyChanged += Channel_PropertyChanged;
-                }
                 if (e.OldItems != null)
-                {
                     foreach (ChannelNode ch in e.OldItems) ch.PropertyChanged -= Channel_PropertyChanged;
-                }
             };
         }
 
@@ -216,7 +207,6 @@ namespace TERMINAL.DeviceHub
         private DateTime _lastUpdateTime = DateTime.MinValue;
 
         public string Name { get; set; }
-
         public string Unit
         {
             get => _unit;
@@ -271,57 +261,15 @@ namespace TERMINAL.DeviceHub
             OnPropertyChanged(nameof(IsValueSet));
         }
 
-        // ★ ДОБАВЛЕНО: Персональный мини-график для истории ★
-        private PlotModel _miniPlotModel;
-        public PlotModel MiniPlotModel
+        // ★ ХРАНИМ ТОЧКИ ★
+        public List<DataPoint> HistoryPoints { get; set; } = new List<DataPoint>();
+
+        // ★ СВОЙСТВО ДЛЯ ПРИВЯЗКИ (вместо Tag) ★
+        private PlotModel _chartModel;
+        public PlotModel ChartModel
         {
-            get
-            {
-                if (_miniPlotModel == null)
-                {
-                    _miniPlotModel = new PlotModel
-                    {
-                        Background = OxyColors.White,
-                        PlotAreaBorderColor = OxyColors.LightGray,
-                        IsLegendVisible = false,
-                        Title = Name,
-                        TitleFontSize = 12,
-                        TitleFont = "Times New Roman",
-                        TitleFontWeight = OxyPlot.FontWeights.Bold,
-                        Padding = new OxyThickness(2)
-                    };
-
-                    _miniPlotModel.Axes.Add(new LinearAxis
-                    {
-                        Position = AxisPosition.Left,
-                        MajorGridlineStyle = LineStyle.Dot,
-                        MinorGridlineStyle = LineStyle.None,
-                        MajorGridlineColor = OxyColors.Gainsboro,
-                        TextColor = OxyColors.Black,
-                        FontSize = 10,
-                        Font = "Times New Roman"
-                    });
-
-                    _miniPlotModel.Axes.Add(new DateTimeAxis
-                    {
-                        Position = AxisPosition.Bottom,
-                        StringFormat = "HH:mm:ss",
-                        MajorGridlineStyle = LineStyle.Dot,
-                        MajorGridlineColor = OxyColors.Gainsboro,
-                        TextColor = OxyColors.Black,
-                        FontSize = 10,
-                        Font = "Times New Roman"
-                    });
-
-                    _miniPlotModel.Series.Add(new LineSeries
-                    {
-                        Color = OxyColors.DeepSkyBlue,
-                        StrokeThickness = 1.5,
-                        MarkerType = MarkerType.None
-                    });
-                }
-                return _miniPlotModel;
-            }
+            get => _chartModel;
+            set { _chartModel = value; OnPropertyChanged(); }
         }
     }
 }
