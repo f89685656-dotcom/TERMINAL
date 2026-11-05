@@ -57,12 +57,18 @@ namespace TERMINAL.DeviceHub
                 if (dev.PortName == "I2C")
                 {
                     if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address))
+                    {
+                        dev.ParentInterface = i2cIface;
                         i2cIface.Devices.Add(dev);
+                    }
                 }
                 else
                 {
                     if (rs485Iface != null && !rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                    {
+                        dev.ParentInterface = rs485Iface;
                         rs485Iface.Devices.Add(dev);
+                    }
                 }
             });
 
@@ -70,9 +76,6 @@ namespace TERMINAL.DeviceHub
             _uiQueueTimer.Tick += UiQueueTimer_Tick;
             _uiQueueTimer.Start();
             UpdateStatusText();
-
-            // Отписываемся при выгрузке
-            Unloaded += (s, e) => _uiQueueTimer.Stop();
         }
 
         // ================= ОБРАБОТЧИКИ ИНТЕРФЕЙСА =================
@@ -89,62 +92,89 @@ namespace TERMINAL.DeviceHub
                     RefreshHistoryButton.Visibility = Visibility.Collapsed;
                     ClearHistoryButton.Visibility = Visibility.Collapsed;
 
-                    // Отвязываем модели истории
                     HistoryItemsControl.ItemsSource = null;
-
                     foreach (var iface in Interfaces)
                         foreach (var dev in iface.Devices)
                             foreach (var ch in dev.Channels)
                                 ch.ChartModel = null;
 
-                    // ★ ПРИНУДИТЕЛЬНО ПЕРЕРИСОВЫВАЕМ ГРАФИК РЕАЛЬНОГО ВРЕМЕНИ ★
-                    if (_plotModelRealTime != null)
-                    {
-                        _plotModelRealTime.InvalidatePlot(true);
-                    }
+                    if (_plotModelRealTime != null) _plotModelRealTime.InvalidatePlot(true);
                 }
                 else if (tabControl.SelectedIndex == 1) // "История"
                 {
                     RecordButton.Visibility = Visibility.Collapsed;
                     RefreshHistoryButton.Visibility = Visibility.Visible;
                     ClearHistoryButton.Visibility = Visibility.Visible;
-
                     UpdateHistoryList();
                 }
             }
         }
+
         private void ChannelRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is FrameworkElement element && element.DataContext is ChannelNode channel)
             {
+                // Сбрасываем выделение у всех
+                foreach (var iface in Interfaces)
+                    foreach (var dev in iface.Devices)
+                        foreach (var ch in dev.Channels)
+                            ch.IsVisibleOnPlot = false;
+
+                // Выделяем текущий
+                channel.IsVisibleOnPlot = true;
                 _selectedChannelForPlot = channel;
 
-                string title = channel.Name;
+                // ★ БЕРЕМ ДАННЫЕ ИЗ МОДЕЛИ ★
+                string channelName = channel.Name;
+
+                // Берем DisplayName (которое отображается в дереве) и убираем скобки для ID
+                // Например: "[COM9|0xC002]" -> "COM9|0xC002"
+                string devInfo = channel.ParentDevice?.DisplayName?.Replace("[", "").Replace("]", "") ?? "?";
+
+                string address = channel.ParentDevice?.Address ?? "?";
+
+                // Ищем интерфейс, если ParentInterface пуст
+                string ifaceName = channel.ParentInterface?.Name;
+                if (string.IsNullOrEmpty(ifaceName))
+                {
+                    var parentIface = Interfaces.FirstOrDefault(i => i.Devices.Contains(channel.ParentDevice));
+                    ifaceName = parentIface?.Name ?? "?";
+                }
+
+                // Для I2C заменяем "I2C|" на "FT260|" (чтобы было FT260|0xC002)
+                if (devInfo.StartsWith("I2C|"))
+                    devInfo = devInfo.Replace("I2C|", "FT260|");
+
+                // Формируем строку: "Давление[адрес: 006|COM9|0xC002|RS-485 (Ц1)]"
+                _plotModelRealTime.Title = $"{channelName}[адрес: {address}|{devInfo}|{ifaceName}]";
+
+                // Устанавливаем ось Y
                 string yAxisTitle = "Значение";
-                if (channel.Name.Contains("Частота давления")) yAxisTitle = "Fp, Гц";
-                else if (channel.Name.Contains("Частота температуры")) yAxisTitle = "Ft, Гц";
-                else if (channel.Name.Contains("Давление")) yAxisTitle = "P, кгс/см²";
-                else if (channel.Name.Contains("Температура процессора")) yAxisTitle = "t, °C";
-                else if (channel.Name.Contains("Температура")) yAxisTitle = "t, °C";
-                else if (channel.Name.Contains("Напряжение питания")) yAxisTitle = "U, В";
+                if (channelName.Contains("Частота давления")) yAxisTitle = "Fp, Гц";
+                else if (channelName.Contains("Частота температуры")) yAxisTitle = "Ft, Гц";
+                else if (channelName.Contains("Давление")) yAxisTitle = "P, кгс/см²";
+                else if (channelName.Contains("Температура процессора")) yAxisTitle = "t, °C";
+                else if (channelName.Contains("Температура")) yAxisTitle = "t, °C";
+                else if (channelName.Contains("Напряжение питания")) yAxisTitle = "U, В";
 
-                _plotModelRealTime.Title = title;
-
-                var yAxisRT = _plotModelRealTime.Axes.FirstOrDefault(a => a.Position == AxisPosition.Left);
-                if (yAxisRT != null) yAxisRT.Title = yAxisTitle;
+                var yAxisRT = _plotModelRealTime.Axes.FirstOrDefault(a => a.Position == AxisPosition.Left) as LinearAxis;
+                if (yAxisRT != null)
+                {
+                    yAxisRT.Title = yAxisTitle;
+                    yAxisRT.StringFormat = channel.IsInt32 ? "0" : "0.000";
+                }
 
                 _plotModelRealTime.InvalidatePlot(true);
                 UpdatePlotVisibility();
             }
         }
-
         private void MiniPlot_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 2 && sender is FrameworkElement element && element.DataContext is ChannelNode channel)
             {
                 var historyWindow = new Window
                 {
-                    Title = $"История: {channel.Name}",
+                    Title = $"История: {channel.FullName}",
                     Width = 900,
                     Height = 500,
                     WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -152,39 +182,24 @@ namespace TERMINAL.DeviceHub
                     Background = System.Windows.Media.Brushes.White
                 };
 
-                // Создаем независимую модель
                 var newPlotModel = new PlotModel
                 {
-                    Title = channel.Name,
+                    Title = channel.FullName,
                     Background = OxyColors.White,
                     DefaultFont = "Times New Roman",
                     TitleFontSize = 18,
                     TitleFontWeight = OxyPlot.FontWeights.Bold
                 };
 
-                newPlotModel.Axes.Add(new LinearAxis
-                {
-                    Position = AxisPosition.Left,
-                    MajorGridlineStyle = LineStyle.Solid,
-                    MajorGridlineColor = OxyColors.LightGray,
-                    Title = channel.Unit,
-                    FontSize = 12
-                });
+                string yAxisFormat = channel.IsInt32 ? "0" : "0.000";
 
-                newPlotModel.Axes.Add(new DateTimeAxis
-                {
-                    Position = AxisPosition.Bottom,
-                    StringFormat = "HH:mm:ss",
-                    MajorGridlineStyle = LineStyle.Solid,
-                    MajorGridlineColor = OxyColors.LightGray,
-                    Title = "Время",
-                    FontSize = 12
-                });
+                newPlotModel.Axes.Add(new LinearAxis { Position = AxisPosition.Left, MajorGridlineStyle = LineStyle.Solid, MajorGridlineColor = OxyColors.LightGray, Title = channel.Unit, FontSize = 12, StringFormat = yAxisFormat, AxisTitleDistance = 30 });
+                newPlotModel.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", MajorGridlineStyle = LineStyle.Solid, MajorGridlineColor = OxyColors.LightGray, Title = "Время", FontSize = 12, AxisTitleDistance = 15 });
 
-                var destSeries = new LineSeries { Color = OxyColors.DeepSkyBlue, StrokeThickness = 2.5 };
+                var destSeries = new LineSeries { Color = OxyColors.DeepSkyBlue, StrokeThickness = 2.5, TrackerFormatString = $"{channel.FullName}\nВремя: {{2:HH:mm:ss}}\nЗначение: {{4:{yAxisFormat}}}" };
                 foreach (var pt in channel.HistoryPoints) destSeries.Points.Add(pt);
-
                 newPlotModel.Series.Add(destSeries);
+
                 historyWindow.Content = new OxyPlot.Wpf.PlotView { Model = newPlotModel };
                 historyWindow.Show();
                 e.Handled = true;
@@ -199,9 +214,7 @@ namespace TERMINAL.DeviceHub
 
         private void ClearHistoryButton_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show("Вы уверены, что хотите удалить всю накопленную историю графиков?",
-                                         "Очистка истории", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
+            var result = MessageBox.Show("Вы уверены, что хотите удалить всю накопленную историю графиков?", "Очистка истории", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
             {
                 foreach (var iface in Interfaces)
@@ -209,7 +222,7 @@ namespace TERMINAL.DeviceHub
                         foreach (var ch in dev.Channels)
                             ch.HistoryPoints.Clear();
 
-                UpdateHistoryList(); // Пересоздаем графики
+                UpdateHistoryList();
                 ResetHistorySliders();
                 LogListView.Items.Add("[UI] История графиков полностью очищена.");
             }
@@ -282,7 +295,11 @@ namespace TERMINAL.DeviceHub
                 Interfaces.Clear();
                 if (_isRs485Enabled) Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
                 if (_isI2CEnabled) Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
-                _plotModelRealTime.Series.Clear(); _seriesMapRealTime.Clear(); _plotModelRealTime.InvalidatePlot(true); HistoryItemsControl.ItemsSource = null;
+
+                _plotModelRealTime.Series.Clear();
+                _seriesMapRealTime.Clear();
+                _plotModelRealTime.InvalidatePlot(true);
+                HistoryItemsControl.ItemsSource = null;
 
                 var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, _scanCts.Token);
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
@@ -294,15 +311,27 @@ namespace TERMINAL.DeviceHub
                 {
                     if (dev.PortName == "I2C")
                     {
-                        if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address)) { i2cIface.Devices.Add(dev); i2cIface.RecalculateSelection(); }
+                        if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address))
+                        {
+                            dev.ParentInterface = i2cIface;
+                            i2cIface.Devices.Add(dev);
+                            i2cIface.RecalculateSelection();
+                        }
                     }
                     else
                     {
-                        if (rs485Iface != null && !rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName)) { rs485Iface.Devices.Add(dev); rs485Iface.RecalculateSelection(); }
+                        if (rs485Iface != null && !rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                        {
+                            dev.ParentInterface = rs485Iface;
+                            rs485Iface.Devices.Add(dev);
+                            rs485Iface.RecalculateSelection();
+                        }
                     }
                 }
 
-                CreateSeriesForAllChannels(); UpdateHistoryList(); LogListView.Items.Add("Сканирование завершено.");
+                CreateSeriesForAllChannels();
+                UpdateHistoryList();
+                LogListView.Items.Add("Сканирование завершено.");
             }
             catch (OperationCanceledException) { LogListView.Items.Add("Поиск отменён."); }
             catch (Exception ex) { LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}"); }
@@ -335,12 +364,54 @@ namespace TERMINAL.DeviceHub
 
         private void InitializePlot()
         {
-            _plotModelRealTime = new PlotModel { Title = "Показания датчиков (Реальное время)", Background = OxyColors.White, TitleColor = OxyColors.Black, DefaultFont = "Times New Roman", TitleFont = "Times New Roman", TitleFontSize = 16, TitleFontWeight = OxyPlot.FontWeights.Bold, IsLegendVisible = false };
-            _plotModelRealTime.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", Title = "Время", MajorGridlineStyle = LineStyle.Solid, MinorGridlineStyle = LineStyle.Dot, MajorGridlineColor = OxyColors.LightGray, MinorGridlineColor = OxyColors.Gainsboro });
-            _plotModelRealTime.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Значение", MajorGridlineStyle = LineStyle.Solid, MinorGridlineStyle = LineStyle.Dot, MajorGridlineColor = OxyColors.LightGray, MinorGridlineColor = OxyColors.Gainsboro });
+            _plotModelRealTime = new PlotModel
+            {
+                Title = "Показания датчиков (Реальное время)",
+                Background = OxyColors.White,
+                TitleColor = OxyColors.Black,
+                DefaultFont = "Times New Roman",
+                TitleFont = "Times New Roman",
+                TitleFontSize = 16,
+                TitleFontWeight = OxyPlot.FontWeights.Bold,
+                IsLegendVisible = false,
+                // ★ УБИРАЕМ ЛИШНИЙ PADDING (оставляем только небольшой сверху для заголовка) ★
+                Padding = new OxyThickness(0, 5, 0, 0)
+            };
+
+            // ★ ОСЬ X ★
+            _plotModelRealTime.Axes.Add(new DateTimeAxis
+            {
+                Position = AxisPosition.Bottom,
+                StringFormat = "HH:mm:ss",
+                Title = "Время",
+                MajorGridlineStyle = LineStyle.Solid,
+                MinorGridlineStyle = LineStyle.Dot,
+                MajorGridlineColor = OxyColors.LightGray,
+                MinorGridlineColor = OxyColors.Gainsboro,
+                AxisTitleDistance = 5, // Прижали к цифрам
+                TitleFont = "Times New Roman",
+                TitleFontSize = 14,
+                TitleFontWeight = OxyPlot.FontWeights.Bold
+            });
+
+            // ★ ОСЬ Y ★
+            _plotModelRealTime.Axes.Add(new LinearAxis
+            {
+                Position = AxisPosition.Left,
+                Title = "Значение",
+                MajorGridlineStyle = LineStyle.Solid,
+                MinorGridlineStyle = LineStyle.Dot,
+                MajorGridlineColor = OxyColors.LightGray,
+                MinorGridlineColor = OxyColors.Gainsboro,
+                StringFormat = "0.000",
+                AxisTitleDistance = 10, // Оптимальное расстояние (не наезжает на цифры, но и не улетает)
+                TitleFont = "Times New Roman",
+                TitleFontSize = 14,
+                TitleFontWeight = OxyPlot.FontWeights.Bold
+            });
+
             PlotViewRealTime.Model = _plotModelRealTime;
         }
-
         private void CreateSeriesForAllChannels()
         {
             _plotModelRealTime.Series.Clear();
@@ -354,7 +425,7 @@ namespace TERMINAL.DeviceHub
                     {
                         ch.PropertyChanged -= Channel_PropertyChanged;
                         ch.PropertyChanged += Channel_PropertyChanged;
-                        var seriesRT = new LineSeries { Title = $"{dev.Name} - {ch.Name}", Color = colors[colorIndex % colors.Length], StrokeThickness = 2, IsVisible = false };
+                        var seriesRT = new LineSeries { Title = ch.FullName, Color = colors[colorIndex % colors.Length], StrokeThickness = 2, IsVisible = false };
                         _plotModelRealTime.Series.Add(seriesRT);
                         _seriesMapRealTime[ch] = seriesRT;
                         colorIndex++;
@@ -382,20 +453,25 @@ namespace TERMINAL.DeviceHub
 
         private void UpdateHistoryList()
         {
-            // 1. Жестко очищаем старый список, чтобы WPF уничтожил все старые PlotView
             HistoryItemsControl.ItemsSource = null;
-            HistoryItemsControl.Items.Refresh(); // Принудительно обновляем
 
-            // 2. Создаем абсолютно новые модели для всех каналов
             var visibleChannels = Interfaces.SelectMany(i => i.Devices).SelectMany(d => d.Channels).Where(c => c.IsSelected).ToList();
 
             foreach (var ch in visibleChannels)
             {
-                // Всегда создаем новую модель!
+                // ★ ГАРАНТИРУЕМ, ЧТО PARENTINTERFACE УСТАНОВЛЕН ★
+                if (ch.ParentInterface == null && ch.ParentDevice != null)
+                {
+                    var parentIface = Interfaces.FirstOrDefault(i => i.Devices.Contains(ch.ParentDevice));
+                    if (parentIface != null)
+                    {
+                        ch.ParentInterface = parentIface;
+                    }
+                }
+
                 ch.ChartModel = CreateMiniPlot(ch);
             }
 
-            // 3. Привязываем заново
             HistoryItemsControl.ItemsSource = visibleChannels;
             ResetHistorySliders();
         }
@@ -406,19 +482,54 @@ namespace TERMINAL.DeviceHub
                 Background = OxyColors.White,
                 PlotAreaBorderColor = OxyColors.LightGray,
                 IsLegendVisible = false,
-                Title = channel.Name,
+                Title = channel.FullName,
                 TitleFontSize = 12,
                 TitleFont = "Times New Roman",
                 TitleFontWeight = OxyPlot.FontWeights.Bold,
-                Padding = new OxyThickness(2)
+                // ★ УБИРАЕМ ЛИШНИЙ PADDING ★
+                Padding = new OxyThickness(0, 5, 0, 0)
             };
 
-            model.Axes.Add(new LinearAxis { Position = AxisPosition.Left, MajorGridlineStyle = LineStyle.Dot, MajorGridlineColor = OxyColors.Gainsboro, TextColor = OxyColors.Black, FontSize = 10 });
-            model.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", MajorGridlineStyle = LineStyle.Dot, MajorGridlineColor = OxyColors.Gainsboro, TextColor = OxyColors.Black, FontSize = 10 });
+            string yAxisFormat = channel.IsInt32 ? "0" : "0.000";
 
-            var series = new LineSeries { Color = OxyColors.DeepSkyBlue, StrokeThickness = 1.5, MarkerType = MarkerType.None };
+            // ★ ОСЬ Y ★
+            model.Axes.Add(new LinearAxis
+            {
+                Position = AxisPosition.Left,
+                MajorGridlineStyle = LineStyle.Dot,
+                MajorGridlineColor = OxyColors.Gainsboro,
+                TextColor = OxyColors.Black,
+                FontSize = 10,
+                StringFormat = yAxisFormat,
+                AxisTitleDistance = 10, // Оптимальное расстояние
+                TitleFont = "Times New Roman",
+                TitleFontSize = 12,
+                TitleFontWeight = OxyPlot.FontWeights.Bold
+            });
 
-            // Берем для отрисовки только последние 5000 точек
+            // ★ ОСЬ X ★
+            model.Axes.Add(new DateTimeAxis
+            {
+                Position = AxisPosition.Bottom,
+                StringFormat = "HH:mm:ss",
+                MajorGridlineStyle = LineStyle.Dot,
+                MajorGridlineColor = OxyColors.Gainsboro,
+                TextColor = OxyColors.Black,
+                FontSize = 10,
+                AxisTitleDistance = 5,
+                TitleFont = "Times New Roman",
+                TitleFontSize = 12,
+                TitleFontWeight = OxyPlot.FontWeights.Bold
+            });
+
+            var series = new LineSeries
+            {
+                Color = OxyColors.DeepSkyBlue,
+                StrokeThickness = 1.5,
+                MarkerType = MarkerType.None,
+                TrackerFormatString = $"{channel.FullName}\nВремя: {{2:HH:mm:ss}}\nЗначение: {{4:{yAxisFormat}}}"
+            };
+
             var pointsToDraw = channel.HistoryPoints.Count > 5000
                 ? channel.HistoryPoints.Skip(channel.HistoryPoints.Count - 5000)
                 : channel.HistoryPoints;
@@ -428,7 +539,6 @@ namespace TERMINAL.DeviceHub
             model.Series.Add(series);
             return model;
         }
-
         private void ResetHistorySliders()
         {
             if (!_isRecording) return;
@@ -445,24 +555,39 @@ namespace TERMINAL.DeviceHub
                 _historyMaxTime = DateTimeAxis.ToDouble(DateTime.Now);
             }
 
-            HistoryTimeSlider.Minimum = _historyMinTime;
-            HistoryTimeSlider.Maximum = _historyMaxTime;
-            HistoryTimeSlider.Value = _historyMinTime;
-            HistoryTimeSliderEnd.Minimum = _historyMinTime;
-            HistoryTimeSliderEnd.Maximum = _historyMaxTime;
-            HistoryTimeSliderEnd.Value = _historyMaxTime;
+            HistoryRangeSlider.Minimum = _historyMinTime;
+            HistoryRangeSlider.Maximum = _historyMaxTime;
+            HistoryRangeSlider.Value = _historyMinTime;
+
+            HistoryStartText.Text = $"С: {DateTimeAxis.ToDateTime(_historyMinTime):HH:mm:ss}";
+            HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(_historyMaxTime):HH:mm:ss}";
         }
 
-        private void HistoryTimeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void HistoryRangeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (HistoryTimeSliderEnd != null && HistoryTimeSliderEnd.Value <= e.NewValue) HistoryTimeSliderEnd.Value = e.NewValue + 1;
-            ApplyHistoryTimeRange(e.NewValue, HistoryTimeSliderEnd?.Value ?? _historyMaxTime);
-        }
+            if (HistoryItemsControl.ItemsSource == null) return;
 
-        private void HistoryTimeSliderEnd_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (HistoryTimeSlider != null && HistoryTimeSlider.Value >= e.NewValue) HistoryTimeSlider.Value = e.NewValue - 1;
-            ApplyHistoryTimeRange(HistoryTimeSlider?.Value ?? _historyMinTime, e.NewValue);
+            var allPoints = Interfaces.SelectMany(i => i.Devices).SelectMany(d => d.Channels).SelectMany(c => c.HistoryPoints).ToList();
+            if (!allPoints.Any()) return;
+
+            double minTime = allPoints.Min(p => p.X);
+            double maxTime = allPoints.Max(p => p.X);
+            double duration = maxTime - minTime;
+
+            if (duration <= 0) return;
+
+            double ratio = (e.NewValue - HistoryRangeSlider.Minimum) / (HistoryRangeSlider.Maximum - HistoryRangeSlider.Minimum);
+            if (double.IsNaN(ratio) || ratio < 0) ratio = 0;
+            if (ratio > 1) ratio = 1;
+
+            double windowDuration = duration * ratio;
+            double newMax = maxTime;
+            double newMin = newMax - windowDuration;
+
+            ApplyHistoryTimeRange(newMin, newMax);
+
+            HistoryStartText.Text = $"С: {DateTimeAxis.ToDateTime(newMin):HH:mm:ss}";
+            HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(newMax):HH:mm:ss}";
         }
 
         private void ApplyHistoryTimeRange(double minX, double maxX)
@@ -487,7 +612,6 @@ namespace TERMINAL.DeviceHub
 
         private void UiQueueTimer_Tick(object sender, EventArgs e)
         {
-            // 1. Обработка очередей
             while (_engine.UiUpdates.TryDequeue(out var action)) { try { action.Invoke(); } catch { } }
             while (_engine.LogQueue.TryDequeue(out var msg)) { LogListView.Items.Add(msg); LogListView.ScrollIntoView(msg); }
 
@@ -496,32 +620,26 @@ namespace TERMINAL.DeviceHub
             int intervalMs = (int)(IntervalSlider.Value * 1000);
             if (intervalMs < 50) intervalMs = 50;
 
-            // 2. Проверка интервала времени
             if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < intervalMs) return;
 
             _lastPlotUpdate = DateTime.Now;
             var now = DateTime.Now;
             bool needRedrawRT = false;
 
-            // 3. Сбор данных
             foreach (var iface in Interfaces)
-            {
                 foreach (var dev in iface.Devices)
-                {
                     foreach (var ch in dev.Channels)
                     {
                         if (!ch.IsSelected || !ch.IsValueSet || (now - ch.LastUpdateTime).TotalSeconds > 3) continue;
 
                         var newPoint = new DataPoint(DateTimeAxis.ToDouble(now), ch.Value);
 
-                        // Обновляем RealTime данные
                         if (_seriesMapRealTime.TryGetValue(ch, out var seriesRT))
                         {
                             seriesRT.Points.Add(newPoint);
                             needRedrawRT = true;
                         }
 
-                        // Обновляем History данные
                         ch.HistoryPoints.Add(newPoint);
 
                         if (ch.ChartModel != null)
@@ -534,43 +652,45 @@ namespace TERMINAL.DeviceHub
                             }
                         }
                     }
-                }
-            }
 
-            // 4. Обрезка RealTime (2 минуты)
             var cutoffRT = DateTimeAxis.ToDouble(now.AddMinutes(-2));
             foreach (var series in _seriesMapRealTime.Values)
                 while (series.Points.Count > 0 && series.Points[0].X < cutoffRT) series.Points.RemoveAt(0);
 
-            // ★ 5. ПРИНУДИТЕЛЬНАЯ ОТРИСОВКА ★
-            // Перерисовываем RealTime, если мы на этой вкладке ИЛИ если есть новые данные
-            if (needRedrawRT || MainTabControl.SelectedIndex == 0)
-            {
-                _plotModelRealTime.InvalidatePlot(true);
-            }
+            if (needRedrawRT || MainTabControl.SelectedIndex == 0) _plotModelRealTime.InvalidatePlot(true);
 
-            // 6. Отрисовка истории (только если мы на вкладке истории)
             if (MainTabControl.SelectedIndex == 1)
-            {
                 foreach (var ch in Interfaces.SelectMany(i => i.Devices).SelectMany(d => d.Channels))
-                {
                     ch.ChartModel?.InvalidatePlot(true);
-                }
-            }
 
-            // 7. Двигаем ползунок
-            if (HistoryTimeSliderEnd.Value >= _historyMaxTime - 1)
+            if (HistoryRangeSlider.Value >= HistoryRangeSlider.Maximum - 1)
             {
                 _historyMaxTime = DateTimeAxis.ToDouble(now);
-                HistoryTimeSliderEnd.Maximum = _historyMaxTime;
-                HistoryTimeSlider.Maximum = _historyMaxTime;
-                HistoryTimeSliderEnd.Value = _historyMaxTime;
-                ApplyHistoryTimeRange(HistoryTimeSlider.Value, _historyMaxTime);
+                HistoryRangeSlider.Maximum = _historyMaxTime;
+                HistoryRangeSlider.Value = _historyMaxTime;
+                HistoryRangeSlider_ValueChanged(null, new RoutedPropertyChangedEventArgs<double>(HistoryRangeSlider.Value, HistoryRangeSlider.Value));
             }
         }
+
         public void ClosePort() => _engine.ClosePort();
 
         public void SetPollingInterval(double seconds) { if (seconds >= IntervalSlider.Minimum && seconds <= IntervalSlider.Maximum) { IntervalSlider.Value = seconds; IntervalTextBox.Text = seconds.ToString("F2"); } }
         public double GetPollingInterval() => IntervalSlider.Value;
+
+        private void HistoryCard_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is Border border && border.DataContext is ChannelNode channel)
+            {
+                channel.IsHovered = true;
+            }
+        }
+
+        private void HistoryCard_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (sender is Border border && border.DataContext is ChannelNode channel)
+            {
+                channel.IsHovered = false;
+            }
+        }
     }
 }

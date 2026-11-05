@@ -86,14 +86,8 @@ namespace TERMINAL.DeviceHub
             SerialPort port = null;
             var sem = GetPortLock(portName);
 
-            try
-            {
-                await sem.WaitAsync(token);
-            }
-            catch (OperationCanceledException)
-            {
-                return foundDevices;
-            }
+            try { await sem.WaitAsync(token); }
+            catch (OperationCanceledException) { return foundDevices; }
 
             try
             {
@@ -127,13 +121,14 @@ namespace TERMINAL.DeviceHub
 
                         var newDev = new DeviceNode
                         {
-                            Address = address.ToString("D3"),
-                            PortName = portName
+                            Address = address.ToString("D3"), // "006"
+                            PortName = portName,
+                            // ★ ДОБАВЛЯЕМ ИМЯ ПОРТА В NAME ★
+                            Name = $"[{portName}|0x{id:X4}]"
                         };
 
                         if (id == 0xDB80 || id == 0xDB81)
                         {
-                            newDev.Name = $"[{portName}|DB80/DB81]";
                             int channelCount = 24;
                             if (id == 0xDB81) channelCount = 12;
 
@@ -151,7 +146,6 @@ namespace TERMINAL.DeviceHub
                         }
                         else if (id == 0xC002)
                         {
-                            newDev.Name = $"[{portName}|C002]";
                             newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
                             newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
                             newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
@@ -165,13 +159,11 @@ namespace TERMINAL.DeviceHub
                         {
                             if (address == 1)
                             {
-                                newDev.Name = $"[{portName}|DBA2]";
                                 newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
                                 newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x0006, Is32Bit = true });
                             }
                             else if (address == 2)
                             {
-                                newDev.Name = $"[{portName}|DBA0]";
                                 newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
                                 newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
                                 newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0004, Is32Bit = true });
@@ -179,7 +171,6 @@ namespace TERMINAL.DeviceHub
                             }
                             else
                             {
-                                newDev.Name = $"[{portName}|DBA{address}]";
                                 newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
                             }
                         }
@@ -221,31 +212,45 @@ namespace TERMINAL.DeviceHub
 
             return foundDevices;
         }
-
         private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface, CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
             FT260_I2CDotNet.FT260 i2cMaster = null;
 
-            try
-            {
-                await _i2cLock.WaitAsync(token);
-            }
-            catch (OperationCanceledException)
-            {
-                return foundDevices;
-            }
+            try { await _i2cLock.WaitAsync(token); }
+            catch (OperationCanceledException) { return foundDevices; }
 
             try
             {
                 LogQueue.Enqueue("[Scan] I2C: Поиск устройств...");
 
                 i2cMaster = new FT260_I2CDotNet.FT260();
+
+                // ★ ИСПРАВЛЕНА ЛОГИКА ОТКРЫТИЯ ★
                 if (!i2cMaster.TryOpen())
                 {
                     LogQueue.Enqueue("[Scan] I2C: Не удалось открыть FT260.");
                     return foundDevices;
                 }
+
+                // ★ ПЫТАЕМСЯ ПОЛУЧИТЬ ИМЯ ПЕРЕХОДНИКА (ЕСЛИ СВОЙСТВО ЕСТЬ) ★
+                string adapterName = "FT260";
+                try
+                {
+                    // Пробуем найти свойство DevicePath или Description
+                    var prop = i2cMaster.GetType().GetProperty("DevicePath")
+                               ?? i2cMaster.GetType().GetProperty("Description")
+                               ?? i2cMaster.GetType().GetProperty("SerialNumber");
+
+                    if (prop != null)
+                    {
+                        var val = prop.GetValue(i2cMaster)?.ToString();
+                        if (!string.IsNullOrEmpty(val)) adapterName = val;
+                    }
+                }
+                catch { }
+
+                LogQueue.Enqueue($"[Scan] I2C: Открыт переходник: {adapterName}");
 
                 int maxAddress = 0x77;
                 int startAddress = 0x08;
@@ -253,19 +258,31 @@ namespace TERMINAL.DeviceHub
                 for (byte address = 0x08; address <= 0x77; address++)
                 {
                     if (token.IsCancellationRequested) break;
-
                     ScanProgressChanged?.Invoke("I2C", address - startAddress + 1, maxAddress - startAddress + 1);
 
                     try
                     {
                         if (!i2cMaster.I2C_Detect(address)) continue;
-
                         LogQueue.Enqueue($"[Scan] I2C: ★ НАЙДЕНО ★ по адресу 0x{address:X2} (dec {address})");
 
+                        ushort deviceId = 0xFFFF;
+                        try
+                        {
+                            i2cMaster.Write(address, new byte[] { 0x80 }, Start: true, Stop: false);
+                            i2cMaster.Read(address, out byte[] idData, 2, RepStart: true, Stop: true);
+                            deviceId = (ushort)((idData[1] << 8) | idData[0]);
+                            LogQueue.Enqueue($"[Scan] I2C: Прочитан ID = 0x{deviceId:X4}");
+                        }
+                        catch (Exception ex)
+                        {
+                            LogQueue.Enqueue($"[Scan] I2C: Не удалось прочитать ID. Ошибка: {ex.Message}");
+                        }
+
+                        // ★ ИСПОЛЬЗУЕМ ИМЯ ПЕРЕХОДНИКА ИЗ СВОЙСТВА ★
                         var newDev = new DeviceNode
                         {
-                            Name = $"[I2C|0x{address:X2}]",
-                            Address = $"0x{address:X2}",
+                            Name = $"[{adapterName}|0x{deviceId:X4}]",
+                            Address = address.ToString("D3"),
                             PortName = "I2C"
                         };
 
@@ -296,7 +313,6 @@ namespace TERMINAL.DeviceHub
 
             return foundDevices;
         }
-
         public void StartPolling(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c, int intervalMs = 500)
         {
             Stop();
@@ -457,7 +473,6 @@ namespace TERMINAL.DeviceHub
             try
             {
                 LogQueue.Enqueue("[Poll] I2C: Опрос запущен...");
-
                 i2cMaster = new FT260_I2CDotNet.FT260();
                 if (!i2cMaster.TryOpen())
                 {
@@ -473,8 +488,8 @@ namespace TERMINAL.DeviceHub
 
                         try
                         {
-                            string addressStr = dev.Address.Replace("0x", "").Trim();
-                            byte address = byte.Parse(addressStr, System.Globalization.NumberStyles.HexNumber);
+                            // ★ ПАРСИМ АДРЕС КАК ДЕСЯТИЧНОЕ ЧИСЛО ★
+                            byte address = byte.Parse(dev.Address.Trim());
 
                             foreach (var ch in dev.Channels)
                             {
@@ -527,7 +542,6 @@ namespace TERMINAL.DeviceHub
                 LogQueue.Enqueue("[Poll] I2C: Опрос остановлен.");
             }
         }
-
         public void Stop()
         {
             var cts = _cts;

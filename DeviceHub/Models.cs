@@ -31,9 +31,20 @@ namespace TERMINAL.DeviceHub
             Devices.CollectionChanged += (s, e) =>
             {
                 if (e.NewItems != null)
-                    foreach (DeviceNode dev in e.NewItems) dev.SelectionChanged += Device_SelectionChanged;
+                {
+                    foreach (DeviceNode dev in e.NewItems)
+                    {
+                        dev.ParentInterface = this;
+                        dev.SelectionChanged += Device_SelectionChanged;
+                    }
+                }
                 if (e.OldItems != null)
-                    foreach (DeviceNode dev in e.OldItems) dev.SelectionChanged -= Device_SelectionChanged;
+                {
+                    foreach (DeviceNode dev in e.OldItems)
+                    {
+                        dev.SelectionChanged -= Device_SelectionChanged;
+                    }
+                }
             };
         }
 
@@ -81,9 +92,20 @@ namespace TERMINAL.DeviceHub
 
         public event EventHandler SelectionChanged;
 
+        public InterfaceNode ParentInterface { get; set; }
         public string PortName { get; set; }
         public string Name { get; set; }
         public string Address { get; set; }
+
+        // ★ СВОЙСТВО ДЛЯ ОТОБРАЖЕНИЯ В ДЕРЕВЕ ★
+        public string DisplayName
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Name)) return "";
+                return Name;
+            }
+        }
 
         public ObservableCollection<ChannelNode> Channels { get; set; } = new ObservableCollection<ChannelNode>();
 
@@ -92,9 +114,21 @@ namespace TERMINAL.DeviceHub
             Channels.CollectionChanged += (s, e) =>
             {
                 if (e.NewItems != null)
-                    foreach (ChannelNode ch in e.NewItems) ch.PropertyChanged += Channel_PropertyChanged;
+                {
+                    foreach (ChannelNode ch in e.NewItems)
+                    {
+                        ch.ParentDevice = this;
+                        ch.ParentInterface = this.ParentInterface; // Прокидываем интерфейс
+                        ch.PropertyChanged += Channel_PropertyChanged;
+                    }
+                }
                 if (e.OldItems != null)
-                    foreach (ChannelNode ch in e.OldItems) ch.PropertyChanged -= Channel_PropertyChanged;
+                {
+                    foreach (ChannelNode ch in e.OldItems)
+                    {
+                        ch.PropertyChanged -= Channel_PropertyChanged;
+                    }
+                }
             };
         }
 
@@ -205,8 +239,27 @@ namespace TERMINAL.DeviceHub
         private bool _isVisibleOnPlot = false;
         private bool _isValueSet = false;
         private DateTime _lastUpdateTime = DateTime.MinValue;
+        private bool _isHovered = false;
 
+        public DeviceNode ParentDevice { get; set; }
+        public InterfaceNode ParentInterface { get; set; }
         public string Name { get; set; }
+
+        // ★ ФОРМИРУЕМ ПОЛНЫЙ ПУТЬ С ПРАВИЛЬНЫМ ОТОБРАЖЕНИЕМ ★
+        public string FullName
+        {
+            get
+            {
+                if (ParentDevice == null) return Name;
+
+                string address = ParentDevice.Address ?? "?";
+                string port = ParentDevice.PortName ?? "?";
+                string iface = ParentInterface?.Name ?? "?";
+                string devId = ParentDevice.Name?.Replace("[", "").Replace("]", "") ?? "?";
+
+                return $"{Name}|адрес: {address}|{devId}|{iface}";
+            }
+        }
         public string Unit
         {
             get => _unit;
@@ -245,6 +298,12 @@ namespace TERMINAL.DeviceHub
             set { if (_isVisibleOnPlot != value) { _isVisibleOnPlot = value; OnPropertyChanged(); } }
         }
 
+        public bool IsHovered
+        {
+            get => _isHovered;
+            set { if (_isHovered != value) { _isHovered = value; OnPropertyChanged(); } }
+        }
+
         public bool Is32Bit { get; set; } = true;
         public bool IsInt32 { get; set; } = false;
         public bool IsDouble { get; set; } = false;
@@ -261,10 +320,8 @@ namespace TERMINAL.DeviceHub
             OnPropertyChanged(nameof(IsValueSet));
         }
 
-        // ★ ХРАНИМ ТОЧКИ ★
         public List<DataPoint> HistoryPoints { get; set; } = new List<DataPoint>();
 
-        // ★ СВОЙСТВО ДЛЯ ПРИВЯЗКИ (вместо Tag) ★
         private PlotModel _chartModel;
         public PlotModel ChartModel
         {
