@@ -1,8 +1,12 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Data;
+using OxyPlot;
+using OxyPlot.Axes;
+using OxyPlot.Series;
 
 namespace TERMINAL.DeviceHub
 {
@@ -13,14 +17,30 @@ namespace TERMINAL.DeviceHub
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
-    // ★ ИНТЕРФЕЙС (RS-485, I2C) ★
     public class InterfaceNode : ViewModelBase
     {
         private bool _isExpanded = true;
-        private bool _isSelected = true;
+        private bool? _isSelected = true;
 
         public string Name { get; set; }
         public ObservableCollection<DeviceNode> Devices { get; set; } = new ObservableCollection<DeviceNode>();
+
+        public InterfaceNode()
+        {
+            Devices.CollectionChanged += (s, e) =>
+            {
+                if (e.NewItems != null)
+                {
+                    foreach (DeviceNode dev in e.NewItems) dev.SelectionChanged += Device_SelectionChanged;
+                }
+                if (e.OldItems != null)
+                {
+                    foreach (DeviceNode dev in e.OldItems) dev.SelectionChanged -= Device_SelectionChanged;
+                }
+            };
+        }
+
+        private void Device_SelectionChanged(object sender, EventArgs e) => RecalculateSelection();
 
         public bool IsExpanded
         {
@@ -28,7 +48,7 @@ namespace TERMINAL.DeviceHub
             set { _isExpanded = value; OnPropertyChanged(); }
         }
 
-        public bool IsSelected
+        public bool? IsSelected
         {
             get => _isSelected;
             set
@@ -37,24 +57,34 @@ namespace TERMINAL.DeviceHub
                 {
                     _isSelected = value;
                     OnPropertyChanged();
-
-                    // ★ КАСКАДНОЕ ОБНОВЛЕНИЕ УСТРОЙСТВ (БЕЗ ЛИШНИХ УВЕДОМЛЕНИЙ) ★
-                    foreach (var dev in Devices)
+                    if (value.HasValue)
                     {
-                        dev.SetSelectedSilent(value);
+                        foreach (var dev in Devices) dev.SetSelectedSilent(value.Value);
                     }
                 }
             }
         }
+
+        public void RecalculateSelection()
+        {
+            if (Devices.Count == 0) return;
+            bool allSelected = Devices.All(d => d.IsSelected == true);
+            bool anySelected = Devices.Any(d => d.IsSelected != false);
+
+            if (allSelected) IsSelected = true;
+            else if (anySelected) IsSelected = null;
+            else IsSelected = false;
+        }
     }
 
-    // ★ УСТРОЙСТВО (C002, DBA0, DBA2, DB80, DB81, I2C) ★
     public class DeviceNode : ViewModelBase
     {
         private bool _isExpanded = true;
-        private bool _isSelected = true;
+        private bool? _isSelected = true;
         private bool _showOnlySelected = false;
         private bool _suppressNotify = false;
+
+        public event EventHandler SelectionChanged;
 
         public string PortName { get; set; }
         public string Name { get; set; }
@@ -68,17 +98,11 @@ namespace TERMINAL.DeviceHub
             {
                 if (e.NewItems != null)
                 {
-                    foreach (ChannelNode ch in e.NewItems)
-                    {
-                        ch.PropertyChanged += Channel_PropertyChanged;
-                    }
+                    foreach (ChannelNode ch in e.NewItems) ch.PropertyChanged += Channel_PropertyChanged;
                 }
                 if (e.OldItems != null)
                 {
-                    foreach (ChannelNode ch in e.OldItems)
-                    {
-                        ch.PropertyChanged -= Channel_PropertyChanged;
-                    }
+                    foreach (ChannelNode ch in e.OldItems) ch.PropertyChanged -= Channel_PropertyChanged;
                 }
             };
         }
@@ -90,6 +114,7 @@ namespace TERMINAL.DeviceHub
                 if (!_suppressNotify)
                 {
                     ChannelsView.Refresh();
+                    RecalculateSelection();
                 }
             }
         }
@@ -112,8 +137,7 @@ namespace TERMINAL.DeviceHub
         {
             if (item is ChannelNode channel)
             {
-                if (ShowOnlySelected)
-                    return channel.IsSelected;
+                if (ShowOnlySelected) return channel.IsSelected;
                 return true;
             }
             return false;
@@ -122,12 +146,7 @@ namespace TERMINAL.DeviceHub
         public bool ShowOnlySelected
         {
             get => _showOnlySelected;
-            set
-            {
-                _showOnlySelected = value;
-                OnPropertyChanged();
-                ChannelsView.Refresh();
-            }
+            set { _showOnlySelected = value; OnPropertyChanged(); ChannelsView.Refresh(); }
         }
 
         public bool IsExpanded
@@ -136,7 +155,7 @@ namespace TERMINAL.DeviceHub
             set { _isExpanded = value; OnPropertyChanged(); }
         }
 
-        public bool IsSelected
+        public bool? IsSelected
         {
             get => _isSelected;
             set
@@ -145,39 +164,48 @@ namespace TERMINAL.DeviceHub
                 {
                     _isSelected = value;
                     OnPropertyChanged();
-
-                    // ★ МАССОВОЕ ОБНОВЛЕНИЕ КАНАЛОВ (БЕЗ УВЕДОМЛЕНИЙ) ★
-                    _suppressNotify = true;
-                    foreach (var ch in Channels)
+                    if (value.HasValue)
                     {
-                        ch.IsSelected = value;
+                        _suppressNotify = true;
+                        foreach (var ch in Channels) ch.IsSelected = value.Value;
+                        _suppressNotify = false;
+                        ChannelsView.Refresh();
+                        SelectionChanged?.Invoke(this, EventArgs.Empty);
                     }
-                    _suppressNotify = false;
-
-                    // ★ ОБНОВЛЯЕМ UI ОДИН РАЗ ПОСЛЕ ЦИКЛА ★
-                    ChannelsView.Refresh();
                 }
             }
         }
 
-        // ★ МЕТОД ДЛЯ ТИХОГО ОБНОВЛЕНИЯ (БЕЗ UI) ★
         public void SetSelectedSilent(bool value)
         {
-            _isSelected = value;
-            OnPropertyChanged(); // Обновляем галочку устройства
-
-            _suppressNotify = true;
-            foreach (var ch in Channels)
+            if (_isSelected != value)
             {
-                ch.IsSelected = value;
+                _isSelected = value;
+                OnPropertyChanged(nameof(IsSelected));
             }
+            _suppressNotify = true;
+            foreach (var ch in Channels) ch.IsSelected = value;
             _suppressNotify = false;
-
             ChannelsView.Refresh();
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void RecalculateSelection()
+        {
+            if (Channels.Count == 0) return;
+            bool allSelected = Channels.All(c => c.IsSelected);
+            bool anySelected = Channels.Any(c => c.IsSelected);
+
+            bool? newState = allSelected ? true : (anySelected ? (bool?)null : false);
+            if (_isSelected != newState)
+            {
+                _isSelected = newState;
+                OnPropertyChanged(nameof(IsSelected));
+                SelectionChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 
-    // ★ КАНАЛ (Давление, Температура, Частоты) ★
     public class ChannelNode : ViewModelBase
     {
         private bool _isSelected = true;
@@ -185,6 +213,7 @@ namespace TERMINAL.DeviceHub
         private string _unit;
         private bool _isVisibleOnPlot = false;
         private bool _isValueSet = false;
+        private DateTime _lastUpdateTime = DateTime.MinValue;
 
         public string Name { get; set; }
 
@@ -199,14 +228,14 @@ namespace TERMINAL.DeviceHub
             get => _value;
             set
             {
-                if (Math.Abs(_value - value) > 0.0001)
-                {
-                    _value = value;
-                    _isValueSet = true;
-                    OnPropertyChanged();
-                }
+                _value = value;
+                _isValueSet = true;
+                _lastUpdateTime = DateTime.Now;
+                OnPropertyChanged();
             }
         }
+
+        public DateTime LastUpdateTime => _lastUpdateTime;
 
         public bool IsValueSet
         {
@@ -223,24 +252,76 @@ namespace TERMINAL.DeviceHub
         public bool IsVisibleOnPlot
         {
             get => _isVisibleOnPlot;
-            set
-            {
-                if (_isVisibleOnPlot != value)
-                {
-                    _isVisibleOnPlot = value;
-                    OnPropertyChanged();
-                }
-            }
+            set { if (_isVisibleOnPlot != value) { _isVisibleOnPlot = value; OnPropertyChanged(); } }
         }
 
         public bool Is32Bit { get; set; } = true;
         public bool IsInt32 { get; set; } = false;
         public bool IsDouble { get; set; } = false;
         public double LastValue { get; set; }
-
         public ushort RegisterAddress { get; set; }
         public double Multiplier { get; set; } = 1.0;
 
         public event Action<ChannelNode, double> ValueUpdated;
+
+        public void ResetValueState()
+        {
+            _isValueSet = false;
+            _lastUpdateTime = DateTime.MinValue;
+            OnPropertyChanged(nameof(IsValueSet));
+        }
+
+        // ★ ДОБАВЛЕНО: Персональный мини-график для истории ★
+        private PlotModel _miniPlotModel;
+        public PlotModel MiniPlotModel
+        {
+            get
+            {
+                if (_miniPlotModel == null)
+                {
+                    _miniPlotModel = new PlotModel
+                    {
+                        Background = OxyColors.White,
+                        PlotAreaBorderColor = OxyColors.LightGray,
+                        IsLegendVisible = false,
+                        Title = Name,
+                        TitleFontSize = 12,
+                        TitleFont = "Times New Roman",
+                        TitleFontWeight = OxyPlot.FontWeights.Bold,
+                        Padding = new OxyThickness(2)
+                    };
+
+                    _miniPlotModel.Axes.Add(new LinearAxis
+                    {
+                        Position = AxisPosition.Left,
+                        MajorGridlineStyle = LineStyle.Dot,
+                        MinorGridlineStyle = LineStyle.None,
+                        MajorGridlineColor = OxyColors.Gainsboro,
+                        TextColor = OxyColors.Black,
+                        FontSize = 10,
+                        Font = "Times New Roman"
+                    });
+
+                    _miniPlotModel.Axes.Add(new DateTimeAxis
+                    {
+                        Position = AxisPosition.Bottom,
+                        StringFormat = "HH:mm:ss",
+                        MajorGridlineStyle = LineStyle.Dot,
+                        MajorGridlineColor = OxyColors.Gainsboro,
+                        TextColor = OxyColors.Black,
+                        FontSize = 10,
+                        Font = "Times New Roman"
+                    });
+
+                    _miniPlotModel.Series.Add(new LineSeries
+                    {
+                        Color = OxyColors.DeepSkyBlue,
+                        StrokeThickness = 1.5,
+                        MarkerType = MarkerType.None
+                    });
+                }
+                return _miniPlotModel;
+            }
+        }
     }
 }

@@ -23,11 +23,22 @@ namespace TERMINAL.DeviceHub
         public event Action<string, int, int> ScanProgressChanged;
         public event Action<DeviceNode> DeviceFound;
 
-        private SerialPort _port;
-        private IModbusMaster _master;
-        private bool _isPortOpen = false;
+        private readonly Dictionary<string, SemaphoreSlim> _portLocks = new Dictionary<string, SemaphoreSlim>();
+        private readonly object _portLocksSync = new object();
+        private static readonly SemaphoreSlim _i2cLock = new SemaphoreSlim(1, 1);
 
-        // --- МЕТОД СКАНИРОВАНИЯ ---
+        private SemaphoreSlim GetPortLock(string portName)
+        {
+            lock (_portLocksSync)
+            {
+                if (!_portLocks.TryGetValue(portName, out var sem))
+                {
+                    sem = new SemaphoreSlim(1, 1);
+                    _portLocks[portName] = sem;
+                }
+                return sem;
+            }
+        }
 
         public async Task<List<DeviceNode>> ScanAllAsync(
             ObservableCollection<InterfaceNode> interfaces,
@@ -41,15 +52,16 @@ namespace TERMINAL.DeviceHub
 
             foreach (var iface in interfaces)
             {
-                if (!iface.IsSelected) continue;
+                if (iface.IsSelected == false) continue;
 
                 if (iface.Name.Contains("RS-485") && isRs485)
                 {
                     foreach (var setting in rs485Settings)
                     {
+                        var localSetting = setting;
                         scanTasks.Add(Task.Run(async () =>
                         {
-                            var devices = await ScanModbusAsync(iface, setting.PortName, setting.BaudRate, token);
+                            var devices = await ScanModbusAsync(iface, localSetting.PortName, localSetting.BaudRate, token);
                             lock (foundDevices) { foundDevices.AddRange(devices); }
                         }, token));
                     }
@@ -72,6 +84,16 @@ namespace TERMINAL.DeviceHub
         {
             var foundDevices = new List<DeviceNode>();
             SerialPort port = null;
+            var sem = GetPortLock(portName);
+
+            try
+            {
+                await sem.WaitAsync(token);
+            }
+            catch (OperationCanceledException)
+            {
+                return foundDevices;
+            }
 
             try
             {
@@ -99,7 +121,6 @@ namespace TERMINAL.DeviceHub
 
                     try
                     {
-                        // ★ СНАЧАЛА ЧИТАЕМ ID (Holding 0x00) ★
                         ushort[] idRegs = master.ReadHoldingRegisters(address, 0x00, 1);
                         ushort id = idRegs[0];
                         LogQueue.Enqueue($"[Scan] {portName}: Адрес {address}, ID = 0x{id:X4} (за {sw.ElapsedMilliseconds} мс)");
@@ -110,10 +131,8 @@ namespace TERMINAL.DeviceHub
                             PortName = portName
                         };
 
-                        // ★ ОПРЕДЕЛЯЕМ ТИП ПО ID ★
                         if (id == 0xDB80 || id == 0xDB81)
                         {
-                            // ★ DB80/DB81 ★
                             newDev.Name = $"[{portName}|DB80/DB81]";
                             int channelCount = 24;
                             if (id == 0xDB81) channelCount = 12;
@@ -132,7 +151,6 @@ namespace TERMINAL.DeviceHub
                         }
                         else if (id == 0xC002)
                         {
-                            // ★ C002 ★
                             newDev.Name = $"[{portName}|C002]";
                             newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
                             newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0002, Is32Bit = true });
@@ -145,7 +163,6 @@ namespace TERMINAL.DeviceHub
                         }
                         else if (id == 0xDBA0 || id == 0xDBA2)
                         {
-                            // ★ DBA0/DBA2 ★
                             if (address == 1)
                             {
                                 newDev.Name = $"[{portName}|DBA2]";
@@ -199,14 +216,25 @@ namespace TERMINAL.DeviceHub
                     port.Close();
                 }
                 port?.Dispose();
+                sem.Release();
             }
 
             return foundDevices;
         }
+
         private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface, CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
             FT260_I2CDotNet.FT260 i2cMaster = null;
+
+            try
+            {
+                await _i2cLock.WaitAsync(token);
+            }
+            catch (OperationCanceledException)
+            {
+                return foundDevices;
+            }
 
             try
             {
@@ -262,32 +290,35 @@ namespace TERMINAL.DeviceHub
             }
             finally
             {
-                // ★ ВСЕГДА ЗАКРЫВАЕМ FT260 ★
                 i2cMaster?.Close();
+                _i2cLock.Release();
             }
 
             return foundDevices;
-        }        // --- МЕТОД ОПРОСА ---
+        }
 
         public void StartPolling(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c, int intervalMs = 500)
         {
             Stop();
-            Thread.Sleep(500);
+            if (intervalMs < 50) intervalMs = 50;
+
             _cts = new CancellationTokenSource();
             _pollingTasks.Clear();
 
             foreach (var iface in interfaces)
             {
-                if (!iface.IsSelected) continue;
+                if (iface.IsSelected == false) continue;
 
                 if (iface.Name.Contains("RS-485") && isRs485)
                 {
                     foreach (var setting in rs485Settings)
                     {
-                        var devices = iface.Devices.Where(d => d.IsSelected).ToList();
+                        var localSetting = setting;
+                        // Выбираем устройства, у которых галочка не снята (true или null)
+                        var devices = iface.Devices.Where(d => d.IsSelected != false).ToList();
                         if (devices.Any())
                         {
-                            _pollingTasks.Add(Task.Run(() => PollModbusLoop(setting.PortName, setting.BaudRate, devices, intervalMs, _cts.Token)));
+                            _pollingTasks.Add(Task.Run(() => PollModbusLoop(localSetting.PortName, localSetting.BaudRate, devices, intervalMs, _cts.Token)));
                         }
                     }
                 }
@@ -296,19 +327,25 @@ namespace TERMINAL.DeviceHub
             if (isI2c)
             {
                 var i2cIface = interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
-                if (i2cIface != null)
+                if (i2cIface != null && i2cIface.IsSelected != false)
                 {
-                    var i2cDevices = i2cIface.Devices.Where(d => d.IsSelected).ToList();
+                    var i2cDevices = i2cIface.Devices.Where(d => d.IsSelected != false).ToList();
                     if (i2cDevices.Any())
                     {
                         _pollingTasks.Add(Task.Run(() => PollI2CLoop(i2cDevices, intervalMs, _cts.Token)));
                     }
                 }
             }
+
+            LogQueue.Enqueue($"[Poll] Запущено задач опроса: {_pollingTasks.Count}");
         }
 
         private async Task PollModbusLoop(string portName, int baudRate, List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
+            var sem = GetPortLock(portName);
+            try { await sem.WaitAsync(token); }
+            catch (OperationCanceledException) { return; }
+
             SerialPort port = null;
             IModbusMaster master = null;
 
@@ -350,7 +387,7 @@ namespace TERMINAL.DeviceHub
                                         }
                                         double val = BitConverter.ToDouble(bytes, 0);
                                         ch.LastValue = val;
-                                        ch.IsValueSet = true; // ★ ВСЕГДА true ★
+                                        ch.Value = val;
                                     }
                                     else if (ch.IsInt32)
                                     {
@@ -358,7 +395,7 @@ namespace TERMINAL.DeviceHub
                                         int raw = (regs[1] << 16) | regs[0];
                                         double val = Math.Round((double)raw);
                                         ch.LastValue = val;
-                                        ch.IsValueSet = true; // ★ ВСЕГДА true ★
+                                        ch.Value = val;
                                     }
                                     else
                                     {
@@ -370,7 +407,7 @@ namespace TERMINAL.DeviceHub
                                         bytes[3] = (byte)(regs[1] >> 8);
                                         float val = BitConverter.ToSingle(bytes, 0);
                                         ch.LastValue = val;
-                                        ch.IsValueSet = true; // ★ ВСЕГДА true ★
+                                        ch.Value = val;
                                     }
                                 }
                                 catch (Exception ex)
@@ -388,9 +425,11 @@ namespace TERMINAL.DeviceHub
                         }
                     }
 
-                    await Task.Delay(intervalMs, token);
+                    try { await Task.Delay(intervalMs, token); }
+                    catch (OperationCanceledException) { break; }
                 }
             }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 LogQueue.Enqueue($"[Poll] {portName}: Ошибка: {ex.Message}");
@@ -404,12 +443,16 @@ namespace TERMINAL.DeviceHub
                     port.Close();
                 }
                 port?.Dispose();
-                LogQueue.Enqueue($"[Poll] {portName}: Опрос остановлен.");
+                sem.Release();
+                LogQueue.Enqueue($"[Poll] {portName}: Опрос остановлен, порт освобождён.");
             }
         }
+
         private async Task PollI2CLoop(List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
             FT260_I2CDotNet.FT260 i2cMaster = null;
+            try { await _i2cLock.WaitAsync(token); }
+            catch (OperationCanceledException) { return; }
 
             try
             {
@@ -445,7 +488,7 @@ namespace TERMINAL.DeviceHub
                                         i2cMaster.Read(address, out byte[] data, 8, RepStart: true, Stop: true);
                                         double val = BitConverter.ToDouble(data, 0);
                                         ch.LastValue = val;
-                                        ch.IsValueSet = true; // ★ ВСЕГДА true ★
+                                        ch.Value = val;
                                     }
                                     else
                                     {
@@ -459,23 +502,20 @@ namespace TERMINAL.DeviceHub
                                         bytes[3] = data[3];
                                         float val = BitConverter.ToSingle(bytes, 0);
                                         ch.LastValue = val;
-                                        ch.IsValueSet = true; // ★ ВСЕГДА true ★
+                                        ch.Value = val;
                                     }
                                 }
-                                catch
-                                {
-                                    // Игнорируем ошибки чтения
-                                }
+                                catch { }
                             }
                         }
-                        catch
-                        {
-                            // Игнорируем ошибки устройства
-                        }
+                        catch { }
                     }
-                    await Task.Delay(intervalMs, token);
+
+                    try { await Task.Delay(intervalMs, token); }
+                    catch (OperationCanceledException) { break; }
                 }
             }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 LogQueue.Enqueue($"[Poll] I2C: Ошибка: {ex.Message}");
@@ -483,35 +523,36 @@ namespace TERMINAL.DeviceHub
             finally
             {
                 i2cMaster?.Close();
+                _i2cLock.Release();
                 LogQueue.Enqueue("[Poll] I2C: Опрос остановлен.");
             }
         }
+
         public void Stop()
         {
-            if (_cts != null)
+            var cts = _cts;
+            if (cts == null)
             {
-                _cts.Cancel();
-                _cts.Dispose();
-                _cts = null;
+                _pollingTasks.Clear();
+                return;
             }
+
+            try { cts.Cancel(); } catch { }
+            _cts = null;
+
+            var tasks = _pollingTasks.ToArray();
             _pollingTasks.Clear();
-            // ★ УБРАЛИ Task.WaitAll и Thread.Sleep ★
+            if (tasks.Length > 0)
+            {
+                try { Task.WaitAll(tasks, 5000); }
+                catch (AggregateException) { }
+            }
+
+            try { cts.Dispose(); } catch { }
         }
 
         public void ClosePort()
         {
-            if (_port != null)
-            {
-                _master?.Dispose();
-                if (_port.IsOpen)
-                {
-                    try { _port.DiscardInBuffer(); _port.DiscardOutBuffer(); } catch { }
-                    _port.Close();
-                }
-                _port.Dispose();
-                _port = null;
-                _isPortOpen = false;
-            }
         }
     }
 }

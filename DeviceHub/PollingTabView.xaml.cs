@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,12 +18,16 @@ namespace TERMINAL.DeviceHub
     {
         private PollingEngine _engine = new PollingEngine();
         private DispatcherTimer _uiQueueTimer;
-        private PlotModel _plotModel;
-        private Dictionary<ChannelNode, LineSeries> _seriesMap = new Dictionary<ChannelNode, LineSeries>();
+
+        private PlotModel _plotModelRealTime;
+        private Dictionary<ChannelNode, LineSeries> _seriesMapRealTime = new Dictionary<ChannelNode, LineSeries>();
         private DateTime _lastPlotUpdate = DateTime.MinValue;
+
         public ObservableCollection<InterfaceNode> Interfaces { get; set; } = new ObservableCollection<InterfaceNode>();
+
         private bool _isScanning = false;
         private CancellationTokenSource _scanCts;
+
         private bool _isRs485Enabled = true;
         private List<PortSetting> _rs485Ports = new List<PortSetting>
         {
@@ -31,8 +36,6 @@ namespace TERMINAL.DeviceHub
         private bool _isI2CEnabled = true;
 
         private bool _isRecording = false;
-
-        // ★ Текущий выбранный канал для графика ★
         private ChannelNode _selectedChannelForPlot = null;
 
         public PollingTabView()
@@ -92,25 +95,15 @@ namespace TERMINAL.DeviceHub
             _uiQueueTimer.Start();
 
             UpdateStatusText();
-        }        // ★ ОБРАБОТЧИК КЛИКА ПО КАНАЛУ В ДЕРЕВЕ (ДЛЯ ВЫБОРА ГРАФИКА) ★
+        }
+
         private void ChannelRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is FrameworkElement element && element.DataContext is ChannelNode channel)
             {
-                // Снимаем выделение со всех каналов
-                foreach (var iface in Interfaces)
-                    foreach (var dev in iface.Devices)
-                        foreach (var ch in dev.Channels)
-                            ch.IsVisibleOnPlot = false;
-
-                // Выделяем текущий
-                channel.IsVisibleOnPlot = true;
                 _selectedChannelForPlot = channel;
 
-                // ★ МЕНЯЕМ ЗАГОЛОВОК ГРАФИКА ★
-                _plotModel.Title = channel.Name;
-
-                // ★ УМНАЯ ПОДПИСЬ ОСИ Y ★
+                string title = channel.Name;
                 string yAxisTitle = "Значение";
                 if (channel.Name.Contains("Частота давления")) yAxisTitle = "Fp, Гц";
                 else if (channel.Name.Contains("Частота температуры")) yAxisTitle = "Ft, Гц";
@@ -119,32 +112,46 @@ namespace TERMINAL.DeviceHub
                 else if (channel.Name.Contains("Температура")) yAxisTitle = "t, °C";
                 else if (channel.Name.Contains("Напряжение питания")) yAxisTitle = "U, В";
 
-                var yAxis = _plotModel.Axes.FirstOrDefault(a => a.Position == AxisPosition.Left);
-                if (yAxis != null)
-                    yAxis.Title = yAxisTitle;
+                _plotModelRealTime.Title = title;
 
-                _plotModel.InvalidatePlot(true);
+                var yAxisRT = _plotModelRealTime.Axes.FirstOrDefault(a => a.Position == AxisPosition.Left);
+                if (yAxisRT != null) yAxisRT.Title = yAxisTitle;
 
-                // Обновляем видимость серий
+                _plotModelRealTime.InvalidatePlot(true);
+
                 UpdatePlotVisibility();
             }
-        }        // ★ ОБНОВЛЕНИЕ ВИДИМОСТИ СЕРИЙ НА ГРАФИКЕ ★
+        }
+
         private void UpdatePlotVisibility()
         {
-            foreach (var kvp in _seriesMap)
+            foreach (var kvp in _seriesMapRealTime)
             {
-                var channel = kvp.Key;
-                var series = kvp.Value;
-                series.IsVisible = (channel == _selectedChannelForPlot);
+                kvp.Value.IsVisible = (kvp.Key == _selectedChannelForPlot);
             }
-            _plotModel.InvalidatePlot(true);
+            _plotModelRealTime.InvalidatePlot(true);
+
+            // Обновляем список истории (скрываем/показываем графики)
+            UpdateHistoryList();
+        }
+
+        // ★ ОБНОВЛЕНИЕ СПИСКА ИСТОРИИ ★
+        private void UpdateHistoryList()
+        {
+            var allChannels = Interfaces.SelectMany(i => i.Devices).SelectMany(d => d.Channels).ToList();
+
+            // Берем только те каналы, которые отмечены галочкой
+            var visibleChannels = allChannels.Where(c => c.IsSelected).ToList();
+
+            // Привязываем к ItemsControl (который должен быть в XAML)
+            HistoryItemsControl.ItemsSource = visibleChannels;
         }
 
         private void RecordButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_isRecording)
             {
-                if (!Interfaces.Any(i => i.Devices.Any(d => d.IsSelected)))
+                if (!Interfaces.Any(i => i.Devices.Any(d => d.IsSelected != false)))
                 {
                     LogListView.Items.Add("Нет выбранных устройств для опроса. Сначала выполните поиск.");
                     return;
@@ -165,16 +172,17 @@ namespace TERMINAL.DeviceHub
                 {
                     foreach (var dev in iface.Devices)
                     {
-                        foreach (var ch in dev.Channels)
-                        {
-                            ch.IsValueSet = false;
-                        }
+                        foreach (var ch in dev.Channels) ch.ResetValueState();
                     }
                 }
 
                 int intervalMs = (int)(IntervalSlider.Value * 1000);
+                if (intervalMs < 50) intervalMs = 50;
+
                 _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, intervalMs);
                 _isRecording = true;
+
+                UpdateHistoryList(); // Обновляем список при старте
 
                 RecordIcon.Text = "\uE71A";
                 RecordIcon.Foreground = new SolidColorBrush(Colors.Red);
@@ -190,10 +198,11 @@ namespace TERMINAL.DeviceHub
                 LogListView.Items.Add("Запись графика остановлена.");
             }
         }
+
         private void CreateSeriesForAllChannels()
         {
-            _plotModel.Series.Clear();
-            _seriesMap.Clear();
+            _plotModelRealTime.Series.Clear();
+            _seriesMapRealTime.Clear();
 
             var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
             int colorIndex = 0;
@@ -207,32 +216,30 @@ namespace TERMINAL.DeviceHub
                         ch.PropertyChanged -= Channel_PropertyChanged;
                         ch.PropertyChanged += Channel_PropertyChanged;
 
-                        var series = new LineSeries
+                        var seriesRT = new LineSeries
                         {
                             Title = $"{dev.Name} - {ch.Name}",
                             Color = colors[colorIndex % colors.Length],
                             StrokeThickness = 2,
-                            IsVisible = false // По умолчанию скрыта
+                            IsVisible = false
                         };
-                        _plotModel.Series.Add(series);
-                        _seriesMap[ch] = series;
+                        _plotModelRealTime.Series.Add(seriesRT);
+                        _seriesMapRealTime[ch] = seriesRT;
                         colorIndex++;
                     }
                 }
             }
-            _plotModel.InvalidatePlot(true);
+            _plotModelRealTime.InvalidatePlot(true);
         }
-
 
         private void UiQueueTimer_Tick(object sender, EventArgs e)
         {
-            // 1. Применяем обновления UI
             while (_engine.UiUpdates.TryDequeue(out var action))
             {
-                action.Invoke();
+                try { action.Invoke(); }
+                catch (Exception ex) { LogListView.Items.Add($"[UI] {ex.Message}"); }
             }
 
-            // 2. Логи
             while (_engine.LogQueue.TryDequeue(out var msg))
             {
                 LogListView.Items.Add(msg);
@@ -240,87 +247,100 @@ namespace TERMINAL.DeviceHub
                     LogListView.ScrollIntoView(LogListView.Items[LogListView.Items.Count - 1]);
             }
 
-            // 3. График (раз в intervalMs)
             if (!_isRecording) return;
 
             int intervalMs = (int)(IntervalSlider.Value * 1000);
-            if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < intervalMs)
-                return;
+            if (intervalMs < 50) intervalMs = 50;
+
+            if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < intervalMs) return;
 
             _lastPlotUpdate = DateTime.Now;
+            bool needRedrawRT = false;
+            var now = DateTime.Now;
 
-            bool needRedraw = false;
             foreach (var iface in Interfaces)
             {
                 foreach (var dev in iface.Devices)
                 {
                     foreach (var ch in dev.Channels)
                     {
-                        if (!ch.IsSelected) continue;
+                        if (!ch.IsSelected || !ch.IsValueSet) continue;
+                        if ((now - ch.LastUpdateTime).TotalSeconds > 3) continue;
 
-                        // ★ ОБНОВЛЯЕМ ch.Value ИЗ ch.LastValue ★
-                        ch.Value = ch.LastValue;
-
-                        if (_seriesMap.TryGetValue(ch, out var series))
+                        // 1. Пишем в RealTime
+                        if (_seriesMapRealTime.TryGetValue(ch, out var seriesRT))
                         {
-                            if (!ch.IsValueSet) continue;
+                            seriesRT.Points.Add(new DataPoint(DateTimeAxis.ToDouble(now), ch.Value));
+                            needRedrawRT = true;
+                        }
 
-                            series.Points.Add(new DataPoint(DateTimeAxis.ToDouble(DateTime.Now), ch.Value));
-                            if (series.Points.Count > 1000) series.Points.RemoveAt(0);
-                            needRedraw = true;
+                        // 2. Пишем в мини-график Истории
+                        if (ch.MiniPlotModel.Series.Count > 0 && ch.MiniPlotModel.Series[0] is LineSeries miniSeries)
+                        {
+                            miniSeries.Points.Add(new DataPoint(DateTimeAxis.ToDouble(now), ch.Value));
+
+                            // Ограничиваем историю последними 2 минутами
+                            var cutoff = now.AddMinutes(-2);
+                            double cutoffX = DateTimeAxis.ToDouble(cutoff);
+                            while (miniSeries.Points.Count > 0 && miniSeries.Points[0].X < cutoffX)
+                            {
+                                miniSeries.Points.RemoveAt(0);
+                            }
+
+                            ch.MiniPlotModel.InvalidatePlot(true);
                         }
                     }
                 }
             }
 
-            if (needRedraw)
+            // Обрезаем RealTime
+            var cutoffRT = now.AddMinutes(-2);
+            double cutoffXRT = DateTimeAxis.ToDouble(cutoffRT);
+            foreach (var series in _seriesMapRealTime.Values)
             {
-                _plotModel.InvalidatePlot(true);
+                while (series.Points.Count > 0 && series.Points[0].X < cutoffXRT)
+                {
+                    series.Points.RemoveAt(0);
+                }
             }
+
+            if (needRedrawRT) _plotModelRealTime.InvalidatePlot(true);
         }
+
         private void IntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (IntervalTextBox != null)
-            {
-                IntervalTextBox.Text = e.NewValue.ToString("F2"); // ★ Обновляем TextBox ★
-            }
+            if (IntervalTextBox != null) IntervalTextBox.Text = e.NewValue.ToString("F2");
         }
 
         private void IntervalTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (double.TryParse(IntervalTextBox.Text, out double value))
             {
-                if (value >= IntervalSlider.Minimum && value <= IntervalSlider.Maximum)
-                {
-                    IntervalSlider.Value = value; // ★ Обновляем Slider ★
-                }
+                if (value >= IntervalSlider.Minimum && value <= IntervalSlider.Maximum) IntervalSlider.Value = value;
             }
         }
 
         private void UpdateStatusText()
         {
-            var rs485Str = _isRs485Enabled
-                ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))
-                : "Выкл";
-
-            // ★ ОБНОВЛЯЕМ СТАТУС С НОВЫМИ НАЗВАНИЯМИ ★
+            var rs485Str = _isRs485Enabled ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}")) : "Выкл";
             StatusText.Text = $"RS-485 (Ц1): {rs485Str} | I2C (Ц4): {(_isI2CEnabled ? "Вкл" : "Выкл")}";
         }
 
         private void InitializePlot()
         {
-            _plotModel = new PlotModel
+            _plotModelRealTime = new PlotModel
             {
-                Title = "Показания датчиков",
+                Title = "Показания датчиков (Реальное время)",
                 Background = OxyColors.White,
                 TitleColor = OxyColors.Black,
                 DefaultFont = "Times New Roman",
                 TitleFont = "Times New Roman",
                 TitleFontSize = 16,
-                TitleFontWeight = OxyPlot.FontWeights.Bold // ★ double, а не FontWeight ★
+                TitleFontWeight = OxyPlot.FontWeights.Bold,
+                IsLegendVisible = false
             };
 
-            _plotModel.Axes.Add(new DateTimeAxis
+            _plotModelRealTime.Axes.Add(new DateTimeAxis
             {
                 Position = AxisPosition.Bottom,
                 StringFormat = "HH:mm:ss",
@@ -334,10 +354,10 @@ namespace TERMINAL.DeviceHub
                 Font = "Times New Roman",
                 TitleFont = "Times New Roman",
                 TitleFontSize = 12,
-                AxisTitleDistance = 15 // ★ Только это, без TitlePadding ★
+                AxisTitleDistance = 15
             });
 
-            _plotModel.Axes.Add(new LinearAxis
+            _plotModelRealTime.Axes.Add(new LinearAxis
             {
                 Position = AxisPosition.Left,
                 Title = "Значение",
@@ -350,20 +370,21 @@ namespace TERMINAL.DeviceHub
                 Font = "Times New Roman",
                 TitleFont = "Times New Roman",
                 TitleFontSize = 12,
-                AxisTitleDistance = 25 // ★ Отодвигаем заголовок от чисел ★
+                AxisTitleDistance = 25
             });
 
-            PlotView.Model = _plotModel;
+            PlotViewRealTime.Model = _plotModelRealTime;
         }
+
         private void Channel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(ChannelNode.IsVisibleOnPlot))
             {
                 var channel = (ChannelNode)sender;
-                if (_seriesMap.TryGetValue(channel, out var series))
+                if (_seriesMapRealTime.TryGetValue(channel, out var seriesRT))
                 {
-                    series.IsVisible = channel.IsVisibleOnPlot;
-                    _plotModel.InvalidatePlot(false);
+                    seriesRT.IsVisible = channel.IsVisibleOnPlot;
+                    _plotModelRealTime.InvalidatePlot(false);
                 }
             }
         }
@@ -371,13 +392,11 @@ namespace TERMINAL.DeviceHub
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
             var settingsWindow = new HubSettingsWindow { Owner = Window.GetWindow(this) };
-
             if (settingsWindow.ShowDialog() == true)
             {
                 _isRs485Enabled = settingsWindow.IsRs485Enabled;
                 _rs485Ports = settingsWindow.SelectedPortsWithBaud;
                 _isI2CEnabled = settingsWindow.IsI2CEnabled;
-
                 UpdateStatusText();
                 LogListView.Items.Add($"Настройки: Порты={string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))}");
             }
@@ -385,7 +404,6 @@ namespace TERMINAL.DeviceHub
 
         private async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
-            // ★ ЕСЛИ ИДЁТ ЗАПИСЬ — ОСТАНАВЛИВАЕМ ОПРОС ★
             if (_isRecording)
             {
                 _engine.Stop();
@@ -397,7 +415,7 @@ namespace TERMINAL.DeviceHub
 
             if (_isScanning)
             {
-                _engine.Stop(); // на всякий случай
+                _engine.Stop();
                 _scanCts?.Cancel();
                 _scanCts?.Dispose();
                 _scanCts = null;
@@ -426,18 +444,15 @@ namespace TERMINAL.DeviceHub
             try
             {
                 Interfaces.Clear();
-                if (_isRs485Enabled)
-                    Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
-                if (_isI2CEnabled)
-                    Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
+                if (_isRs485Enabled) Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
+                if (_isI2CEnabled) Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
 
-                _plotModel.Series.Clear();
-                _seriesMap.Clear();
-                _plotModel.InvalidatePlot(true);
+                _plotModelRealTime.Series.Clear();
+                _seriesMapRealTime.Clear();
+                _plotModelRealTime.InvalidatePlot(true);
+                HistoryItemsControl.ItemsSource = null;
 
-                var foundDevices = await _engine.ScanAllAsync(
-                    Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, _scanCts.Token);
-
+                var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, _scanCts.Token);
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
 
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
@@ -450,7 +465,7 @@ namespace TERMINAL.DeviceHub
                         if (!i2cIface.Devices.Any(d => d.Address == dev.Address))
                         {
                             i2cIface.Devices.Add(dev);
-                            LogListView.Items.Add($"[Scan] I2C устройство {dev.Name} добавлено в дерево.");
+                            i2cIface.RecalculateSelection();
                         }
                     }
                     else if (rs485Iface != null)
@@ -458,51 +473,18 @@ namespace TERMINAL.DeviceHub
                         if (!rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
                         {
                             rs485Iface.Devices.Add(dev);
-                            LogListView.Items.Add($"[Scan] RS-485 устройство {dev.Name} добавлено в дерево.");
+                            rs485Iface.RecalculateSelection();
                         }
                     }
                 }
 
-                var colors = new[] { OxyColors.Red, OxyColors.DeepSkyBlue, OxyColors.Lime, OxyColors.Orange, OxyColors.Yellow, OxyColors.Purple };
-                int colorIndex = 0;
-                int createdCount = 0;
+                CreateSeriesForAllChannels();
+                UpdateHistoryList();
 
-                foreach (var iface in Interfaces)
-                {
-                    foreach (var dev in iface.Devices)
-                    {
-                        foreach (var ch in dev.Channels)
-                        {
-                            ch.PropertyChanged -= Channel_PropertyChanged;
-                            ch.PropertyChanged += Channel_PropertyChanged;
-
-                            var series = new LineSeries
-                            {
-                                Title = $"{dev.Name} - {ch.Name}",
-                                Color = colors[colorIndex % colors.Length],
-                                StrokeThickness = 2,
-                                IsVisible = false
-                            };
-                            _plotModel.Series.Add(series);
-                            _seriesMap[ch] = series;
-                            colorIndex++;
-                            createdCount++;
-                        }
-                    }
-                }
-
-                LogListView.Items.Add($"[Scan] Создано серий для графика: {createdCount}");
-                _plotModel.InvalidatePlot(true);
                 LogListView.Items.Add("Сканирование завершено.");
             }
-            catch (OperationCanceledException)
-            {
-                LogListView.Items.Add("Поиск отменён.");
-            }
-            catch (Exception ex)
-            {
-                LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}");
-            }
+            catch (OperationCanceledException) { LogListView.Items.Add("Поиск отменён."); }
+            catch (Exception ex) { LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}"); }
             finally
             {
                 _isScanning = false;
@@ -510,7 +492,6 @@ namespace TERMINAL.DeviceHub
                 _scanCts = null;
                 ScanButtonIcon.Text = "\uE721";
                 ScanButton.ToolTip = "Поиск";
-
                 ScanProgressBarRS485.Visibility = Visibility.Collapsed;
                 ScanProgressTextRS485.Visibility = Visibility.Collapsed;
                 ScanProgressBarI2C.Visibility = Visibility.Collapsed;
@@ -521,36 +502,76 @@ namespace TERMINAL.DeviceHub
                 ScanProgressTextI2C.Text = "";
             }
         }
-        public void ClosePort()
+
+        private void MiniPlot_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            _engine.ClosePort();
+            if (sender is FrameworkElement element && element.DataContext is ChannelNode channel)
+            {
+                var historyWindow = new Window
+                {
+                    Title = $"История: {channel.Name}",
+                    Width = 900,
+                    Height = 500,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = Window.GetWindow(this),
+                    Background = System.Windows.Media.Brushes.White
+                };
+
+                var newPlotModel = new PlotModel
+                {
+                    Title = channel.Name,
+                    Background = OxyColors.White,
+                    DefaultFont = "Times New Roman",
+                    TitleFontSize = 18,
+                    TitleFontWeight = OxyPlot.FontWeights.Bold
+                };
+
+                newPlotModel.Axes.Add(new LinearAxis
+                {
+                    Position = AxisPosition.Left,
+                    MajorGridlineStyle = LineStyle.Solid,
+                    MajorGridlineColor = OxyColors.LightGray,
+                    Title = channel.Unit,
+                    FontSize = 12
+                });
+                newPlotModel.Axes.Add(new DateTimeAxis
+                {
+                    Position = AxisPosition.Bottom,
+                    StringFormat = "HH:mm:ss",
+                    MajorGridlineStyle = LineStyle.Solid,
+                    MajorGridlineColor = OxyColors.LightGray,
+                    Title = "Время",
+                    FontSize = 12
+                });
+
+                if (channel.MiniPlotModel.Series[0] is LineSeries sourceSeries)
+                {
+                    var destSeries = new LineSeries
+                    {
+                        Color = sourceSeries.Color,
+                        StrokeThickness = 2.5
+                    };
+                    foreach (var pt in sourceSeries.Points) destSeries.Points.Add(pt);
+                    newPlotModel.Series.Add(destSeries);
+                }
+
+                var plotView = new OxyPlot.Wpf.PlotView { Model = newPlotModel };
+                historyWindow.Content = plotView;
+                historyWindow.Show();
+            }
         }
 
-        private void CopyLogMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            CopySelectedLogs();
-        }
+        public void ClosePort() => _engine.ClosePort();
 
-        private void CopyLogCommand_Executed(object sender, ExecutedRoutedEventArgs e)
-        {
-            CopySelectedLogs();
-        }
+        private void CopyLogMenuItem_Click(object sender, RoutedEventArgs e) => CopySelectedLogs();
+        private void CopyLogCommand_Executed(object sender, ExecutedRoutedEventArgs e) => CopySelectedLogs();
 
         private void CopySelectedLogs()
         {
             if (LogListView.SelectedItems.Count == 0) return;
-
             var sb = new System.Text.StringBuilder();
-            foreach (var item in LogListView.SelectedItems)
-            {
-                sb.AppendLine(item.ToString());
-            }
-
-            try
-            {
-                Clipboard.SetText(sb.ToString());
-            }
-            catch { }
+            foreach (var item in LogListView.SelectedItems) sb.AppendLine(item.ToString());
+            try { Clipboard.SetText(sb.ToString()); } catch { }
         }
 
         public void SetPollingInterval(double seconds)
@@ -562,9 +583,6 @@ namespace TERMINAL.DeviceHub
             }
         }
 
-        public double GetPollingInterval()
-        {
-            return IntervalSlider.Value;
-        }
+        public double GetPollingInterval() => IntervalSlider.Value;
     }
 }

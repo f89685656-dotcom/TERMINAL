@@ -195,8 +195,46 @@
                 <TabItem Header="Реальное время">
                     <oxy:PlotView x:Name="PlotViewRealTime" Background="{DynamicResource PanelBackground}"/>
                 </TabItem>
+                <!-- Вкладка История -->
                 <TabItem Header="История">
-                    <oxy:PlotView x:Name="PlotViewHistory" Background="{DynamicResource PanelBackground}"/>
+                    <Grid>
+                        <!-- Оставляем заголовок и кнопки -->
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Скроллбар для прокрутки графиков -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="5">
+                            <ItemsControl x:Name="HistoryItemsControl">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <!-- Карточка одного графика -->
+                                        <Border BorderBrush="LightGray" BorderThickness="1" Margin="0,0,0,8" CornerRadius="4" Background="White">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="200"/>
+                                                </Grid.RowDefinitions>
+
+                                                <!-- Заголовок и значение -->
+                                                <StackPanel Orientation="Horizontal" Margin="5" Background="#F0F0F0">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="14" Margin="0,0,10,0"/>
+                                                    <TextBlock Text="{Binding Value, StringFormat={}{0:F3}}" FontWeight="Bold" Foreground="Blue" FontSize="14"/>
+                                                    <TextBlock Text="{Binding Unit}" Margin="5,0,0,0" FontSize="14"/>
+                                                </StackPanel>
+
+                                                <!-- Сам мини-график с двойным кликом -->
+                                                <oxy:PlotView Grid.Row="1" Model="{Binding MiniPlotModel}" 
+                                              MouseDoubleClick="MiniPlot_MouseDoubleClick" 
+                                              Background="White"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
                 </TabItem>
             </TabControl>
         </Grid>
