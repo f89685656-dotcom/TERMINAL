@@ -190,7 +190,15 @@
             </Border>
 
             <!-- ГРАФИК -->
-            <oxy:PlotView Grid.Column="1" x:Name="PlotView" Margin="10" Background="{DynamicResource PanelBackground}"/>
+            <!-- ГРАФИК (ДВЕ ВКЛАДКИ) -->
+            <TabControl Grid.Column="1" Margin="10">
+                <TabItem Header="Реальное время">
+                    <oxy:PlotView x:Name="PlotViewRealTime" Background="{DynamicResource PanelBackground}"/>
+                </TabItem>
+                <TabItem Header="История">
+                    <oxy:PlotView x:Name="PlotViewHistory" Background="{DynamicResource PanelBackground}"/>
+                </TabItem>
+            </TabControl>
         </Grid>
 
         <!-- ★ ЛОГ + ПРОГРЕСС-БАРЫ (ВНИЗУ) ★ -->

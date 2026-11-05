@@ -150,7 +150,6 @@ namespace TERMINAL.DeviceHub
                     return;
                 }
 
-                // ★ ПРЕРЫВАЕМ ПОИСК, ЕСЛИ ОН ИДЁТ ★
                 if (_isScanning)
                 {
                     _scanCts?.Cancel();
@@ -162,7 +161,6 @@ namespace TERMINAL.DeviceHub
                     LogListView.Items.Add("Поиск прерван (запущен опрос).");
                 }
 
-                // ★ СБРАСЫВАЕМ ФЛАГ IsValueSet У ВСЕХ КАНАЛОВ ★
                 foreach (var iface in Interfaces)
                 {
                     foreach (var dev in iface.Devices)
@@ -174,7 +172,6 @@ namespace TERMINAL.DeviceHub
                     }
                 }
 
-                // ★ ПЕРЕВОДИМ СЕКУНДЫ В МИЛЛИСЕКУНДЫ ★
                 int intervalMs = (int)(IntervalSlider.Value * 1000);
                 _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, intervalMs);
                 _isRecording = true;

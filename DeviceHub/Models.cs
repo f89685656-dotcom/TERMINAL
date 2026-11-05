@@ -38,20 +38,23 @@ namespace TERMINAL.DeviceHub
                     _isSelected = value;
                     OnPropertyChanged();
 
-                    // ★ КАСКАДНОЕ ОБНОВЛЕНИЕ УСТРОЙСТВ ★
+                    // ★ КАСКАДНОЕ ОБНОВЛЕНИЕ УСТРОЙСТВ (БЕЗ ЛИШНИХ УВЕДОМЛЕНИЙ) ★
                     foreach (var dev in Devices)
-                        dev.IsSelected = value;
+                    {
+                        dev.SetSelectedSilent(value);
+                    }
                 }
             }
         }
     }
 
-    // ★ УСТРОЙСТВО (C002, DBA0, DBA2, I2C) ★
+    // ★ УСТРОЙСТВО (C002, DBA0, DBA2, DB80, DB81, I2C) ★
     public class DeviceNode : ViewModelBase
     {
         private bool _isExpanded = true;
         private bool _isSelected = true;
         private bool _showOnlySelected = false;
+        private bool _suppressNotify = false;
 
         public string PortName { get; set; }
         public string Name { get; set; }
@@ -61,7 +64,6 @@ namespace TERMINAL.DeviceHub
 
         public DeviceNode()
         {
-            // ★ ПОДПИСКА НА ИЗМЕНЕНИЯ КАНАЛОВ ★
             Channels.CollectionChanged += (s, e) =>
             {
                 if (e.NewItems != null)
@@ -85,8 +87,10 @@ namespace TERMINAL.DeviceHub
         {
             if (e.PropertyName == nameof(ChannelNode.IsSelected))
             {
-                // ★ ОБНОВЛЯЕМ ФИЛЬТР, ЧТОБЫ СКРЫТЬ/ПОКАЗАТЬ КАНАЛ ★
-                ChannelsView.Refresh();
+                if (!_suppressNotify)
+                {
+                    ChannelsView.Refresh();
+                }
             }
         }
 
@@ -142,15 +146,38 @@ namespace TERMINAL.DeviceHub
                     _isSelected = value;
                     OnPropertyChanged();
 
-                    // ★ КАСКАДНОЕ ОБНОВЛЕНИЕ КАНАЛОВ ★
+                    // ★ МАССОВОЕ ОБНОВЛЕНИЕ КАНАЛОВ (БЕЗ УВЕДОМЛЕНИЙ) ★
+                    _suppressNotify = true;
                     foreach (var ch in Channels)
+                    {
                         ch.IsSelected = value;
+                    }
+                    _suppressNotify = false;
+
+                    // ★ ОБНОВЛЯЕМ UI ОДИН РАЗ ПОСЛЕ ЦИКЛА ★
+                    ChannelsView.Refresh();
                 }
             }
         }
+
+        // ★ МЕТОД ДЛЯ ТИХОГО ОБНОВЛЕНИЯ (БЕЗ UI) ★
+        public void SetSelectedSilent(bool value)
+        {
+            _isSelected = value;
+            OnPropertyChanged(); // Обновляем галочку устройства
+
+            _suppressNotify = true;
+            foreach (var ch in Channels)
+            {
+                ch.IsSelected = value;
+            }
+            _suppressNotify = false;
+
+            ChannelsView.Refresh();
+        }
     }
 
-    // ★ КАНАЛ (Давление, Температура и т.д.) ★
+    // ★ КАНАЛ (Давление, Температура, Частоты) ★
     public class ChannelNode : ViewModelBase
     {
         private bool _isSelected = true;
@@ -208,6 +235,7 @@ namespace TERMINAL.DeviceHub
 
         public bool Is32Bit { get; set; } = true;
         public bool IsInt32 { get; set; } = false;
+        public bool IsDouble { get; set; } = false;
         public double LastValue { get; set; }
 
         public ushort RegisterAddress { get; set; }
