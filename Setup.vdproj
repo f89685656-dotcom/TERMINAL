@@ -739,7 +739,7 @@
         {
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_731E23B828C14C3CA1BAC8E6BDD7C401"
             {
-            "SourcePath" = "8:..\\obj\\Release\\net8.0-windows10.0.26100.0\\win-x64\\TERMINAL.dll"
+            "SourcePath" = "8:..\\Setup\\Publish\\TERMINAL.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_0D5D05DF83D4431091B00847C524189D"

@@ -1,0 +1,27 @@
+﻿<UserControl x:Class="TERMINAL.DeviceHub.DeviceHubControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:TERMINAL.DeviceHub"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800">
+    <Grid Background="{DynamicResource WindowBackground}">
+        <TabControl Margin="5">
+            <!-- Вкладка 1: Опрос -->
+            <TabItem Header="Опрос">
+                <local:PollingTabView x:Name="PollingTabViewControl" />
+            </TabItem>
+
+            <!-- Вкладка 2: Съём данных -->
+            <TabItem Header="Съём данных">
+                <local:DataLogTabView />
+            </TabItem>
+
+            <!-- Вкладка 3: Прошивка -->
+            <TabItem Header="Прошивка">
+                <local:FirmwareTabView />
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

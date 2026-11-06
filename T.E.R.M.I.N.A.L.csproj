@@ -8,25 +8,34 @@
 		<UseWPF>true</UseWPF>
 		<ApplicationIcon>6.ico</ApplicationIcon>
 		<AssemblyName>TERMINAL</AssemblyName>
-		<Version>1.6.0</Version>
+		<Version>1.7.0</Version>
 		<PackageIcon>6.png</PackageIcon>
 		<Platforms>AnyCPU;x64</Platforms>
 		<PlatformTarget>x64</PlatformTarget>
-		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
 		<NoWarn>$(NoWarn);CA1416</NoWarn>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+		<!-- ★ НАСТРОЙКИ ПУБЛИКАЦИИ В ОТДЕЛЬНУЮ ПАПКУ ★ -->
+		<PublishDir>$(MSBuildProjectDirectory)\..\Setup\Publish\</PublishDir>
+		<PublishUrl>$(MSBuildProjectDirectory)\..\Setup\Publish\</PublishUrl>
+
+		<!-- ★ SELF-CONTAINED, ЧТОБЫ ВСЕ DLL БЫЛИ РЯДОМ ★ -->
+		<SelfContained>true</SelfContained>
+		<PublishSingleFile>false</PublishSingleFile>
+		<PublishReadyToRun>false</PublishReadyToRun>
+		<ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
 	</PropertyGroup>
-	
-	<ItemGroup>
-	  <Content Include="$(NuGetPackageRoot)system.io.ports\8.0.0\runtimes\win\lib\net8.0\System.IO.Ports.dll">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-			<Link>runtimes\win\lib\net8.0\System.IO.Ports.dll</Link>
-	  </Content>
-	</ItemGroup>
 
 	<ItemGroup>
 		<None Remove="Images\AGK.png" />
 		<None Remove="Images\ST_351.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="FT260_I2CDotNet">
+			<HintPath>Libs\FT260_I2CDotNet.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 
 	<ItemGroup>
@@ -43,13 +52,20 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Include="Setup.vdproj" />
+		<None Include="Setup.vdproj" />
 	</ItemGroup>
 
+	<!-- NuGet-пакеты -->
 	<ItemGroup>
 		<PackageReference Include="HidSharp" Version="2.6.4" />
-		<PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
-		<PackageReference Include="System.IO.Ports" Version="8.0.0" />   <!-- ← 8.0.0 вместо 11.0.0-rc -->
+		<PackageReference Include="LibUsbDotNet" Version="2.2.29" />
+		<PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.1.0-dev-798" />
+		<PackageReference Include="System.IO.Ports" Version="8.0.0" />
+	</ItemGroup>
+
+	<!-- Ссылки на проекты -->
+	<ItemGroup>
+		<ProjectReference Include="..\..\GUI_Merge\KalibratorGUI\KalibratorGUI_WPF\KalibratorGUI_WPF.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -58,5 +74,4 @@
 			<SubType>Designer</SubType>
 		</Page>
 	</ItemGroup>
-
 </Project>

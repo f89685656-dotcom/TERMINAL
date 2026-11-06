@@ -85,6 +85,10 @@ namespace TERMINAL
                 _tickTimingEnabled = _loadedSettings.TickTimingEnabled;
                 _logSlowTicks = _loadedSettings.LogSlowTicks;
                 _isDarkTheme = _loadedSettings.IsDarkTheme;
+                // ★ ЗАГРУЖАЕМ ПЕРИОД ★
+                _pollingInterval = _loadedSettings.PollingInterval;
+                if (_pollingInterval < 0.1) _pollingInterval = 0.1;
+                if (_pollingInterval > 30) _pollingInterval = 30;
 
                 // ─── Уведомления ───
                 _notificationsEnabled = _loadedSettings.NotificationsEnabled;
@@ -303,8 +307,15 @@ namespace TERMINAL
                 BatchPresetCombo.SelectedIndex = _loadedSettings.LastUsedPresetIndex;
             }
 
+            // ★ ПЕРЕДАЕМ ПЕРИОД В POLLINGTABVIEW ★
+            if (_pollingView != null)
+            {
+                _pollingView.SetPollingInterval(_pollingInterval);
+            }
+
             ApplyTickTimingVisibility();
             UpdateStartButtonMode();
+
         }
 
         private void SaveSettings()
@@ -318,6 +329,12 @@ namespace TERMINAL
 
                 if (!Directory.Exists(SettingsDir))
                     Directory.CreateDirectory(SettingsDir);
+
+                // ★ ЗАБИРАЕМ ПЕРИОД ИЗ POLLINGTABVIEW ★
+                if (_pollingView != null)
+                {
+                    _pollingInterval = _pollingView.GetPollingInterval();
+                }
 
                 var s = new Settings
                 {
@@ -670,6 +687,8 @@ namespace TERMINAL
             public string SmsLogin { get; set; } = "";
             public string SmsPass { get; set; } = "";
             public string SmsPhone { get; set; } = "";
+
+            public double PollingInterval { get; set; } = 1.0;
         }
 
         private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"TERMINAL");
