@@ -278,7 +278,6 @@ namespace TERMINAL
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации {job.StabilizationMinutes} мин...", false);
 
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
-                        await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
 
                         _lastStabNotify = DateTime.MinValue; // Сброс для первого апдейта
 
@@ -302,7 +301,6 @@ namespace TERMINAL
                         job.StatusColor = Brushes.Gold;
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] проверка допуска...");
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
-                        await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
 
                         bool inTolerance = await WaitForBatchTemperatureInToleranceAsync(completedCount, enabledCount);
                         if (!inTolerance)
@@ -608,7 +606,7 @@ namespace TERMINAL
                         $"осталось {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
 
                     // ★ Обновляем Telegram раз в 5 секунд
-                    if ((DateTime.Now - _lastStabNotify).TotalSeconds >= 5)
+                    if ((DateTime.Now - _lastStabNotify).TotalSeconds >= 1)
                     {
                         _lastStabNotify = DateTime.Now;
                         string timeStr = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";

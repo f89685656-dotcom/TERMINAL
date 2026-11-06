@@ -30,7 +30,15 @@ namespace TERMINAL.Notifications
         public async Task SendAsync(string text)
         {
             using var msg = new MailMessage(_user, _to, "TERMINAL", text);
-            await _client.SendMailAsync(msg).ConfigureAwait(false);
+            using var cts = new CancellationTokenSource(10000);
+            try
+            {
+                await _client.SendMailAsync(msg, cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("Email: таймаут отправки (10 сек)");
+            }
         }
 
         public Task<int?> SendMessageAsync(string text)

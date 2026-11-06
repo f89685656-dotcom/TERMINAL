@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace TERMINAL.Notifications
@@ -30,17 +31,27 @@ namespace TERMINAL.Notifications
                          $"&mes={Uri.EscapeDataString(text ?? "")}" +
                          "&charset=utf-8&fmt=3";
 
-            var response = await _http.GetAsync(url);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException($"SMSC вернул {(int)response.StatusCode}");
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                var response = await _http.GetAsync(url, cts.Token).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"SMSC вернул {(int)response.StatusCode}");
 
-            // Проверка на ошибку в JSON (например, неверный пароль или нет денег)
-            string body = await response.Content.ReadAsStringAsync();
-            if (body.Contains("\"error\""))
-                throw new HttpRequestException("SMSC: " + body);
+                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (body.Contains("\"error\""))
+                    throw new HttpRequestException("SMSC: " + body);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("SMS: таймаут отправки (5 сек)");
+            }
         }
 
-        public Task<int?> SendMessageAsync(string text) => SendAsync(text).ContinueWith(_ => (int?)null);
-        public Task<bool> EditMessageAsync(int id, string text) => Task.FromResult(false);
+        public Task<int?> SendMessageAsync(string text)
+            => SendAsync(text).ContinueWith(_ => (int?)null, TaskScheduler.Default);
+
+        public Task<bool> EditMessageAsync(int id, string text)
+            => Task.FromResult(false);
     }
 }
