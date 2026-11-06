@@ -2,19 +2,29 @@
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<TargetFramework>net8.0-windows</TargetFramework>
+		<TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 		<ApplicationIcon>6.ico</ApplicationIcon>
 		<AssemblyName>TERMINAL</AssemblyName>
-		<Version>1.6.0</Version>
+		<Version>1.7.0</Version>
 		<PackageIcon>6.png</PackageIcon>
 		<Platforms>AnyCPU;x64</Platforms>
 		<PlatformTarget>x64</PlatformTarget>
-		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
 		<NoWarn>$(NoWarn);CA1416</NoWarn>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+		<!-- ★ НАСТРОЙКИ ПУБЛИКАЦИИ В ОТДЕЛЬНУЮ ПАПКУ ★ -->
+		<PublishDir>$(MSBuildProjectDirectory)\..\Setup\Publish\</PublishDir>
+		<PublishUrl>$(MSBuildProjectDirectory)\..\Setup\Publish\</PublishUrl>
+
+		<!-- ★ SELF-CONTAINED, ЧТОБЫ ВСЕ DLL БЫЛИ РЯДОМ ★ -->
+		<SelfContained>true</SelfContained>
+		<PublishSingleFile>false</PublishSingleFile>
+		<PublishReadyToRun>false</PublishReadyToRun>
+		<ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -53,9 +63,8 @@
 		<PackageReference Include="System.IO.Ports" Version="8.0.0" />
 	</ItemGroup>
 
-	<!-- Ссылки на проекты (должны быть отдельно от PackageReference!) -->
+	<!-- Ссылки на проекты -->
 	<ItemGroup>
-		<!-- Путь ..\..\ выходит из папки T.E.R.M.I.N.A.L._code на диск C:\ и заходит в GUI_Merge -->
 		<ProjectReference Include="..\..\GUI_Merge\KalibratorGUI\KalibratorGUI_WPF\KalibratorGUI_WPF.csproj" />
 	</ItemGroup>
 
