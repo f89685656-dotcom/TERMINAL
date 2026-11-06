@@ -1138,18 +1138,24 @@ namespace TERMINAL
                     // ★ Включаем авто-режим
                     xl.Run("SetAutoMode", true);
 
+                    // ★ Замер системным Stopwatch вокруг самого макроса
+                    var macroSw = System.Diagnostics.Stopwatch.StartNew();
+
                     // ★ ЗАПУСК С ТАЙМАУТОМ (2 минуты)
                     var runTask1 = Task.Run(() => xl.Run(filterMacro));
                     if (await Task.WhenAny(runTask1, Task.Delay(120000)) != runTask1)
                     {
+                        macroSw.Stop();
                         throw new TimeoutException($"Макрос «{filterMacro}» не завершился за 2 минуты. Возможно, он завис.");
                     }
                     await runTask1; // пробрасываем исключение, если оно было
 
+                    macroSw.Stop();
+
                     // ★ Выключаем авто-режим
                     xl.Run("SetAutoMode", false);
 
-                    AppendLog($"Excel: макрос «{filterMacro}» выполнен", Brushes.Green);
+                    AppendLog($"Excel: макрос «{filterMacro}» выполнен за {macroSw.ElapsedMilliseconds} мс", Brushes.Green);
                 }
                 catch (TimeoutException tex)
                 {
@@ -1202,15 +1208,20 @@ namespace TERMINAL
                 {
                     AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
 
+                    var macroSw = System.Diagnostics.Stopwatch.StartNew();
+
                     // ★ ЗАПУСК С ТАЙМАУТОМ (3 минуты)
                     var runTask2 = Task.Run(() => xl.Run("Universal_Insert_FULL_Auto"));
                     if (await Task.WhenAny(runTask2, Task.Delay(180000)) != runTask2)
                     {
+                        macroSw.Stop();
                         throw new TimeoutException("Макрос «Universal Insert» не завершился за 3 минуты. Возможно, он завис.");
                     }
                     await runTask2;
 
-                    AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
+                    macroSw.Stop();
+
+                    AppendLog($"Excel: макрос «Universal Insert» выполнен за {macroSw.ElapsedMilliseconds} мс", Brushes.Green);
                 }
                 catch (TimeoutException tex)
                 {
@@ -1337,7 +1348,7 @@ namespace TERMINAL
                     int state = (int)xl.CalculationState;
                     if (state == xlDone)
                     {
-                        AppendLog($"Excel: готов (за {sw.ElapsedMilliseconds} мс)", Brushes.Gray);
+                        AppendLog($"Excel: готов, остаток ожидания {sw.ElapsedMilliseconds} мс", Brushes.Gray);
                         return;
                     }
                     System.Threading.Thread.Sleep(100);
@@ -1349,7 +1360,6 @@ namespace TERMINAL
                 AppendLog($"Excel: WaitForExcelIdle ошибка — {ex.Message}", Brushes.Orange);
             }
         }
-
         private int GetSelectedClientCase()
         {
             var client = _connectedClients.FirstOrDefault(c => c.IsSelected);
