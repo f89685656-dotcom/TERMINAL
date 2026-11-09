@@ -1,191 +1,92 @@
 ﻿<Window x:Class="TERMINAL.Windows.SummaryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Сводка данных"
-        Width="1200" Height="800"
-        MinWidth="800" MinHeight="500"
+        Title="Сводка данных" Height="700" Width="1000"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource WindowBackground}"
-        Foreground="{DynamicResource TextForeground}">
-
-    <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/TERMINAL;component/Themes/LightTheme.xaml"/>
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
-    </Window.Resources>
-
-    <Grid Margin="10">
+        Background="{DynamicResource WindowBackground}">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto" MaxHeight="260"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="4*"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- ═══ Toolbar ═══ -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-            <Button x:Name="OpenCsvButton" Content="Открыть CSV"
-                    Width="110" Height="28" Margin="0,0,6,0"
-                    Click="OpenCsv_Click"/>
-            <Button x:Name="SaveCsvButton" Content="Сохранить CSV"
-                    Width="120" Height="28" Margin="0,0,6,0"
-                    Click="SaveCsv_Click"/>
-            <Button x:Name="RefreshButton" Content="Обновить"
-                    Width="100" Height="28" Margin="0,0,6,0"
-                    Click="Refresh_Click"/>
-            <Button x:Name="PrintButton" Content="Печать"
-                    Width="100" Height="28" Margin="0,0,6,0"
-                    Click="Print_Click"/>
-
-            <CheckBox x:Name="PrintAllCheckBox"
-                      Content="Печать всех датчиков"
-                      FontSize="12"
-                      VerticalAlignment="Center"
-                      Margin="15,0,0,0"/>
-
-            <TextBlock x:Name="BatchNameText"
-                       Text="Партия: —"
-                       VerticalAlignment="Center"
-                       FontSize="13" FontWeight="Bold"
-                       Margin="15,0,0,0"/>
+        <!-- Панель инструментов -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10" Background="{DynamicResource PanelBackground}">
+            <Button x:Name="OpenCsvButton" Content="Открыть CSV" Width="110" Height="30" Margin="0,0,10,0" Click="OpenCsv_Click"/>
+            <Button x:Name="SaveCsvButton" Content="Сохранить CSV" Width="110" Height="30" Margin="0,0,10,0" Click="SaveCsv_Click"/>
+            <Button x:Name="RefreshButton" Content="Обновить" Width="110" Height="30" Margin="0,0,10,0" Click="Refresh_Click"/>
+            <Button x:Name="PrintButton" Content="Печать" Width="110" Height="30" Margin="0,0,20,0" Click="Print_Click"/>
+            <CheckBox x:Name="PrintAllCheckBox" Content="Печать всех датчиков" VerticalAlignment="Center"/>
+            <TextBlock x:Name="BatchNameText" Text="Партия: —" VerticalAlignment="Center" Margin="20,0,0,0" FontWeight="Bold"/>
         </StackPanel>
 
-        <!-- ═══ Путь к папке ═══ -->
-        <TextBlock Grid.Row="1"
-                   x:Name="DataFolderText"
-                   Text=""
-                   FontSize="11"
-                   Foreground="Gray"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,4"/>
+        <!-- Папка -->
+        <TextBlock Grid.Row="1" x:Name="DataFolderText" Text="Папка: —" Margin="10,0,10,10" Foreground="Gray" FontSize="11"/>
 
-        <!-- ═══ Прогресс-бар ═══ -->
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,6">
-            <ProgressBar x:Name="LoadProgressBar"
-                         Width="300" Height="18"
-                         Minimum="0" Maximum="1"
-                         Value="0"
-                         VerticalAlignment="Center"
-                         Visibility="Collapsed"/>
-            <TextBlock x:Name="LoadProgressText"
-                       Text=""
-                       VerticalAlignment="Center"
-                       FontSize="11"
-                       Foreground="Gray"
-                       Margin="8,0,0,0"
-                       Visibility="Collapsed"/>
+        <!-- Прогресс-бар -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="10,0,10,10">
+            <ProgressBar x:Name="LoadProgressBar" Width="300" Height="20" Visibility="Collapsed"/>
+            <TextBlock x:Name="LoadProgressText" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
         </StackPanel>
 
-        <!-- ═══ Заголовок сводки ═══ -->
-        <TextBlock Grid.Row="3"
-                   Text="Сводка по датчикам"
-                   FontSize="14" FontWeight="Bold"
-                   Margin="0,0,0,4"/>
-
-        <!-- ═══ DataGrid сводки ═══ -->
-        <DataGrid Grid.Row="4"
-                  x:Name="SummaryGrid"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  CanUserSortColumns="True"
-                  CanUserAddRows="False"
-                  SelectionMode="Single"
-                  SelectionChanged="SummaryGrid_SelectionChanged"
-                  GridLinesVisibility="All"
-                  HeadersVisibility="Column"
-                  RowHeaderWidth="0"
-                  FontSize="12"
-                  Background="{DynamicResource PanelBackground}"
-                  Foreground="{DynamicResource TextForeground}"
-                  BorderBrush="{DynamicResource PanelBorder}"
-                  HorizontalGridLinesBrush="{DynamicResource PanelBorder}"
-                  VerticalGridLinesBrush="{DynamicResource PanelBorder}"
-                  RowBackground="{DynamicResource PanelBackground}"
-                  AlternatingRowBackground="{DynamicResource WindowBackground}">
+        <!-- Таблица сводки -->
+        <DataGrid Grid.Row="3" x:Name="SummaryGrid" Margin="10,0,10,10" 
+                  AutoGenerateColumns="False" IsReadOnly="True" 
+                  CanUserAddRows="False" SelectionChanged="SummaryGrid_SelectionChanged"
+                  Background="{DynamicResource PanelBackground}" Foreground="{DynamicResource TextForeground}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="№" Binding="{Binding Number}" Width="50"/>
-                <DataGridTextColumn Header="Опис.град." Binding="{Binding GradDescriptionText}" Width="90"/>
-                <DataGridTextColumn Header="Пров.1" Binding="{Binding Check1Text}" Width="80"/>
-                <DataGridTextColumn Header="Пров.2" Binding="{Binding Check2Text}" Width="80"/>
-                <DataGridTextColumn Header="Пров.3" Binding="{Binding Check3Text}" Width="80"/>
-                <DataGridTextColumn Header="Пров.4" Binding="{Binding Check4Text}" Width="80"/>
-                <DataGridTextColumn Header="Пров.5" Binding="{Binding Check5Text}" Width="80"/>
+                <DataGridTextColumn Header="Опис. град." Binding="{Binding GradDescriptionText}" Width="100"/>
+                <DataGridTextColumn Header="Пров. 1" Binding="{Binding Check1Text}" Width="100"/>
+                <DataGridTextColumn Header="Пров. 2" Binding="{Binding Check2Text}" Width="100"/>
+                <DataGridTextColumn Header="Пров. 3" Binding="{Binding Check3Text}" Width="100"/>
+                <DataGridTextColumn Header="Пров. 4" Binding="{Binding Check4Text}" Width="100"/>
+                <DataGridTextColumn Header="Пров. 5" Binding="{Binding Check5Text}" Width="100"/>
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- ═══ Заголовок деталей ═══ -->
-        <TextBlock Grid.Row="5"
-                   x:Name="DetailHeaderText"
-                   Text="Детали: выберите датчик"
-                   FontSize="14" FontWeight="Bold"
-                   Margin="0,10,0,4"/>
+        <!-- Заголовок деталей -->
+        <TextBlock Grid.Row="4" x:Name="DetailHeaderText" Text="Детали: —" Margin="10,0,10,5" FontWeight="Bold"/>
 
-        <!-- ═══ TabControl ═══ -->
-        <TabControl Grid.Row="6"
-            x:Name="DetailTabs"
-            SelectionChanged="DetailTabs_SelectionChanged"
-            Height="30"
-            Margin="0,0,0,4"
-            Background="{DynamicResource PanelBackground}"
-            BorderBrush="{DynamicResource PanelBorder}">
-            <TabControl.Resources>
-                <Style TargetType="TabItem">
-                    <Setter Property="Background" Value="{DynamicResource PanelBackground}"/>
-                    <Setter Property="Foreground" Value="{DynamicResource TextForeground}"/>
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="TabItem">
-                                <Border x:Name="Bd"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{DynamicResource PanelBorder}"
-                                BorderThickness="1,1,1,0"
-                                CornerRadius="2,2,0,0"
-                                Padding="6,2">
-                                    <ContentPresenter ContentSource="Header"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsSelected" Value="True">
-                                        <!-- ★ Активная вкладка: светлый фон, как в окне настроек -->
-                                        <Setter TargetName="Bd" Property="Background" Value="#3F3F46"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Trigger>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#505050"/>
-                                    </Trigger>
-                                    <Trigger Property="IsEnabled" Value="False">
-                                        <Setter Property="Foreground" Value="Gray"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </TabControl.Resources>
-
-            <TabItem Header="Гистерезис"/>
-            <TabItem Header="ТЧХ"/>
-            <TabItem Header="Погрешность"/>
-            <TabItem Header="ГСТ"/>
+        <!-- Вкладки с деталями -->
+        <TabControl Grid.Row="5" x:Name="DetailTabs" Margin="10,0,10,10" 
+                    SelectionChanged="DetailTabs_SelectionChanged"
+                    Background="{DynamicResource PanelBackground}">
+            <TabItem Header="Гистерезис">
+                <ContentControl x:Name="HysteresisContent"/>
+            </TabItem>
+            <TabItem Header="ТЧХ">
+                <ContentControl x:Name="TchxContent"/>
+            </TabItem>
+            <TabItem Header="Погрешность">
+                <ContentControl x:Name="ErrorsContent"/>
+            </TabItem>
+            <!-- ★ НОВАЯ ВКЛАДКА "ПРОВЕРКА" ★ -->
+            <TabItem Header="Проверка">
+                <DataGrid x:Name="VerificationGrid" 
+                          AutoGenerateColumns="True" 
+                          IsReadOnly="True" 
+                          CanUserAddRows="False"
+                          GridLinesVisibility="All"
+                          HeadersVisibility="Column"
+                          RowHeight="22"
+                          FontSize="12"
+                          Background="{DynamicResource PanelBackground}" 
+                          Foreground="{DynamicResource TextForeground}"
+                          BorderBrush="{DynamicResource PanelBorder}"
+                          HorizontalGridLinesBrush="{DynamicResource PanelBorder}"
+                          VerticalGridLinesBrush="{DynamicResource PanelBorder}"
+                          RowBackground="{DynamicResource PanelBackground}"
+                          AlternatingRowBackground="{DynamicResource WindowBackground}"/>
+            </TabItem>
+            <!-- ★ КОНЕЦ НОВОЙ ВКЛАДКИ ★ -->
+            <TabItem Header="ГСТ">
+                <ContentControl x:Name="GstContent"/>
+            </TabItem>
         </TabControl>
-
-        <!-- ═══ Область деталей ═══ -->
-        <Border Grid.Row="7"
-                BorderBrush="{DynamicResource PanelBorder}"
-                BorderThickness="1"
-                Background="{DynamicResource PanelBackground}"
-                CornerRadius="2">
-            <ContentControl x:Name="DetailContent"/>
-        </Border>
     </Grid>
 </Window>

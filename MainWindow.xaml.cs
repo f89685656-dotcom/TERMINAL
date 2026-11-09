@@ -447,23 +447,29 @@ namespace TERMINAL
             LoadSettings(); // ★ Читаем JSON, заполняем _loadedSettings (и _isDarkTheme, если добавили в LoadSettings)
 
             // ─── Инициализация сервиса уведомлений из сохранённых настроек ───
-            if (_notificationsEnabled
-                && !string.IsNullOrEmpty(_telegramToken)
-                && long.TryParse(_telegramChatId, out long _initChatId))
+            NotificationManager.ClearServices(); // Начинаем с чистого листа
+
+            if (_notificationsEnabled)
             {
-                try
+                // ★ Проверяем ГАЛОЧКУ Telegram (_notifyTgEnabled), а не только наличие токена
+                if (_notifyTgEnabled && !string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long _initChatId))
                 {
-                    NotificationManager.SetService(
-                        new TelegramNotificationService(_telegramToken, _initChatId));
+                    try
+                    {
+                        NotificationManager.AddService(new TelegramNotificationService(_telegramToken, _initChatId));
+                    }
+                    catch { }
                 }
-                catch (Exception ex)
+
+                // Добавьте сюда инициализацию VK и остальных, если хотите, чтобы они работали сразу при запуске
+                if (_notifyVkEnabled && !string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
                 {
-                    NotificationManager.SetService(new NullNotificationService());
-                    System.Diagnostics.Debug.WriteLine(
-                        "Уведомления: не удалось инициализировать — " + ex.Message);
+                    NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
                 }
             }
-            else
+
+            // Если ни один сервис не добавился (все галочки сняты), ставим пустышку
+            if (NotificationManager.GetServices().Count == 0)
             {
                 NotificationManager.SetService(new NullNotificationService());
             }

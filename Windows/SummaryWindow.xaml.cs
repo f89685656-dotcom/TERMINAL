@@ -35,14 +35,13 @@ namespace TERMINAL.Windows
             BatchNameText.Text = "Партия: —";
             SummaryGrid.ItemsSource = null;
             DetailHeaderText.Text = "Детали: —";
-            DetailContent.Content = new TextBlock
-            {
-                Text = "Нажмите «Обновить» для загрузки данных из .xlsm\n" +
-                       "или «Открыть CSV» для просмотра сохранённой партии.",
-                Margin = new Thickness(20),
-                FontStyle = FontStyles.Italic,
-                Foreground = Brushes.Gray
-            };
+
+            // Очищаем вкладки при старте
+            HysteresisContent.Content = null;
+            TchxContent.Content = null;
+            ErrorsContent.Content = null;
+            VerificationGrid.ItemsSource = null;
+            GstContent.Content = null;
 
             // ★ Применяем текущую тему из MainWindow
             ApplyThemeFromMainWindow();
@@ -319,7 +318,7 @@ namespace TERMINAL.Windows
         }
 
         // ═══════════════════════════════════════════════════
-        // Печать (без изменений в цветах — печать всегда на белом фоне)
+        // Печать
         // ═══════════════════════════════════════════════════
         private void Print_Click(object sender, RoutedEventArgs e)
         {
@@ -424,7 +423,7 @@ namespace TERMINAL.Windows
         }
 
         // ═══════════════════════════════════════════════════
-        // Страница для печати (без изменений — печать на белом фоне)
+        // Страница для печати
         // ═══════════════════════════════════════════════════
         private FixedPage BuildPageForSensor(SensorSummary sensor, double pageWidth, double pageHeight)
         {
@@ -851,7 +850,6 @@ namespace TERMINAL.Windows
                 HorizontalAlignment = HorizontalAlignment.Left
             };
 
-            // ★ Тёмная тема: цвета через DynamicResource
             grid.SetResourceReference(DataGrid.BackgroundProperty, "PanelBackground");
             grid.SetResourceReference(DataGrid.ForegroundProperty, "TextForeground");
             grid.SetResourceReference(DataGrid.BorderBrushProperty, "PanelBorder");
@@ -945,7 +943,6 @@ namespace TERMINAL.Windows
                         StringFormat = "0.000"
                     });
 
-                // ★ Тёмная тема: цвет текста через DynamicResource
                 textFactory.SetValue(TextBlock.ForegroundProperty,
                     new DynamicResourceExtension("TextForeground"));
 
@@ -998,31 +995,72 @@ namespace TERMINAL.Windows
             if (SummaryGrid.SelectedItem is not SummaryRow row)
             {
                 DetailHeaderText.Text = "Детали: —";
-                DetailContent.Content = null;
+
+                HysteresisContent.Content = null;
+                TchxContent.Content = null;
+                ErrorsContent.Content = null;
+                VerificationGrid.ItemsSource = null;
+                GstContent.Content = null;
+
                 return;
             }
 
             DetailHeaderText.Text = $"Детали: Датчик №{row.Number}    " +
                                     $"Опис.град.: {row.GradDescription?.ToString("0.0000") ?? "—"}";
 
-            int tabIndex = DetailTabs.SelectedIndex;
+            // Заполняем все вкладки сразу (скрытые просто не будут видны)
+            // Это быстрее, чем пересоздавать при каждом переключении
+            HysteresisContent.Content = BuildHysteresisPanel(row);
+            TchxContent.Content = BuildTchxPanel(row);
+            ErrorsContent.Content = BuildSingleTablePanel(row.Source.Errors);
+            UpdateVerificationGrid(row.Source);
+            GstContent.Content = BuildGstPanel(row);
+        }
 
-            if (tabIndex == 0)
+        // ═══════════════════════════════════════════════════
+        // Заполнить таблицу Проверки
+        // ═══════════════════════════════════════════════════
+        private void UpdateVerificationGrid(SensorSummary sensor)
+        {
+            if (sensor.VerificationTable == null)
             {
-                DetailContent.Content = BuildHysteresisPanel(row);
+                VerificationGrid.ItemsSource = null;
+                return;
             }
-            else if (tabIndex == 1)
+
+            var dt = new System.Data.DataTable();
+
+            // Первая колонка — давление
+            dt.Columns.Add("P, кгс/см²", typeof(string));
+
+            // Добавляем колонки для температур
+            foreach (var temp in sensor.VerificationTable.ColumnHeaders)
             {
-                DetailContent.Content = BuildTchxPanel(row);
+                dt.Columns.Add(temp.ToString("0.###"), typeof(string));
             }
-            else if (tabIndex == 2)
+
+            // Заполняем строки
+            for (int r = 0; r < sensor.VerificationTable.Values.GetLength(0); r++)
             {
-                DetailContent.Content = BuildSingleTablePanel(row.Source.Errors);
+                var row = dt.NewRow();
+
+                // Давление (из RowHeaders)
+                string p = r < sensor.VerificationTable.RowHeaders.Count
+                    ? sensor.VerificationTable.RowHeaders[r].ToString("0.###")
+                    : "";
+                row[0] = p;
+
+                // Значения
+                for (int c = 0; c < sensor.VerificationTable.Values.GetLength(1); c++)
+                {
+                    var val = sensor.VerificationTable.Values[r, c];
+                    row[c + 1] = val.HasValue ? val.Value.ToString("0.0000") : "";
+                }
+
+                dt.Rows.Add(row);
             }
-            else if (tabIndex == 3)
-            {
-                DetailContent.Content = BuildGstPanel(row);
-            }
+
+            VerificationGrid.ItemsSource = dt.DefaultView;
         }
 
         // ═══════════════════════════════════════════════════
@@ -1238,7 +1276,6 @@ namespace TERMINAL.Windows
                 HorizontalAlignment = HorizontalAlignment.Left
             };
 
-            // ★ Тёмная тема: цвета через DynamicResource
             grid.SetResourceReference(DataGrid.BackgroundProperty, "PanelBackground");
             grid.SetResourceReference(DataGrid.ForegroundProperty, "TextForeground");
             grid.SetResourceReference(DataGrid.BorderBrushProperty, "PanelBorder");
@@ -1372,7 +1409,6 @@ namespace TERMINAL.Windows
                         StringFormat = "0.000"
                     });
 
-                // ★ Тёмная тема: цвет текста через DynamicResource
                 textFactory.SetValue(TextBlock.ForegroundProperty,
                     new DynamicResourceExtension("TextForeground"));
 

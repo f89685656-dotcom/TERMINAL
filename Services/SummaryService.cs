@@ -201,6 +201,19 @@ namespace TERMINAL.Services
                         dataRows: 6, dataCols: 5);
                 }
                 catch (Exception ex) { throw new Exception("Ошибка чтения Гистерезиса проверки: " + ex.Message); }
+
+
+                // ★ Чтение таблицы Проверки
+                try
+                {
+                    sensor.VerificationTable = ReadTable(
+                        wsTerminal,
+                        tempRow: 22, tempColStart: 3, tempColCount: 5, // Температуры (C22:G22)
+                        pressRowStart: 23, pressRowCount: 16, pressCol: 2, // Давления (B23:B38)
+                        dataRowStart: 23, dataColStart: 3, // Данные (C23:G38)
+                        dataRows: 16, dataCols: 5);
+                }
+                catch (Exception ex) { throw new Exception("Ошибка чтения Проверки: " + ex.Message); }
             }
             catch (Exception ex)
             {
