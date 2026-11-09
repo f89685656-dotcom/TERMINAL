@@ -330,23 +330,29 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,5,10,5">
-                <ProgressBar x:Name="ScanProgressBarRS485" Width="150" Height="15" 
-                             Minimum="0" Maximum="10" Value="0" 
-                             Foreground="#33adff" Background="#222222"
-                             Visibility="Collapsed"/>
-                <TextBlock x:Name="ScanProgressTextRS485" Text="" VerticalAlignment="Center" 
-                           Margin="5,0,20,0" Width="100" Foreground="{DynamicResource TextForeground}"
-                           Visibility="Collapsed"/>
+            <!-- ★ ДИНАМИЧЕСКИЕ ПРОГРЕСС-БАРЫ ДЛЯ КАЖДОГО ПОРТА ★ -->
+            <ItemsControl x:Name="ScanProgressList" Grid.Row="0" Margin="10,5,10,5">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,0,0,3">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="120"/>
+                            </Grid.ColumnDefinitions>
 
-                <ProgressBar x:Name="ScanProgressBarI2C" Width="150" Height="15" 
-                             Minimum="0" Maximum="10" Value="0" 
-                             Foreground="#33adff" Background="#222222"
-                             Visibility="Collapsed"/>
-                <TextBlock x:Name="ScanProgressTextI2C" Text="" VerticalAlignment="Center" 
-                           Margin="5,0,0,0" Width="100" Foreground="{DynamicResource TextForeground}"
-                           Visibility="Collapsed"/>
-            </StackPanel>
+                            <!-- Имя порта (например, COM3 (57600 бод)) -->
+                            <TextBlock Grid.Column="0" Text="{Binding PortName}" VerticalAlignment="Center" FontWeight="Bold" FontSize="11" Foreground="{DynamicResource TextForeground}"/>
+
+                            <!-- Прогресс-бар -->
+                            <ProgressBar Grid.Column="1" Height="15" Minimum="0" Maximum="{Binding Total}" Value="{Binding Current}" Margin="5,0" Foreground="#33adff" Background="#222222"/>
+
+                            <!-- Статус (например, Адрес 15) -->
+                            <TextBlock Grid.Column="2" Text="{Binding StatusText}" VerticalAlignment="Center" Margin="5,0" FontSize="11" Foreground="{DynamicResource TextForeground}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
             <ListView Grid.Row="1" x:Name="LogListView" Margin="10,0,10,10" 
                       Background="{DynamicResource PanelBackground}" 

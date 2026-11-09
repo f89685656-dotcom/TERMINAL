@@ -19,6 +19,8 @@ namespace TERMINAL.DeviceHub
         private PollingEngine _engine = new PollingEngine();
         private DispatcherTimer _uiQueueTimer;
 
+        public ObservableCollection<ScanProgressInfo> ScanProgresses { get; set; } = new();
+
         private PlotModel _plotModelRealTime;
         private Dictionary<ChannelNode, LineSeries> _seriesMapRealTime = new Dictionary<ChannelNode, LineSeries>();
         private DateTime _lastPlotUpdate = DateTime.MinValue;
@@ -43,10 +45,23 @@ namespace TERMINAL.DeviceHub
             DataContext = this;
             InitializePlot();
 
-            _engine.ScanProgressChanged += (port, current, total) => Dispatcher.Invoke(() =>
+            // ★ Привязываем ItemsControl к коллекции
+            ScanProgressList.ItemsSource = ScanProgresses;
+
+            // ★ Обновленный обработчик прогресса (поддерживает несколько портов одновременно)
+            _engine.ScanProgressChanged += (progressInfo) => Dispatcher.Invoke(() =>
             {
-                if (port == "RS-485") { ScanProgressBarRS485.Maximum = total; ScanProgressBarRS485.Value = current; ScanProgressTextRS485.Text = $"RS-485: {current}/{total}"; }
-                else if (port == "I2C") { ScanProgressBarI2C.Maximum = total; ScanProgressBarI2C.Value = current; ScanProgressTextI2C.Text = $"I2C: {current}/{total}"; }
+                var existing = ScanProgresses.FirstOrDefault(p => p.PortName == progressInfo.PortName);
+                if (existing == null)
+                {
+                    ScanProgresses.Add(progressInfo);
+                }
+                else
+                {
+                    existing.Current = progressInfo.Current;
+                    existing.Total = progressInfo.Total;
+                    existing.StatusText = progressInfo.StatusText;
+                }
             });
 
             _engine.DeviceFound += (dev) => Dispatcher.Invoke(() =>
@@ -77,7 +92,6 @@ namespace TERMINAL.DeviceHub
             _uiQueueTimer.Start();
             UpdateStatusText();
         }
-
         // ================= ОБРАБОТЧИКИ ИНТЕРФЕЙСА =================
 
         private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -283,12 +297,36 @@ namespace TERMINAL.DeviceHub
 
         private async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRecording) { _engine.Stop(); _isRecording = false; RecordIcon.Text = "\uE768"; RecordIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50")); LogListView.Items.Add("Опрос остановлен (запущен поиск)."); }
-            if (_isScanning) { _engine.Stop(); _scanCts?.Cancel(); _scanCts?.Dispose(); _scanCts = null; _isScanning = false; ScanButtonIcon.Text = "\uE721"; ScanButton.ToolTip = "Поиск"; LogListView.Items.Add("Поиск отменён."); return; }
+            if (_isRecording)
+            {
+                _engine.Stop();
+                _isRecording = false;
+                RecordIcon.Text = "\uE768";
+                RecordIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50"));
+                LogListView.Items.Add("Опрос остановлен (запущен поиск).");
+            }
 
-            _isScanning = true; _scanCts = new CancellationTokenSource(); ScanButtonIcon.Text = "\uE711"; ScanButton.ToolTip = "Отмена"; LogListView.Items.Add("Запуск параллельного сканирования...");
-            ScanProgressBarRS485.Visibility = Visibility.Visible; ScanProgressTextRS485.Visibility = Visibility.Visible; ScanProgressBarI2C.Visibility = Visibility.Visible; ScanProgressTextI2C.Visibility = Visibility.Visible;
-            ScanProgressBarRS485.Value = 0; ScanProgressTextRS485.Text = ""; ScanProgressBarI2C.Value = 0; ScanProgressTextI2C.Text = "";
+            if (_isScanning)
+            {
+                _engine.Stop();
+                _scanCts?.Cancel();
+                _scanCts?.Dispose();
+                _scanCts = null;
+                _isScanning = false;
+                ScanButtonIcon.Text = "\uE721";
+                ScanButton.ToolTip = "Поиск";
+                LogListView.Items.Add("Поиск отменён.");
+                return;
+            }
+
+            _isScanning = true;
+            _scanCts = new CancellationTokenSource();
+            ScanButtonIcon.Text = "\uE711";
+            ScanButton.ToolTip = "Отмена";
+            LogListView.Items.Add("Запуск параллельного сканирования...");
+
+            // ★ Очищаем старые прогресс-бары
+            ScanProgresses.Clear();
 
             try
             {
@@ -333,16 +371,23 @@ namespace TERMINAL.DeviceHub
                 UpdateHistoryList();
                 LogListView.Items.Add("Сканирование завершено.");
             }
-            catch (OperationCanceledException) { LogListView.Items.Add("Поиск отменён."); }
-            catch (Exception ex) { LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}"); }
+            catch (OperationCanceledException)
+            {
+                LogListView.Items.Add("Поиск отменён.");
+            }
+            catch (Exception ex)
+            {
+                LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}");
+            }
             finally
             {
-                _isScanning = false; _scanCts?.Dispose(); _scanCts = null; ScanButtonIcon.Text = "\uE721"; ScanButton.ToolTip = "Поиск";
-                ScanProgressBarRS485.Visibility = Visibility.Collapsed; ScanProgressTextRS485.Visibility = Visibility.Collapsed; ScanProgressBarI2C.Visibility = Visibility.Collapsed; ScanProgressTextI2C.Visibility = Visibility.Collapsed;
-                ScanProgressBarRS485.Value = 0; ScanProgressTextRS485.Text = ""; ScanProgressBarI2C.Value = 0; ScanProgressTextI2C.Text = "";
+                _isScanning = false;
+                _scanCts?.Dispose();
+                _scanCts = null;
+                ScanButtonIcon.Text = "\uE721";
+                ScanButton.ToolTip = "Поиск";
             }
         }
-
         private void CopyLogMenuItem_Click(object sender, RoutedEventArgs e) => CopySelectedLogs();
         private void CopyLogCommand_Executed(object sender, ExecutedRoutedEventArgs e) => CopySelectedLogs();
 

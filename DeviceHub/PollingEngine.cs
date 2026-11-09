@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO.Ports;
 using System.Linq;
 using System.Threading;
@@ -20,7 +21,8 @@ namespace TERMINAL.DeviceHub
         public ConcurrentQueue<Action> UiUpdates { get; } = new ConcurrentQueue<Action>();
         public ConcurrentQueue<string> LogQueue { get; } = new ConcurrentQueue<string>();
 
-        public event Action<string, int, int> ScanProgressChanged;
+        // ★ ИЗМЕНЕНО: Теперь передаем объект с именем порта, текущим и общим количеством
+        public event Action<ScanProgressInfo> ScanProgressChanged;
         public event Action<DeviceNode> DeviceFound;
 
         private readonly Dictionary<string, SemaphoreSlim> _portLocks = new Dictionary<string, SemaphoreSlim>();
@@ -106,12 +108,26 @@ namespace TERMINAL.DeviceHub
                 int maxAddress = 247;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
+                // ★ Создаем объект прогресса для этого порта
+                var progress = new ScanProgressInfo
+                {
+                    PortName = $"{portName} ({baudRate} бод)",
+                    Total = maxAddress,
+                    Current = 0,
+                    StatusText = "Запуск..."
+                };
+                ScanProgressChanged?.Invoke(progress);
+
                 for (byte address = 1; address <= maxAddress; address++)
                 {
                     if (token.IsCancellationRequested) break;
 
                     sw.Restart();
-                    ScanProgressChanged?.Invoke("RS-485", address, maxAddress);
+
+                    // ★ Обновляем прогресс для этого порта
+                    progress.Current = address;
+                    progress.StatusText = $"Адрес {address}";
+                    ScanProgressChanged?.Invoke(progress);
 
                     try
                     {
@@ -121,9 +137,8 @@ namespace TERMINAL.DeviceHub
 
                         var newDev = new DeviceNode
                         {
-                            Address = address.ToString("D3"), // "006"
+                            Address = address.ToString("D3"),
                             PortName = portName,
-                            // ★ ДОБАВЛЯЕМ ИМЯ ПОРТА В NAME ★
                             Name = $"[{portName}|0x{id:X4}]"
                         };
 
@@ -193,6 +208,9 @@ namespace TERMINAL.DeviceHub
                     }
                 }
 
+                progress.StatusText = "Готово";
+                ScanProgressChanged?.Invoke(progress);
+
                 LogQueue.Enqueue($"[Scan] {portName}: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
             }
             catch (Exception ex)
@@ -212,6 +230,7 @@ namespace TERMINAL.DeviceHub
 
             return foundDevices;
         }
+
         private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface, CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
@@ -226,18 +245,15 @@ namespace TERMINAL.DeviceHub
 
                 i2cMaster = new FT260_I2CDotNet.FT260();
 
-                // ★ ИСПРАВЛЕНА ЛОГИКА ОТКРЫТИЯ ★
                 if (!i2cMaster.TryOpen())
                 {
                     LogQueue.Enqueue("[Scan] I2C: Не удалось открыть FT260.");
                     return foundDevices;
                 }
 
-                // ★ ПЫТАЕМСЯ ПОЛУЧИТЬ ИМЯ ПЕРЕХОДНИКА (ЕСЛИ СВОЙСТВО ЕСТЬ) ★
                 string adapterName = "FT260";
                 try
                 {
-                    // Пробуем найти свойство DevicePath или Description
                     var prop = i2cMaster.GetType().GetProperty("DevicePath")
                                ?? i2cMaster.GetType().GetProperty("Description")
                                ?? i2cMaster.GetType().GetProperty("SerialNumber");
@@ -255,10 +271,23 @@ namespace TERMINAL.DeviceHub
                 int maxAddress = 0x77;
                 int startAddress = 0x08;
 
+                // ★ Создаем объект прогресса для I2C
+                var progress = new ScanProgressInfo
+                {
+                    PortName = $"I2C ({adapterName})",
+                    Total = maxAddress - startAddress + 1,
+                    Current = 0,
+                    StatusText = "Запуск..."
+                };
+                ScanProgressChanged?.Invoke(progress);
+
                 for (byte address = 0x08; address <= 0x77; address++)
                 {
                     if (token.IsCancellationRequested) break;
-                    ScanProgressChanged?.Invoke("I2C", address - startAddress + 1, maxAddress - startAddress + 1);
+
+                    progress.Current = address - startAddress + 1;
+                    progress.StatusText = $"Адрес 0x{address:X2}";
+                    ScanProgressChanged?.Invoke(progress);
 
                     try
                     {
@@ -278,7 +307,6 @@ namespace TERMINAL.DeviceHub
                             LogQueue.Enqueue($"[Scan] I2C: Не удалось прочитать ID. Ошибка: {ex.Message}");
                         }
 
-                        // ★ ИСПОЛЬЗУЕМ ИМЯ ПЕРЕХОДНИКА ИЗ СВОЙСТВА ★
                         var newDev = new DeviceNode
                         {
                             Name = $"[{adapterName}|0x{deviceId:X4}]",
@@ -299,6 +327,9 @@ namespace TERMINAL.DeviceHub
                     catch { }
                 }
 
+                progress.StatusText = "Готово";
+                ScanProgressChanged?.Invoke(progress);
+
                 LogQueue.Enqueue($"[Scan] I2C: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
             }
             catch (Exception ex)
@@ -313,6 +344,7 @@ namespace TERMINAL.DeviceHub
 
             return foundDevices;
         }
+
         public void StartPolling(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c, int intervalMs = 500)
         {
             Stop();
@@ -330,7 +362,6 @@ namespace TERMINAL.DeviceHub
                     foreach (var setting in rs485Settings)
                     {
                         var localSetting = setting;
-                        // Выбираем устройства, у которых галочка не снята (true или null)
                         var devices = iface.Devices.Where(d => d.IsSelected != false).ToList();
                         if (devices.Any())
                         {
@@ -368,15 +399,13 @@ namespace TERMINAL.DeviceHub
             try
             {
                 port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                // ★ Снижаем таймаут до 50 мс. Для 57600 бод этого хватает с головой.
-                // Если прибор отвалился, мы теряем всего 50 мс, а не 100-300.
                 port.ReadTimeout = 50;
                 port.Open();
 
                 var factory = new ModbusFactory();
                 master = factory.CreateRtuMaster(port);
                 master.Transport.ReadTimeout = 50;
-                master.Transport.Retries = 0; // Отключаем ретраи, чтобы не ждать 3 раза по 50 мс
+                master.Transport.Retries = 0;
 
                 LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут 50 мс, период {intervalMs} мс)...");
 
@@ -386,7 +415,6 @@ namespace TERMINAL.DeviceHub
                     {
                         if (token.IsCancellationRequested) break;
 
-                        // Собираем только те каналы, которые выбраны пользователем
                         var activeChannels = dev.Channels.Where(c => c.IsSelected).ToList();
                         if (activeChannels.Count == 0) continue;
 
@@ -394,18 +422,14 @@ namespace TERMINAL.DeviceHub
                         {
                             byte id = byte.Parse(dev.Address);
 
-                            // ★ ОПТИМИЗАЦИЯ: Читаем ОДИН БЛОК регистров от минимального до максимального
-                            // Вместо 8 запросов на устройство делаем 1 запрос.
                             ushort minReg = activeChannels.Min(c => c.RegisterAddress);
                             ushort maxReg = activeChannels.Max(c => c.IsDouble ? (ushort)(c.RegisterAddress + 3) : (ushort)(c.RegisterAddress + 1));
                             ushort numRegs = (ushort)(maxReg - minReg + 1);
 
-                            // Лимит Modbus RTU — 125 регистров за один запрос
                             if (numRegs > 125) numRegs = 125;
 
                             ushort[] blockRegs = master.ReadInputRegisters(id, minReg, numRegs);
 
-                            // Распаковываем прочитанный блок в каналы
                             foreach (var ch in activeChannels)
                             {
                                 int offset = ch.RegisterAddress - minReg;
@@ -444,7 +468,6 @@ namespace TERMINAL.DeviceHub
                         }
                         catch (Exception ex)
                         {
-                            // При таймауте устройства — просто пропускаем до следующего цикла.
                             if (!ex.Message.Contains("timed out"))
                             {
                                 LogQueue.Enqueue($"[Debug] {portName}: Ошибка устройства {dev.Address}: {ex.Message}");
@@ -452,7 +475,6 @@ namespace TERMINAL.DeviceHub
                         }
                     }
 
-                    // Задержка между циклами опроса
                     try { await Task.Delay(intervalMs, token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
@@ -507,8 +529,6 @@ namespace TERMINAL.DeviceHub
                             {
                                 try
                                 {
-                                    // Для I2C оставляем поштучное чтение (у разных датчиков разная структура),
-                                    // но можно было бы оптимизировать аналогично, если регистры идут подряд.
                                     if (ch.IsDouble)
                                     {
                                         i2cMaster.Write(address, new byte[] { (byte)(ch.RegisterAddress & 0xFF) }, Start: true, Stop: false);
@@ -527,10 +547,10 @@ namespace TERMINAL.DeviceHub
                                         ch.Value = val;
                                     }
                                 }
-                                catch { /* Пропускаем ошибку канала */ }
+                                catch { }
                             }
                         }
-                        catch { /* Пропускаем ошибку устройства */ }
+                        catch { }
                     }
 
                     try { await Task.Delay(intervalMs, token).ConfigureAwait(false); }
@@ -549,6 +569,7 @@ namespace TERMINAL.DeviceHub
                 LogQueue.Enqueue("[Poll] I2C: Опрос остановлен.");
             }
         }
+
         public void Stop()
         {
             var cts = _cts;
@@ -575,5 +596,35 @@ namespace TERMINAL.DeviceHub
         public void ClosePort()
         {
         }
+    }
+
+    public class ScanProgressInfo : INotifyPropertyChanged
+    {
+        private int _current;
+        private int _total;
+        private string _statusText;
+
+        public string PortName { get; set; }
+
+        public int Current
+        {
+            get => _current;
+            set { _current = value; OnPropertyChanged(nameof(Current)); }
+        }
+
+        public int Total
+        {
+            get => _total;
+            set { _total = value; OnPropertyChanged(nameof(Total)); }
+        }
+
+        public string StatusText
+        {
+            get => _statusText;
+            set { _statusText = value; OnPropertyChanged(nameof(StatusText)); }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }
