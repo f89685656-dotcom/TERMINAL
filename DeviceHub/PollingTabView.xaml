@@ -265,6 +265,21 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Button>
 
+                    <!-- ★ НОВАЯ КНОПКА: СОХРАНИТЬ ИСТОРИЮ (СТРОКИ) ★ -->
+                    <Button x:Name="SaveHistoryRowsButton" Click="SaveHistoryRowsButton_Click" ToolTip="Сохранить историю (построчно)" 
+                            Width="40" Height="40" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Margin="5,0,0,0">
+                        <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="20" 
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF2196F3"/>
+                    </Button>
+
+                    <!-- ★ НОВАЯ КНОПКА: СОХРАНИТЬ ИСТОРИЮ (ШИРОКАЯ ТАБЛИЦА) ★ -->
+                    <Button x:Name="SaveHistoryWideButton" Click="SaveHistoryWideButton_Click" ToolTip="Сохранить историю (широкая таблица)" 
+                            Width="40" Height="40" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Margin="5,0,0,0">
+                        <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="20" 
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF00BCD4"/>
+                    </Button>
+                    <!-- ★ КОНЕЦ НОВЫХ КНОПОК ★ -->
+
                     <Button x:Name="ClearHistoryButton" Click="ClearHistoryButton_Click" ToolTip="Очистить всю историю" 
                             Width="40" Height="40" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Margin="5,0,0,0">
                         <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="20" 

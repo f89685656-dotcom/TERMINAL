@@ -120,6 +120,8 @@ namespace TERMINAL.DeviceHub
                     RecordButton.Visibility = Visibility.Visible;
                     RefreshHistoryButton.Visibility = Visibility.Collapsed;
                     ClearHistoryButton.Visibility = Visibility.Collapsed;
+                    SaveHistoryRowsButton.Visibility = Visibility.Collapsed;  // ★
+                    SaveHistoryWideButton.Visibility = Visibility.Collapsed;  // ★
 
                     HistoryItemsControl.ItemsSource = null;
                     foreach (var iface in Interfaces)
@@ -134,6 +136,8 @@ namespace TERMINAL.DeviceHub
                     RecordButton.Visibility = Visibility.Collapsed;
                     RefreshHistoryButton.Visibility = Visibility.Visible;
                     ClearHistoryButton.Visibility = Visibility.Visible;
+                    SaveHistoryRowsButton.Visibility = Visibility.Visible;  // ★
+                    SaveHistoryWideButton.Visibility = Visibility.Visible;  // ★
                     UpdateHistoryList();
                 }
             }
@@ -929,8 +933,6 @@ namespace TERMINAL.DeviceHub
                     }
 
                     // ★ Пишем шапку 1: "Устройства:"
-                    // ★ Пишем шапку 1: "Устройства:"
-                    // Используем ; как разделитель. Название устройства пишем один раз для группы каналов.
                     _csvWideWriter.Write("Устройства;");
 
                     DeviceNode lastDev = null;
@@ -938,19 +940,23 @@ namespace TERMINAL.DeviceHub
                     {
                         if (ch.ParentDevice != lastDev)
                         {
-                            // Экранируем кавычками на случай, если в имени есть разделитель (хотя там |)
-                            string devName = ch.FullName.Replace("\"", "\"\"");
+                            // ★ Собираем имя устройства БЕЗ названия канала
+                            string address = ch.ParentDevice?.Address ?? "?";
+                            string iface = ch.ParentInterface?.Name ?? "?";
+                            string devId = ch.ParentDevice?.Name?.Replace("[", "").Replace("]", "") ?? "?";
+
+                            string devName = $"адрес: {address}|{devId}|{iface}";
+                            devName = devName.Replace("\"", "\"\""); // Экранируем кавычки
+
                             _csvWideWriter.Write($"\"{devName}\";");
                             lastDev = ch.ParentDevice;
                         }
                         else
                         {
-                            // Пустая ячейка для остальных каналов этого же устройства
-                            _csvWideWriter.Write(";");
+                            _csvWideWriter.Write(";"); // Пустая ячейка для остальных каналов
                         }
                     }
                     _csvWideWriter.WriteLine();
-
                     // ★ Пишем шапку 2: "Каналы:"
                     _csvWideWriter.Write("Каналы;");
                     foreach (var ch in _csvWideChannels)
@@ -996,16 +1002,171 @@ namespace TERMINAL.DeviceHub
         {
             // Проверяем системный разделитель дробной части
             string separator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
-            
+            return dt.ToString("dd.MM.yyyy HH:mm:ss,fff");
             // Если системный разделитель — запятая, используем запятую для миллисекунд
-            if (separator == ",")
+            //if (separator == ",")
+            //{
+            //    return dt.ToString("dd.MM.yyyy HH:mm:ss,fff");
+            //}
+            //else
+            //{
+            //    // Иначе — точку
+            //    return dt.ToString("dd.MM.yyyy HH:mm:ss.fff");
+            //}
+        }
+
+        private void SaveHistoryRowsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
             {
-                return dt.ToString("dd.MM.yyyy HH:mm:ss,fff");
+                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                DefaultExt = ".csv",
+                FileName = $"История_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                using (var writer = new StreamWriter(dialog.FileName, false, System.Text.Encoding.UTF8))
+                {
+                    writer.AutoFlush = true;
+                    writer.WriteLine("Время;№Изм;№Итер;Адрес;ID устройства;Серийный номер;Ячейка;Значение");
+
+                    foreach (var iface in Interfaces)
+                        foreach (var dev in iface.Devices)
+                            foreach (var ch in dev.Channels)
+                            {
+                                // Пропускаем каналы, у которых нет истории
+                                if (ch.HistoryPoints.Count == 0) continue;
+
+                                foreach (var pt in ch.HistoryPoints)
+                                {
+                                    DateTime dt = DateTimeAxis.ToDateTime(pt.X);
+                                    string timeStr = FormatDateTimeForCsv(dt);
+
+                                    string address = dev.Address ?? "";
+                                    string channelName = ch.Name;
+                                    string value = pt.Y.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+
+                                    string line = $"{timeStr};;;{address};;;{channelName};{value}";
+                                    writer.WriteLine(line);
+                                }
+                            }
+                }
+                LogListView.Items.Add($"История сохранена (построчно): {dialog.FileName}");
             }
-            else
+            catch (Exception ex)
             {
-                // Иначе — точку
-                return dt.ToString("dd.MM.yyyy HH:mm:ss.fff");
+                MessageBox.Show($"Не удалось сохранить файл: {ex.Message}");
+            }
+        }
+
+        private void SaveHistoryWideButton_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                DefaultExt = ".csv",
+                FileName = $"История_Широкая_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                // Собираем список всех каналов, у которых есть история
+                List<ChannelNode> historyChannels = new List<ChannelNode>();
+                foreach (var iface in Interfaces)
+                    foreach (var dev in iface.Devices)
+                        foreach (var ch in dev.Channels)
+                            if (ch.HistoryPoints.Count > 0) historyChannels.Add(ch);
+
+                if (historyChannels.Count == 0)
+                {
+                    MessageBox.Show("Нет накопленных данных для сохранения.");
+                    return;
+                }
+
+                using (var writer = new StreamWriter(dialog.FileName, false, System.Text.Encoding.UTF8))
+                {
+                    writer.AutoFlush = true;
+
+                    // 1. Шапка "Устройства"
+                    writer.Write("Устройства;");
+                    DeviceNode lastDev = null;
+                    foreach (var ch in historyChannels)
+                    {
+                        if (ch.ParentDevice != lastDev)
+                        {
+                            // ★ Собираем имя устройства БЕЗ названия канала
+                            string address = ch.ParentDevice?.Address ?? "?";
+                            string iface = ch.ParentInterface?.Name ?? "?";
+                            string devId = ch.ParentDevice?.Name?.Replace("[", "").Replace("]", "") ?? "?";
+
+                            string devName = $"адрес: {address}|{devId}|{iface}";
+                            devName = devName.Replace("\"", "\"\""); // Экранируем кавычки
+
+                            writer.Write($"\"{devName}\";");
+                            lastDev = ch.ParentDevice;
+                        }
+                        else
+                        {
+                            writer.Write(";");
+                        }
+                    }
+                    writer.WriteLine();
+
+                    // 2. Шапка "Каналы"
+                    writer.Write("Каналы;");
+                    foreach (var ch in historyChannels)
+                    {
+                        writer.Write($"{ch.Name};");
+                    }
+                    writer.WriteLine();
+
+                    // 3. Собираем все уникальные временные метки (X) из всех каналов
+                    // Используем HashSet для быстрого поиска и SortedSet для сортировки
+                    SortedSet<double> allTimestamps = new SortedSet<double>();
+                    foreach (var ch in historyChannels)
+                    {
+                        foreach (var pt in ch.HistoryPoints)
+                        {
+                            allTimestamps.Add(pt.X);
+                        }
+                    }
+
+                    // 4. Пишем строки: Время + значения для каждого канала
+                    foreach (var timestamp in allTimestamps)
+                    {
+                        DateTime dt = DateTimeAxis.ToDateTime(timestamp);
+                        string timeStr = FormatDateTimeForCsv(dt);
+                        writer.Write($"{timeStr};");
+
+                        foreach (var ch in historyChannels)
+                        {
+                            // Ищем точку с такой же временной меткой
+                            // Используем FirstOrDefault, но проверяем, нашли ли мы её
+                            var points = ch.HistoryPoints.Where(p => Math.Abs(p.X - timestamp) < 0.000001);
+
+                            if (points.Any())
+                            {
+                                var point = points.First();
+                                writer.Write($"{point.Y.ToString("F6", System.Globalization.CultureInfo.InvariantCulture)};");
+                            }
+                            else
+                            {
+                                writer.Write(";"); // Если пропуск данных — пусто
+                            }
+                        }
+                        writer.WriteLine();
+                    }
+                }
+                LogListView.Items.Add($"История сохранена (широкая): {dialog.FileName}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось сохранить файл: {ex.Message}");
             }
         }
     }
