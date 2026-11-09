@@ -82,7 +82,11 @@ namespace TERMINAL.Notifications
 
         public void ResetTable()
         {
-            lock (_lock) { _tableMsgId = null; _lastTableText = null; }
+            lock (_lock)
+            {
+                _tableMsgId = null;
+                _lastTableText = null;
+            }
         }
     }
 }

@@ -606,6 +606,8 @@ namespace TERMINAL
                 RefreshSensorUiFromClients();
                 UpdateSktbPanelVisibility();
                 UpdateStartButtonMode();
+
+                await RefreshPreviewTableForFirstEnabledJobAsync();
             }
             catch (Exception ex)
             {
