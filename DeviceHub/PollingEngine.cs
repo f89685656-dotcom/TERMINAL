@@ -334,7 +334,7 @@ namespace TERMINAL.DeviceHub
                         var devices = iface.Devices.Where(d => d.IsSelected != false).ToList();
                         if (devices.Any())
                         {
-                            _pollingTasks.Add(Task.Run(() => PollModbusLoop(localSetting.PortName, localSetting.BaudRate, devices, intervalMs, _cts.Token)));
+                            _pollingTasks.Add(PollModbusLoop(localSetting.PortName, localSetting.BaudRate, devices, intervalMs, _cts.Token));
                         }
                     }
                 }
@@ -348,7 +348,7 @@ namespace TERMINAL.DeviceHub
                     var i2cDevices = i2cIface.Devices.Where(d => d.IsSelected != false).ToList();
                     if (i2cDevices.Any())
                     {
-                        _pollingTasks.Add(Task.Run(() => PollI2CLoop(i2cDevices, intervalMs, _cts.Token)));
+                        _pollingTasks.Add(PollI2CLoop(i2cDevices, intervalMs, _cts.Token));
                     }
                 }
             }
@@ -359,7 +359,7 @@ namespace TERMINAL.DeviceHub
         private async Task PollModbusLoop(string portName, int baudRate, List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
             var sem = GetPortLock(portName);
-            try { await sem.WaitAsync(token); }
+            try { await sem.WaitAsync(token).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
 
             SerialPort port = null;
@@ -368,13 +368,17 @@ namespace TERMINAL.DeviceHub
             try
             {
                 port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                port.ReadTimeout = 100;
+                // ★ Снижаем таймаут до 50 мс. Для 57600 бод этого хватает с головой.
+                // Если прибор отвалился, мы теряем всего 50 мс, а не 100-300.
+                port.ReadTimeout = 50;
                 port.Open();
+
                 var factory = new ModbusFactory();
                 master = factory.CreateRtuMaster(port);
-                master.Transport.ReadTimeout = 100;
+                master.Transport.ReadTimeout = 50;
+                master.Transport.Retries = 0; // Отключаем ретраи, чтобы не ждать 3 раза по 50 мс
 
-                LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут 100 мс, период {intervalMs} мс)...");
+                LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут 50 мс, период {intervalMs} мс)...");
 
                 while (!token.IsCancellationRequested)
                 {
@@ -382,66 +386,74 @@ namespace TERMINAL.DeviceHub
                     {
                         if (token.IsCancellationRequested) break;
 
+                        // Собираем только те каналы, которые выбраны пользователем
+                        var activeChannels = dev.Channels.Where(c => c.IsSelected).ToList();
+                        if (activeChannels.Count == 0) continue;
+
                         try
                         {
                             byte id = byte.Parse(dev.Address);
 
-                            foreach (var ch in dev.Channels)
-                            {
-                                if (!ch.IsSelected) continue;
+                            // ★ ОПТИМИЗАЦИЯ: Читаем ОДИН БЛОК регистров от минимального до максимального
+                            // Вместо 8 запросов на устройство делаем 1 запрос.
+                            ushort minReg = activeChannels.Min(c => c.RegisterAddress);
+                            ushort maxReg = activeChannels.Max(c => c.IsDouble ? (ushort)(c.RegisterAddress + 3) : (ushort)(c.RegisterAddress + 1));
+                            ushort numRegs = (ushort)(maxReg - minReg + 1);
 
-                                try
+                            // Лимит Modbus RTU — 125 регистров за один запрос
+                            if (numRegs > 125) numRegs = 125;
+
+                            ushort[] blockRegs = master.ReadInputRegisters(id, minReg, numRegs);
+
+                            // Распаковываем прочитанный блок в каналы
+                            foreach (var ch in activeChannels)
+                            {
+                                int offset = ch.RegisterAddress - minReg;
+
+                                if (ch.IsDouble)
                                 {
-                                    if (ch.IsDouble)
+                                    byte[] bytes = new byte[8];
+                                    for (int i = 0; i < 4; i++)
                                     {
-                                        ushort[] regs = master.ReadInputRegisters(id, ch.RegisterAddress, 4);
-                                        byte[] bytes = new byte[8];
-                                        for (int i = 0; i < 4; i++)
-                                        {
-                                            bytes[i * 2] = (byte)(regs[i] & 0xFF);
-                                            bytes[i * 2 + 1] = (byte)(regs[i] >> 8);
-                                        }
-                                        double val = BitConverter.ToDouble(bytes, 0);
-                                        ch.LastValue = val;
-                                        ch.Value = val;
+                                        bytes[i * 2] = (byte)(blockRegs[offset + i] & 0xFF);
+                                        bytes[i * 2 + 1] = (byte)(blockRegs[offset + i] >> 8);
                                     }
-                                    else if (ch.IsInt32)
-                                    {
-                                        ushort[] regs = master.ReadInputRegisters(id, ch.RegisterAddress, 2);
-                                        int raw = (regs[1] << 16) | regs[0];
-                                        double val = Math.Round((double)raw);
-                                        ch.LastValue = val;
-                                        ch.Value = val;
-                                    }
-                                    else
-                                    {
-                                        ushort[] regs = master.ReadInputRegisters(id, ch.RegisterAddress, 2);
-                                        byte[] bytes = new byte[4];
-                                        bytes[0] = (byte)(regs[0] & 0xFF);
-                                        bytes[1] = (byte)(regs[0] >> 8);
-                                        bytes[2] = (byte)(regs[1] & 0xFF);
-                                        bytes[3] = (byte)(regs[1] >> 8);
-                                        float val = BitConverter.ToSingle(bytes, 0);
-                                        ch.LastValue = val;
-                                        ch.Value = val;
-                                    }
+                                    double val = BitConverter.ToDouble(bytes, 0);
+                                    ch.LastValue = val;
+                                    ch.Value = val;
                                 }
-                                catch (Exception ex)
+                                else if (ch.IsInt32)
                                 {
-                                    if (!ex.Message.Contains("timed out"))
-                                    {
-                                        LogQueue.Enqueue($"[Debug] {portName}: Ошибка {ch.Name}: {ex.Message}");
-                                    }
+                                    int raw = (blockRegs[offset + 1] << 16) | blockRegs[offset];
+                                    double val = Math.Round((double)raw);
+                                    ch.LastValue = val;
+                                    ch.Value = val;
+                                }
+                                else
+                                {
+                                    byte[] bytes = new byte[4];
+                                    bytes[0] = (byte)(blockRegs[offset] & 0xFF);
+                                    bytes[1] = (byte)(blockRegs[offset] >> 8);
+                                    bytes[2] = (byte)(blockRegs[offset + 1] & 0xFF);
+                                    bytes[3] = (byte)(blockRegs[offset + 1] >> 8);
+                                    float val = BitConverter.ToSingle(bytes, 0);
+                                    ch.LastValue = val;
+                                    ch.Value = val;
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
-                            LogQueue.Enqueue($"[Debug] {portName}: Ошибка устройства {dev.Address}: {ex.Message}");
+                            // При таймауте устройства — просто пропускаем до следующего цикла.
+                            if (!ex.Message.Contains("timed out"))
+                            {
+                                LogQueue.Enqueue($"[Debug] {portName}: Ошибка устройства {dev.Address}: {ex.Message}");
+                            }
                         }
                     }
 
-                    try { await Task.Delay(intervalMs, token); }
+                    // Задержка между циклами опроса
+                    try { await Task.Delay(intervalMs, token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
             }
@@ -467,7 +479,7 @@ namespace TERMINAL.DeviceHub
         private async Task PollI2CLoop(List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
             FT260_I2CDotNet.FT260 i2cMaster = null;
-            try { await _i2cLock.WaitAsync(token); }
+            try { await _i2cLock.WaitAsync(token).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
 
             try
@@ -488,15 +500,15 @@ namespace TERMINAL.DeviceHub
 
                         try
                         {
-                            // ★ ПАРСИМ АДРЕС КАК ДЕСЯТИЧНОЕ ЧИСЛО ★
                             byte address = byte.Parse(dev.Address.Trim());
+                            var activeChannels = dev.Channels.Where(c => c.IsSelected).ToList();
 
-                            foreach (var ch in dev.Channels)
+                            foreach (var ch in activeChannels)
                             {
-                                if (!ch.IsSelected) continue;
-
                                 try
                                 {
+                                    // Для I2C оставляем поштучное чтение (у разных датчиков разная структура),
+                                    // но можно было бы оптимизировать аналогично, если регистры идут подряд.
                                     if (ch.IsDouble)
                                     {
                                         i2cMaster.Write(address, new byte[] { (byte)(ch.RegisterAddress & 0xFF) }, Start: true, Stop: false);
@@ -510,23 +522,18 @@ namespace TERMINAL.DeviceHub
                                         i2cMaster.Write(address, new byte[] { (byte)(ch.RegisterAddress & 0xFF) }, Start: true, Stop: false);
                                         i2cMaster.Read(address, out byte[] data, 4, RepStart: true, Stop: true);
 
-                                        byte[] bytes = new byte[4];
-                                        bytes[0] = data[0];
-                                        bytes[1] = data[1];
-                                        bytes[2] = data[2];
-                                        bytes[3] = data[3];
-                                        float val = BitConverter.ToSingle(bytes, 0);
+                                        float val = BitConverter.ToSingle(data, 0);
                                         ch.LastValue = val;
                                         ch.Value = val;
                                     }
                                 }
-                                catch { }
+                                catch { /* Пропускаем ошибку канала */ }
                             }
                         }
-                        catch { }
+                        catch { /* Пропускаем ошибку устройства */ }
                     }
 
-                    try { await Task.Delay(intervalMs, token); }
+                    try { await Task.Delay(intervalMs, token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
             }
