@@ -4,6 +4,7 @@ using OxyPlot.Series;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -19,6 +20,19 @@ namespace TERMINAL.DeviceHub
         private PollingEngine _engine = new PollingEngine();
         private DispatcherTimer _uiQueueTimer;
 
+        // ★ Поля для записи в CSV ★
+        private bool _isCsvRecording = false;
+        private StreamWriter _csvWriter = null;
+        private DateTime _csvStartTime = DateTime.MinValue;
+        private string _csvFilePath = null;
+
+        private bool _isCsvWideRecording = false;
+        private StreamWriter _csvWideWriter = null;
+        private string _csvWideFilePath = null;
+        private List<ChannelNode> _csvWideChannels = new List<ChannelNode>(); // Список каналов для широкой таблицы
+
+        public ObservableCollection<ScanProgressInfo> ScanProgresses { get; set; } = new();
+
         private PlotModel _plotModelRealTime;
         private Dictionary<ChannelNode, LineSeries> _seriesMapRealTime = new Dictionary<ChannelNode, LineSeries>();
         private DateTime _lastPlotUpdate = DateTime.MinValue;
@@ -30,12 +44,17 @@ namespace TERMINAL.DeviceHub
 
         private bool _isRs485Enabled = true;
         private List<PortSetting> _rs485Ports = new List<PortSetting> { new PortSetting { PortName = "COM9", BaudRate = 57600 } };
-        private bool _isI2CEnabled = true;
+
+        // ★ ТЕПЕРЬ ХРАНИМ СПИСОК ID ВЫБРАННЫХ ПЕРЕХОДНИКОВ I2C (А НЕ ПРОСТО ФЛАГ)
+        private List<string> _selectedI2CDevices = new List<string> { "FT260 [7&5fcd268&0&0000]" };
 
         private bool _isRecording = false;
         private ChannelNode _selectedChannelForPlot = null;
         private double _historyMinTime = 0;
         private double _historyMaxTime = 0;
+
+        private double _historySelectedStart = 0;
+        private double _historySelectedEnd = 0;
 
         public PollingTabView()
         {
@@ -43,10 +62,23 @@ namespace TERMINAL.DeviceHub
             DataContext = this;
             InitializePlot();
 
-            _engine.ScanProgressChanged += (port, current, total) => Dispatcher.Invoke(() =>
+            // ★ Привязываем ItemsControl к коллекции
+            ScanProgressList.ItemsSource = ScanProgresses;
+
+            // ★ Обновленный обработчик прогресса (поддерживает несколько портов одновременно)
+            _engine.ScanProgressChanged += (progressInfo) => Dispatcher.Invoke(() =>
             {
-                if (port == "RS-485") { ScanProgressBarRS485.Maximum = total; ScanProgressBarRS485.Value = current; ScanProgressTextRS485.Text = $"RS-485: {current}/{total}"; }
-                else if (port == "I2C") { ScanProgressBarI2C.Maximum = total; ScanProgressBarI2C.Value = current; ScanProgressTextI2C.Text = $"I2C: {current}/{total}"; }
+                var existing = ScanProgresses.FirstOrDefault(p => p.PortName == progressInfo.PortName);
+                if (existing == null)
+                {
+                    ScanProgresses.Add(progressInfo);
+                }
+                else
+                {
+                    existing.Current = progressInfo.Current;
+                    existing.Total = progressInfo.Total;
+                    existing.StatusText = progressInfo.StatusText;
+                }
             });
 
             _engine.DeviceFound += (dev) => Dispatcher.Invoke(() =>
@@ -54,9 +86,9 @@ namespace TERMINAL.DeviceHub
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
                 var i2cIface = Interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
 
-                if (dev.PortName == "I2C")
+                if (dev.PortName == "I2C") // ★ Теперь это железно "I2C"
                 {
-                    if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address))
+                    if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
                     {
                         dev.ParentInterface = i2cIface;
                         i2cIface.Devices.Add(dev);
@@ -91,6 +123,8 @@ namespace TERMINAL.DeviceHub
                     RecordButton.Visibility = Visibility.Visible;
                     RefreshHistoryButton.Visibility = Visibility.Collapsed;
                     ClearHistoryButton.Visibility = Visibility.Collapsed;
+                    SaveHistoryRowsButton.Visibility = Visibility.Collapsed;  // ★
+                    SaveHistoryWideButton.Visibility = Visibility.Collapsed;  // ★
 
                     HistoryItemsControl.ItemsSource = null;
                     foreach (var iface in Interfaces)
@@ -105,6 +139,8 @@ namespace TERMINAL.DeviceHub
                     RecordButton.Visibility = Visibility.Collapsed;
                     RefreshHistoryButton.Visibility = Visibility.Visible;
                     ClearHistoryButton.Visibility = Visibility.Visible;
+                    SaveHistoryRowsButton.Visibility = Visibility.Visible;  // ★
+                    SaveHistoryWideButton.Visibility = Visibility.Visible;  // ★
                     UpdateHistoryList();
                 }
             }
@@ -114,26 +150,18 @@ namespace TERMINAL.DeviceHub
         {
             if (sender is FrameworkElement element && element.DataContext is ChannelNode channel)
             {
-                // Сбрасываем выделение у всех
                 foreach (var iface in Interfaces)
                     foreach (var dev in iface.Devices)
                         foreach (var ch in dev.Channels)
                             ch.IsVisibleOnPlot = false;
 
-                // Выделяем текущий
                 channel.IsVisibleOnPlot = true;
                 _selectedChannelForPlot = channel;
 
-                // ★ БЕРЕМ ДАННЫЕ ИЗ МОДЕЛИ ★
                 string channelName = channel.Name;
-
-                // Берем DisplayName (которое отображается в дереве) и убираем скобки для ID
-                // Например: "[COM9|0xC002]" -> "COM9|0xC002"
                 string devInfo = channel.ParentDevice?.DisplayName?.Replace("[", "").Replace("]", "") ?? "?";
-
                 string address = channel.ParentDevice?.Address ?? "?";
 
-                // Ищем интерфейс, если ParentInterface пуст
                 string ifaceName = channel.ParentInterface?.Name;
                 if (string.IsNullOrEmpty(ifaceName))
                 {
@@ -141,14 +169,11 @@ namespace TERMINAL.DeviceHub
                     ifaceName = parentIface?.Name ?? "?";
                 }
 
-                // Для I2C заменяем "I2C|" на "FT260|" (чтобы было FT260|0xC002)
                 if (devInfo.StartsWith("I2C|"))
                     devInfo = devInfo.Replace("I2C|", "FT260|");
 
-                // Формируем строку: "Давление[адрес: 006|COM9|0xC002|RS-485 (Ц1)]"
                 _plotModelRealTime.Title = $"{channelName}[адрес: {address}|{devInfo}|{ifaceName}]";
 
-                // Устанавливаем ось Y
                 string yAxisTitle = "Значение";
                 if (channelName.Contains("Частота давления")) yAxisTitle = "Fp, Гц";
                 else if (channelName.Contains("Частота температуры")) yAxisTitle = "Ft, Гц";
@@ -168,6 +193,7 @@ namespace TERMINAL.DeviceHub
                 UpdatePlotVisibility();
             }
         }
+
         private void MiniPlot_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 2 && sender is FrameworkElement element && element.DataContext is ChannelNode channel)
@@ -243,7 +269,7 @@ namespace TERMINAL.DeviceHub
                 int intervalMs = (int)(IntervalSlider.Value * 1000);
                 if (intervalMs < 50) intervalMs = 50;
 
-                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, intervalMs);
+                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _selectedI2CDevices, intervalMs);
                 _isRecording = true;
                 RecordIcon.Text = "\uE71A";
                 RecordIcon.Foreground = new SolidColorBrush(Colors.Red);
@@ -259,7 +285,46 @@ namespace TERMINAL.DeviceHub
                 LogListView.Items.Add("Запись графика остановлена.");
             }
         }
+        private void CsvRecordButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isCsvRecording)
+            {
+                if (string.IsNullOrEmpty(_csvFilePath))
+                {
+                    LogListView.Items.Add("Ошибка: Сначала выберите путь для сохранения CSV (нажмите на квадратик над дискетой).");
+                    return;
+                }
 
+                try
+                {
+                    _csvWriter = new StreamWriter(_csvFilePath, false, System.Text.Encoding.UTF8);
+                    _csvWriter.AutoFlush = true;
+
+                    _csvWriter.WriteLine("Время;№Изм;№Итер;Адрес;ID устройства;Серийный номер;Ячейка;Значение");
+
+                    _isCsvRecording = true;
+
+                    CsvRecordIcon.Foreground = new SolidColorBrush(Colors.Red); // Дискета становится красной
+                    LogListView.Items.Add($"Запись в CSV запущена: {_csvFilePath}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Не удалось создать файл: {ex.Message}");
+                }
+            }
+            else
+            {
+                _isCsvRecording = false;
+                _csvWriter?.Flush();
+                _csvWriter?.Close();
+                _csvWriter?.Dispose();
+                _csvWriter = null;
+
+                // Возвращаем синий цвет (запись остановлена, но путь выбран)
+                CsvRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3));
+                LogListView.Items.Add("Запись в CSV остановлена.");
+            }
+        }
         private void IntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (IntervalTextBox != null) IntervalTextBox.Text = e.NewValue.ToString("F2");
@@ -276,32 +341,66 @@ namespace TERMINAL.DeviceHub
             var settingsWindow = new HubSettingsWindow { Owner = Window.GetWindow(this) };
             if (settingsWindow.ShowDialog() == true)
             {
-                _isRs485Enabled = settingsWindow.IsRs485Enabled; _rs485Ports = settingsWindow.SelectedPortsWithBaud; _isI2CEnabled = settingsWindow.IsI2CEnabled;
-                UpdateStatusText(); LogListView.Items.Add($"Настройки: Порты={string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))}");
+                _isRs485Enabled = settingsWindow.IsRs485Enabled;
+                _rs485Ports = settingsWindow.SelectedPortsWithBaud;
+                _selectedI2CDevices = settingsWindow.SelectedI2CDevices;
+
+                UpdateStatusText();
+
+                // ★ Проверяем, включен ли RS-485, и только тогда выводим порты
+                string portsStr = _isRs485Enabled && _rs485Ports.Count > 0
+                    ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))
+                    : "Выкл";
+
+                LogListView.Items.Add($"Настройки: Порты={portsStr} | I2C={string.Join(", ", _selectedI2CDevices)}");
             }
         }
 
         private async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_isRecording) { _engine.Stop(); _isRecording = false; RecordIcon.Text = "\uE768"; RecordIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50")); LogListView.Items.Add("Опрос остановлен (запущен поиск)."); }
-            if (_isScanning) { _engine.Stop(); _scanCts?.Cancel(); _scanCts?.Dispose(); _scanCts = null; _isScanning = false; ScanButtonIcon.Text = "\uE721"; ScanButton.ToolTip = "Поиск"; LogListView.Items.Add("Поиск отменён."); return; }
+            if (_isRecording)
+            {
+                _engine.Stop();
+                _isRecording = false;
+                RecordIcon.Text = "\uE768";
+                RecordIcon.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50"));
+                LogListView.Items.Add("Опрос остановлен (запущен поиск).");
+            }
 
-            _isScanning = true; _scanCts = new CancellationTokenSource(); ScanButtonIcon.Text = "\uE711"; ScanButton.ToolTip = "Отмена"; LogListView.Items.Add("Запуск параллельного сканирования...");
-            ScanProgressBarRS485.Visibility = Visibility.Visible; ScanProgressTextRS485.Visibility = Visibility.Visible; ScanProgressBarI2C.Visibility = Visibility.Visible; ScanProgressTextI2C.Visibility = Visibility.Visible;
-            ScanProgressBarRS485.Value = 0; ScanProgressTextRS485.Text = ""; ScanProgressBarI2C.Value = 0; ScanProgressTextI2C.Text = "";
+            if (_isScanning)
+            {
+                _engine.Stop();
+                _scanCts?.Cancel();
+                _scanCts?.Dispose();
+                _scanCts = null;
+                _isScanning = false;
+                ScanButtonIcon.Text = "\uE721";
+                ScanButton.ToolTip = "Поиск";
+                LogListView.Items.Add("Поиск отменён.");
+                return;
+            }
+
+            _isScanning = true;
+            _scanCts = new CancellationTokenSource();
+            ScanButtonIcon.Text = "\uE711";
+            ScanButton.ToolTip = "Отмена";
+            LogListView.Items.Add("Запуск параллельного сканирования...");
+
+            ScanProgresses.Clear();
+            ScanProgressList.Visibility = Visibility.Visible;
 
             try
             {
                 Interfaces.Clear();
                 if (_isRs485Enabled) Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
-                if (_isI2CEnabled) Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
+                if (_selectedI2CDevices.Count > 0) Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
 
                 _plotModelRealTime.Series.Clear();
                 _seriesMapRealTime.Clear();
                 _plotModelRealTime.InvalidatePlot(true);
                 HistoryItemsControl.ItemsSource = null;
 
-                var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, _scanCts.Token);
+                var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _selectedI2CDevices, _scanCts.Token);
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
 
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
@@ -309,40 +408,56 @@ namespace TERMINAL.DeviceHub
 
                 foreach (var dev in foundDevices)
                 {
-                    if (dev.PortName == "I2C")
+                    if (dev.PortName == "I2C") // ★ Теперь это железно "I2C"
                     {
-                        if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address))
+                        if (i2cIface != null)
                         {
                             dev.ParentInterface = i2cIface;
-                            i2cIface.Devices.Add(dev);
-                            i2cIface.RecalculateSelection();
+                            if (!i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                            {
+                                i2cIface.Devices.Add(dev);
+                            }
                         }
                     }
                     else
                     {
-                        if (rs485Iface != null && !rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                        if (rs485Iface != null)
                         {
                             dev.ParentInterface = rs485Iface;
-                            rs485Iface.Devices.Add(dev);
-                            rs485Iface.RecalculateSelection();
+                            if (!rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                            {
+                                rs485Iface.Devices.Add(dev);
+                            }
                         }
                     }
                 }
+
+                // Пересчитываем галочки (чтобы родительские узлы обновились)
+                rs485Iface?.RecalculateSelection();
+                i2cIface?.RecalculateSelection();
 
                 CreateSeriesForAllChannels();
                 UpdateHistoryList();
                 LogListView.Items.Add("Сканирование завершено.");
             }
-            catch (OperationCanceledException) { LogListView.Items.Add("Поиск отменён."); }
-            catch (Exception ex) { LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}"); }
+            catch (OperationCanceledException)
+            {
+                LogListView.Items.Add("Поиск отменён.");
+            }
+            catch (Exception ex)
+            {
+                LogListView.Items.Add($"Ошибка при сканировании: {ex.Message}");
+            }
             finally
             {
-                _isScanning = false; _scanCts?.Dispose(); _scanCts = null; ScanButtonIcon.Text = "\uE721"; ScanButton.ToolTip = "Поиск";
-                ScanProgressBarRS485.Visibility = Visibility.Collapsed; ScanProgressTextRS485.Visibility = Visibility.Collapsed; ScanProgressBarI2C.Visibility = Visibility.Collapsed; ScanProgressTextI2C.Visibility = Visibility.Collapsed;
-                ScanProgressBarRS485.Value = 0; ScanProgressTextRS485.Text = ""; ScanProgressBarI2C.Value = 0; ScanProgressTextI2C.Text = "";
+                _isScanning = false;
+                _scanCts?.Dispose();
+                _scanCts = null;
+                ScanButtonIcon.Text = "\uE721";
+                ScanButton.ToolTip = "Поиск";
+                ScanProgressList.Visibility = Visibility.Collapsed;
             }
         }
-
         private void CopyLogMenuItem_Click(object sender, RoutedEventArgs e) => CopySelectedLogs();
         private void CopyLogCommand_Executed(object sender, ExecutedRoutedEventArgs e) => CopySelectedLogs();
 
@@ -359,7 +474,8 @@ namespace TERMINAL.DeviceHub
         private void UpdateStatusText()
         {
             var rs485Str = _isRs485Enabled ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}")) : "Выкл";
-            StatusText.Text = $"RS-485 (Ц1): {rs485Str} | I2C (Ц4): {(_isI2CEnabled ? "Вкл" : "Выкл")}";
+            var i2cStr = _selectedI2CDevices.Count > 0 ? $"{_selectedI2CDevices.Count} шт." : "Выкл";
+            StatusText.Text = $"RS-485 (Ц1): {rs485Str} | I2C (Ц4): {i2cStr}";
         }
 
         private void InitializePlot()
@@ -374,11 +490,9 @@ namespace TERMINAL.DeviceHub
                 TitleFontSize = 16,
                 TitleFontWeight = OxyPlot.FontWeights.Bold,
                 IsLegendVisible = false,
-                // ★ УБИРАЕМ ЛИШНИЙ PADDING (оставляем только небольшой сверху для заголовка) ★
                 Padding = new OxyThickness(0, 5, 0, 0)
             };
 
-            // ★ ОСЬ X ★
             _plotModelRealTime.Axes.Add(new DateTimeAxis
             {
                 Position = AxisPosition.Bottom,
@@ -388,13 +502,12 @@ namespace TERMINAL.DeviceHub
                 MinorGridlineStyle = LineStyle.Dot,
                 MajorGridlineColor = OxyColors.LightGray,
                 MinorGridlineColor = OxyColors.Gainsboro,
-                AxisTitleDistance = 5, // Прижали к цифрам
+                AxisTitleDistance = 5,
                 TitleFont = "Times New Roman",
                 TitleFontSize = 14,
                 TitleFontWeight = OxyPlot.FontWeights.Bold
             });
 
-            // ★ ОСЬ Y ★
             _plotModelRealTime.Axes.Add(new LinearAxis
             {
                 Position = AxisPosition.Left,
@@ -404,7 +517,7 @@ namespace TERMINAL.DeviceHub
                 MajorGridlineColor = OxyColors.LightGray,
                 MinorGridlineColor = OxyColors.Gainsboro,
                 StringFormat = "0.000",
-                AxisTitleDistance = 10, // Оптимальное расстояние (не наезжает на цифры, но и не улетает)
+                AxisTitleDistance = 10,
                 TitleFont = "Times New Roman",
                 TitleFontSize = 14,
                 TitleFontWeight = OxyPlot.FontWeights.Bold
@@ -412,6 +525,7 @@ namespace TERMINAL.DeviceHub
 
             PlotViewRealTime.Model = _plotModelRealTime;
         }
+
         private void CreateSeriesForAllChannels()
         {
             _plotModelRealTime.Series.Clear();
@@ -459,7 +573,6 @@ namespace TERMINAL.DeviceHub
 
             foreach (var ch in visibleChannels)
             {
-                // ★ ГАРАНТИРУЕМ, ЧТО PARENTINTERFACE УСТАНОВЛЕН ★
                 if (ch.ParentInterface == null && ch.ParentDevice != null)
                 {
                     var parentIface = Interfaces.FirstOrDefault(i => i.Devices.Contains(ch.ParentDevice));
@@ -475,6 +588,7 @@ namespace TERMINAL.DeviceHub
             HistoryItemsControl.ItemsSource = visibleChannels;
             ResetHistorySliders();
         }
+
         private PlotModel CreateMiniPlot(ChannelNode channel)
         {
             var model = new PlotModel
@@ -486,13 +600,11 @@ namespace TERMINAL.DeviceHub
                 TitleFontSize = 12,
                 TitleFont = "Times New Roman",
                 TitleFontWeight = OxyPlot.FontWeights.Bold,
-                // ★ УБИРАЕМ ЛИШНИЙ PADDING ★
                 Padding = new OxyThickness(0, 5, 0, 0)
             };
 
             string yAxisFormat = channel.IsInt32 ? "0" : "0.000";
 
-            // ★ ОСЬ Y ★
             model.Axes.Add(new LinearAxis
             {
                 Position = AxisPosition.Left,
@@ -501,13 +613,12 @@ namespace TERMINAL.DeviceHub
                 TextColor = OxyColors.Black,
                 FontSize = 10,
                 StringFormat = yAxisFormat,
-                AxisTitleDistance = 10, // Оптимальное расстояние
+                AxisTitleDistance = 10,
                 TitleFont = "Times New Roman",
                 TitleFontSize = 12,
                 TitleFontWeight = OxyPlot.FontWeights.Bold
             });
 
-            // ★ ОСЬ X ★
             model.Axes.Add(new DateTimeAxis
             {
                 Position = AxisPosition.Bottom,
@@ -539,6 +650,7 @@ namespace TERMINAL.DeviceHub
             model.Series.Add(series);
             return model;
         }
+
         private void ResetHistorySliders()
         {
             if (!_isRecording) return;
@@ -555,41 +667,55 @@ namespace TERMINAL.DeviceHub
                 _historyMaxTime = DateTimeAxis.ToDouble(DateTime.Now);
             }
 
-            HistoryRangeSlider.Minimum = _historyMinTime;
-            HistoryRangeSlider.Maximum = _historyMaxTime;
-            HistoryRangeSlider.Value = _historyMinTime;
+            // Настраиваем оба ползунка
+            HistoryStartSlider.Minimum = _historyMinTime;
+            HistoryStartSlider.Maximum = _historyMaxTime;
+            HistoryEndSlider.Minimum = _historyMinTime;
+            HistoryEndSlider.Maximum = _historyMaxTime;
+
+            // Устанавливаем начальные значения (весь диапазон)
+            HistoryStartSlider.Value = _historyMinTime;
+            HistoryEndSlider.Value = _historyMaxTime;
+
+            _historySelectedStart = _historyMinTime;
+            _historySelectedEnd = _historyMaxTime;
 
             HistoryStartText.Text = $"С: {DateTimeAxis.ToDateTime(_historyMinTime):HH:mm:ss}";
             HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(_historyMaxTime):HH:mm:ss}";
         }
-
-        private void HistoryRangeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void HistoryStartSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (HistoryItemsControl.ItemsSource == null) return;
 
-            var allPoints = Interfaces.SelectMany(i => i.Devices).SelectMany(d => d.Channels).SelectMany(c => c.HistoryPoints).ToList();
-            if (!allPoints.Any()) return;
+            // ★ Не даем левому ползунку зайти за правый
+            if (HistoryStartSlider.Value >= HistoryEndSlider.Value)
+            {
+                HistoryStartSlider.Value = HistoryEndSlider.Value;
+                return;
+            }
 
-            double minTime = allPoints.Min(p => p.X);
-            double maxTime = allPoints.Max(p => p.X);
-            double duration = maxTime - minTime;
+            _historySelectedStart = HistoryStartSlider.Value;
+            ApplyHistoryTimeRange(_historySelectedStart, _historySelectedEnd);
 
-            if (duration <= 0) return;
-
-            double ratio = (e.NewValue - HistoryRangeSlider.Minimum) / (HistoryRangeSlider.Maximum - HistoryRangeSlider.Minimum);
-            if (double.IsNaN(ratio) || ratio < 0) ratio = 0;
-            if (ratio > 1) ratio = 1;
-
-            double windowDuration = duration * ratio;
-            double newMax = maxTime;
-            double newMin = newMax - windowDuration;
-
-            ApplyHistoryTimeRange(newMin, newMax);
-
-            HistoryStartText.Text = $"С: {DateTimeAxis.ToDateTime(newMin):HH:mm:ss}";
-            HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(newMax):HH:mm:ss}";
+            HistoryStartText.Text = $"С: {DateTimeAxis.ToDateTime(_historySelectedStart):HH:mm:ss}";
         }
 
+        private void HistoryEndSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HistoryItemsControl.ItemsSource == null) return;
+
+            // ★ Не даем правому ползунку зайти за левый
+            if (HistoryEndSlider.Value <= HistoryStartSlider.Value)
+            {
+                HistoryEndSlider.Value = HistoryStartSlider.Value;
+                return;
+            }
+
+            _historySelectedEnd = HistoryEndSlider.Value;
+            ApplyHistoryTimeRange(_historySelectedStart, _historySelectedEnd);
+
+            HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(_historySelectedEnd):HH:mm:ss}";
+        }
         private void ApplyHistoryTimeRange(double minX, double maxX)
         {
             if (HistoryItemsControl.ItemsSource == null) return;
@@ -625,33 +751,83 @@ namespace TERMINAL.DeviceHub
             _lastPlotUpdate = DateTime.Now;
             var now = DateTime.Now;
             bool needRedrawRT = false;
+            bool dataWrittenToCsv = false;
+            bool dataWrittenToCsvWide = false;
+
+            Dictionary<ChannelNode, string> currentValues = new Dictionary<ChannelNode, string>();
 
             foreach (var iface in Interfaces)
                 foreach (var dev in iface.Devices)
                     foreach (var ch in dev.Channels)
                     {
-                        if (!ch.IsSelected || !ch.IsValueSet || (now - ch.LastUpdateTime).TotalSeconds > 3) continue;
+                        if (!ch.IsSelected) continue;
 
-                        var newPoint = new DataPoint(DateTimeAxis.ToDouble(now), ch.Value);
-
-                        if (_seriesMapRealTime.TryGetValue(ch, out var seriesRT))
+                        if (ch.IsValueSet && (now - ch.LastUpdateTime).TotalSeconds <= 3)
                         {
-                            seriesRT.Points.Add(newPoint);
-                            needRedrawRT = true;
+                            var newPoint = new DataPoint(DateTimeAxis.ToDouble(now), ch.Value);
+
+                            if (_seriesMapRealTime.TryGetValue(ch, out var seriesRT))
+                            {
+                                seriesRT.Points.Add(newPoint);
+                                needRedrawRT = true;
+                            }
+
+                            ch.HistoryPoints.Add(newPoint);
+
+                            if (ch.ChartModel != null)
+                            {
+                                var miniSeries = ch.ChartModel.Series.OfType<LineSeries>().FirstOrDefault();
+                                if (miniSeries != null)
+                                {
+                                    miniSeries.Points.Add(newPoint);
+                                    if (miniSeries.Points.Count > 5000) miniSeries.Points.RemoveAt(0);
+                                }
+                            }
+
+                            currentValues[ch] = ch.Value.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                        }
+                        else
+                        {
+                            currentValues[ch] = "NaN";
                         }
 
-                        ch.HistoryPoints.Add(newPoint);
-
-                        if (ch.ChartModel != null)
+                        // ★ ЗАПИСЬ В CSV (ФОРМАТ 1: СТРОКИ) ★
+                        if (_isCsvRecording && _csvWriter != null)
                         {
-                            var miniSeries = ch.ChartModel.Series.OfType<LineSeries>().FirstOrDefault();
-                            if (miniSeries != null)
-                            {
-                                miniSeries.Points.Add(newPoint);
-                                if (miniSeries.Points.Count > 5000) miniSeries.Points.RemoveAt(0);
-                            }
+                            string timeStr = FormatDateTimeForCsv(now);
+                            string address = dev.Address ?? "";
+                            string channelName = ch.Name;
+                            string value = currentValues[ch];
+
+                            string line = $"{timeStr};;;{address};;;{channelName};{value}";
+                            _csvWriter.WriteLine(line);
+                            dataWrittenToCsv = true;
                         }
                     }
+
+            if (dataWrittenToCsv && _isCsvRecording && _csvWriter != null)
+            {
+                _csvWriter.Flush();
+            }
+
+            // ★ ЗАПИСЬ В CSV (ФОРМАТ 2: ШИРОКАЯ ТАБЛИЦА) ★
+            if (_isCsvWideRecording && _csvWideWriter != null)
+            {
+                if (_csvWideChannels.Count > 0)
+                {
+                    string timeStr = FormatDateTimeForCsv(now);
+                    _csvWideWriter.Write($"{timeStr};");
+
+                    foreach (var ch in _csvWideChannels)
+                    {
+                        string val = currentValues.ContainsKey(ch) ? currentValues[ch] : "NaN";
+                        _csvWideWriter.Write($"{val};");
+                    }
+
+                    _csvWideWriter.WriteLine();
+                    _csvWideWriter.Flush();
+                }
+            }
 
             var cutoffRT = DateTimeAxis.ToDouble(now.AddMinutes(-2));
             foreach (var series in _seriesMapRealTime.Values)
@@ -663,15 +839,23 @@ namespace TERMINAL.DeviceHub
                 foreach (var ch in Interfaces.SelectMany(i => i.Devices).SelectMany(d => d.Channels))
                     ch.ChartModel?.InvalidatePlot(true);
 
-            if (HistoryRangeSlider.Value >= HistoryRangeSlider.Maximum - 1)
+            // ★ ОБНОВЛЕНИЕ ПОЛЗУНКОВ ★
+            if (HistoryEndSlider.Value >= HistoryEndSlider.Maximum - 1)
             {
                 _historyMaxTime = DateTimeAxis.ToDouble(now);
-                HistoryRangeSlider.Maximum = _historyMaxTime;
-                HistoryRangeSlider.Value = _historyMaxTime;
-                HistoryRangeSlider_ValueChanged(null, new RoutedPropertyChangedEventArgs<double>(HistoryRangeSlider.Value, HistoryRangeSlider.Value));
+
+                HistoryStartSlider.Maximum = _historyMaxTime;
+                HistoryEndSlider.Maximum = _historyMaxTime;
+
+                if (_historySelectedEnd >= _historyMaxTime - 1 || HistoryEndSlider.Value >= HistoryEndSlider.Maximum - 1)
+                {
+                    HistoryEndSlider.Value = _historyMaxTime;
+                    _historySelectedEnd = _historyMaxTime;
+
+                    HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(_historySelectedEnd):HH:mm:ss}";
+                }
             }
         }
-
         public void ClosePort() => _engine.ClosePort();
 
         public void SetPollingInterval(double seconds) { if (seconds >= IntervalSlider.Minimum && seconds <= IntervalSlider.Maximum) { IntervalSlider.Value = seconds; IntervalTextBox.Text = seconds.ToString("F2"); } }
@@ -690,6 +874,324 @@ namespace TERMINAL.DeviceHub
             if (sender is Border border && border.DataContext is ChannelNode channel)
             {
                 channel.IsHovered = false;
+            }
+        }
+        private void CsvPathButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isCsvRecording) return;
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                DefaultExt = ".csv",
+                FileName = $"Данные_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                _csvFilePath = dialog.FileName;
+
+                // ★ Визуально показываем, что путь выбран (меняем текст на "...")
+                CsvPathText.Text = "...";
+                CsvPathBorder.Background = Brushes.LightGreen; // Квадратик становится зеленым
+                CsvPathButton.ToolTip = _csvFilePath; // Полный путь в подсказке
+
+                // Делаем иконку дискеты синей (готовность)
+                CsvRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3));
+            }
+        }
+
+        private void CsvWidePathButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isCsvWideRecording) return;
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                DefaultExt = ".csv",
+                FileName = $"Данные_Широкие_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                _csvWideFilePath = dialog.FileName;
+
+                CsvWidePathText.Text = "...";
+                CsvWidePathBorder.Background = Brushes.LightGreen;
+                CsvWidePathButton.ToolTip = _csvWideFilePath;
+
+                CsvWideRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3)); // Синий
+            }
+        }
+
+        private void CsvWideRecordButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isCsvWideRecording)
+            {
+                if (string.IsNullOrEmpty(_csvWideFilePath))
+                {
+                    LogListView.Items.Add("Ошибка: Сначала выберите путь для широкой таблицы (квадратик над второй дискетой).");
+                    return;
+                }
+
+                try
+                {
+                    _csvWideWriter = new StreamWriter(_csvWideFilePath, false, System.Text.Encoding.UTF8);
+                    _csvWideWriter.AutoFlush = true;
+
+                    // ★ Собираем список всех выбранных каналов для шапки
+                    _csvWideChannels.Clear();
+                    foreach (var iface in Interfaces)
+                        foreach (var dev in iface.Devices)
+                            foreach (var ch in dev.Channels)
+                                if (ch.IsSelected) _csvWideChannels.Add(ch);
+
+                    if (_csvWideChannels.Count == 0)
+                    {
+                        LogListView.Items.Add("Ошибка: Нет выбранных каналов для записи.");
+                        _csvWideWriter.Close();
+                        return;
+                    }
+
+                    // ★ Пишем шапку 1: "Устройства:"
+                    _csvWideWriter.Write("Устройства;");
+
+                    DeviceNode lastDev = null;
+                    foreach (var ch in _csvWideChannels)
+                    {
+                        if (ch.ParentDevice != lastDev)
+                        {
+                            // ★ Собираем имя устройства БЕЗ названия канала
+                            string address = ch.ParentDevice?.Address ?? "?";
+                            string iface = ch.ParentInterface?.Name ?? "?";
+                            string devId = ch.ParentDevice?.Name?.Replace("[", "").Replace("]", "") ?? "?";
+
+                            string devName = $"адрес: {address}|{devId}|{iface}";
+                            devName = devName.Replace("\"", "\"\""); // Экранируем кавычки
+
+                            _csvWideWriter.Write($"\"{devName}\";");
+                            lastDev = ch.ParentDevice;
+                        }
+                        else
+                        {
+                            _csvWideWriter.Write(";"); // Пустая ячейка для остальных каналов
+                        }
+                    }
+                    _csvWideWriter.WriteLine();
+                    // ★ Пишем шапку 2: "Каналы:"
+                    _csvWideWriter.Write("Каналы;");
+                    foreach (var ch in _csvWideChannels)
+                    {
+                        _csvWideWriter.Write($"{ch.Name};");
+                    }
+                    _csvWideWriter.WriteLine();
+
+                    _isCsvWideRecording = true;
+                    CsvWideRecordIcon.Foreground = new SolidColorBrush(Colors.Red); // Красный
+                    LogListView.Items.Add($"Запись в широкую таблицу запущена: {_csvWideFilePath}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Не удалось создать файл: {ex.Message}");
+                }
+            }
+            else
+            {
+                _isCsvWideRecording = false;
+                _csvWideWriter?.Flush();
+                _csvWideWriter?.Close();
+                _csvWideWriter?.Dispose();
+                _csvWideWriter = null;
+
+                CsvWideRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3)); // Синий
+                LogListView.Items.Add("Запись в широкую таблицу остановлена.");
+            }
+        }
+
+        // ★ Получаем строку формата времени в зависимости от системного разделителя
+        private string GetTimeFormatWithSystemSeparator()
+        {
+            string separator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
+
+            // В C# формат даты/времени не принимает разделитель как часть формата напрямую,
+            // поэтому мы сначала формируем время с точкой, а потом заменяем ее, если нужно.
+            return "dd.MM.yyyy HH:mm:ss.fff"; // Базовый формат (всегда с точкой)
+        }
+
+        // ★ Применяем замену разделителя
+        private string FormatDateTimeForCsv(DateTime dt)
+        {
+            // Проверяем системный разделитель дробной части
+            string separator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
+            return dt.ToString("dd.MM.yyyy HH:mm:ss,fff");
+            // Если системный разделитель — запятая, используем запятую для миллисекунд
+            //if (separator == ",")
+            //{
+            //    return dt.ToString("dd.MM.yyyy HH:mm:ss,fff");
+            //}
+            //else
+            //{
+            //    // Иначе — точку
+            //    return dt.ToString("dd.MM.yyyy HH:mm:ss.fff");
+            //}
+        }
+
+        private void SaveHistoryRowsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                DefaultExt = ".csv",
+                FileName = $"История_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                using (var writer = new StreamWriter(dialog.FileName, false, System.Text.Encoding.UTF8))
+                {
+                    writer.AutoFlush = true;
+                    writer.WriteLine("Время;№Изм;№Итер;Адрес;ID устройства;Серийный номер;Ячейка;Значение");
+
+                    foreach (var iface in Interfaces)
+                        foreach (var dev in iface.Devices)
+                            foreach (var ch in dev.Channels)
+                            {
+                                // Пропускаем каналы, у которых нет истории
+                                if (ch.HistoryPoints.Count == 0) continue;
+
+                                foreach (var pt in ch.HistoryPoints)
+                                {
+                                    // ★ Пропускаем точки вне выбранного диапазона ползунков
+                                    if (pt.X < _historySelectedStart || pt.X > _historySelectedEnd) continue;
+
+                                    DateTime dt = DateTimeAxis.ToDateTime(pt.X);
+                                    string timeStr = FormatDateTimeForCsv(dt);
+
+                                    string address = dev.Address ?? "";
+                                    string channelName = ch.Name;
+                                    string value = pt.Y.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+
+                                    string line = $"{timeStr};;;{address};;;{channelName};{value}";
+                                    writer.WriteLine(line);
+                                }
+                            }
+                }
+                LogListView.Items.Add($"История сохранена (построчно): {dialog.FileName}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось сохранить файл: {ex.Message}");
+            }
+        }
+        private void SaveHistoryWideButton_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                DefaultExt = ".csv",
+                FileName = $"История_Широкая_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                // Собираем список всех каналов, у которых есть история
+                List<ChannelNode> historyChannels = new List<ChannelNode>();
+                foreach (var iface in Interfaces)
+                    foreach (var dev in iface.Devices)
+                        foreach (var ch in dev.Channels)
+                            if (ch.HistoryPoints.Count > 0) historyChannels.Add(ch);
+
+                if (historyChannels.Count == 0)
+                {
+                    MessageBox.Show("Нет накопленных данных для сохранения.");
+                    return;
+                }
+
+                using (var writer = new StreamWriter(dialog.FileName, false, System.Text.Encoding.UTF8))
+                {
+                    writer.AutoFlush = true;
+
+                    // 1. Шапка "Устройства"
+                    writer.Write("Устройства;");
+                    DeviceNode lastDev = null;
+                    foreach (var ch in historyChannels)
+                    {
+                        if (ch.ParentDevice != lastDev)
+                        {
+                            // ★ Собираем имя устройства БЕЗ названия канала
+                            string address = ch.ParentDevice?.Address ?? "?";
+                            string iface = ch.ParentInterface?.Name ?? "?";
+                            string devId = ch.ParentDevice?.Name?.Replace("[", "").Replace("]", "") ?? "?";
+
+                            string devName = $"адрес: {address}|{devId}|{iface}";
+                            devName = devName.Replace("\"", "\"\""); // Экранируем кавычки
+
+                            writer.Write($"\"{devName}\";");
+                            lastDev = ch.ParentDevice;
+                        }
+                        else
+                        {
+                            writer.Write(";");
+                        }
+                    }
+                    writer.WriteLine();
+
+                    // 2. Шапка "Каналы"
+                    writer.Write("Каналы;");
+                    foreach (var ch in historyChannels)
+                    {
+                        writer.Write($"{ch.Name};");
+                    }
+                    writer.WriteLine();
+
+                    // 3. Собираем все уникальные временные метки только в выбранном диапазоне
+                    SortedSet<double> allTimestamps = new SortedSet<double>();
+                    foreach (var ch in historyChannels)
+                    {
+                        foreach (var pt in ch.HistoryPoints)
+                        {
+                            // ★ Фильтруем по периоду
+                            if (pt.X >= _historySelectedStart && pt.X <= _historySelectedEnd)
+                            {
+                                allTimestamps.Add(pt.X);
+                            }
+                        }
+                    }
+
+                    // 4. Пишем строки: Время + значения для каждого канала
+                    foreach (var timestamp in allTimestamps)
+                    {
+                        DateTime dt = DateTimeAxis.ToDateTime(timestamp);
+                        string timeStr = FormatDateTimeForCsv(dt);
+                        writer.Write($"{timeStr};");
+
+                        foreach (var ch in historyChannels)
+                        {
+                            // Ищем точку с такой же временной меткой
+                            var points = ch.HistoryPoints.Where(p => Math.Abs(p.X - timestamp) < 0.000001);
+
+                            if (points.Any())
+                            {
+                                var point = points.First();
+                                writer.Write($"{point.Y.ToString("F6", System.Globalization.CultureInfo.InvariantCulture)};");
+                            }
+                            else
+                            {
+                                writer.Write(";"); // Если пропуск данных — пусто
+                            }
+                        }
+                        writer.WriteLine();
+                    }
+                }
+                LogListView.Items.Add($"История сохранена (широкая): {dialog.FileName}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось сохранить файл: {ex.Message}");
             }
         }
     }

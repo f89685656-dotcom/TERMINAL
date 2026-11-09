@@ -8,7 +8,7 @@
 		<UseWPF>true</UseWPF>
 		<ApplicationIcon>6.ico</ApplicationIcon>
 		<AssemblyName>TERMINAL</AssemblyName>
-		<Version>1.7.0</Version>
+		<Version>1.7.1</Version>
 		<PackageIcon>6.png</PackageIcon>
 		<Platforms>AnyCPU;x64</Platforms>
 		<PlatformTarget>x64</PlatformTarget>
@@ -42,12 +42,15 @@
 		<Content Include="6.ico" />
 		<Content Include="Images\AGK.png">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</Content>
 		<Content Include="Images\ST_351.png">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</Content>
 		<Content Include="TERMINAL.ico">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</Content>
 	</ItemGroup>
 
@@ -68,10 +71,31 @@
 		<ProjectReference Include="..\..\GUI_Merge\KalibratorGUI\KalibratorGUI_WPF\KalibratorGUI_WPF.csproj" />
 	</ItemGroup>
 
+	<!-- ★ КОПИРОВАНИЕ БИБЛИОТЕК FT260 В BIN И PUBLISH ★ -->
+	<ItemGroup>
+		<None Update="Libs\FT260_I2CDotNet.dll">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+		<None Update="Libs\libFT260.dll">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+	</ItemGroup>
+
 	<ItemGroup>
 		<Page Update="Windows\DeviceSettingsWindow.xaml">
 			<Generator>MSBuild:Compile</Generator>
 			<SubType>Designer</SubType>
 		</Page>
 	</ItemGroup>
+
+	<!-- ★ АВТОМАТИЧЕСКОЕ КОПИРОВАНИЕ НАТИВНЫХ DLL В КОРЕНЬ PUBLISH ★ -->
+	<Target Name="CopyNativeLibsToPublish" AfterTargets="Publish">
+		<ItemGroup>
+			<NativeLibs Include="$(PublishDir)runtimes\**\*.dll" />
+		</ItemGroup>
+		<Copy SourceFiles="@(NativeLibs)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+	</Target>
+
 </Project>

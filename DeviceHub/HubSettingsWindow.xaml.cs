@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO.Ports;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,31 +28,32 @@ namespace TERMINAL.DeviceHub
         public bool IsSelected
         {
             get => _isSelected;
-            set
-            {
-                _isSelected = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
-            }
+            set { _isSelected = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected))); }
         }
 
         public int BaudRate
         {
             get => _baudRate;
-            set
-            {
-                _baudRate = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BaudRate)));
-            }
+            set { _baudRate = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BaudRate))); }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
     }
 
-    // ★ КЛАСС ДЛЯ I2C-УСТРОЙСТВ ★
-    public class I2CDeviceItem
+    public class I2CDeviceItem : INotifyPropertyChanged
     {
+        private bool _isSelected;
         public string Name { get; set; }
+        public string DevicePath { get; set; }
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set { _isSelected = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected))); }
+        }
+
         public override string ToString() => Name;
+        public event PropertyChangedEventHandler PropertyChanged;
     }
 
     public partial class HubSettingsWindow : Window
@@ -59,10 +61,10 @@ namespace TERMINAL.DeviceHub
         public bool IsRs485Enabled { get; private set; }
         public bool IsI2CEnabled { get; private set; }
         public List<PortSetting> SelectedPortsWithBaud { get; private set; } = new List<PortSetting>();
-        public ObservableCollection<PortItem> Ports { get; set; } = new ObservableCollection<PortItem>();
+        public List<string> SelectedI2CDevices { get; private set; } = new List<string>();
 
-        // ★ СВОЙСТВО ДЛЯ ВЫБРАННОГО I2C-ПЕРЕХОДНИКА ★
-        public string SelectedI2CDevice { get; private set; } = string.Empty;
+        public ObservableCollection<PortItem> Ports { get; set; } = new ObservableCollection<PortItem>();
+        public ObservableCollection<I2CDeviceItem> I2CDevices { get; set; } = new ObservableCollection<I2CDeviceItem>();
 
         public HubSettingsWindow()
         {
@@ -86,28 +88,72 @@ namespace TERMINAL.DeviceHub
             else if (Ports.Any()) Ports[0].IsSelected = true;
 
             Rs485PortsList.ItemsSource = Ports;
+            I2CDevicesList.ItemsSource = I2CDevices;
 
-            // ★ ЗАГРУЖАЕМ СПИСОК FT260 ★
             LoadI2CDevices();
         }
 
-        // ★ МЕТОД ЗАГРУЗКИ СПИСКА FT260 ★
         private void LoadI2CDevices()
         {
             try
             {
-                // ★ ЗДЕСЬ ВЫЗЫВАЕМ МЕТОД ИЗ FT260_I2CDotNet ★
-                // Например: var devices = FT260_I2CDotNet.FT260Device.GetDevices();
-                // I2CDeviceComboBox.ItemsSource = devices;
+                I2CDevices.Clear();
 
-                // ЗАГЛУШКА (пока нет реального метода):
-                var devices = new List<I2CDeviceItem>
+                FT260Native.FT260_CreateDeviceList(out uint deviceCount);
+                int count = (int)deviceCount;
+
+                if (count == 0)
                 {
-                    new I2CDeviceItem { Name = "FT260 [7&5fcd268&0&0000]" }
-                };
+                    MessageBox.Show("Не найдено ни одного HID-устройства.");
+                    return;
+                }
 
-                I2CDeviceComboBox.ItemsSource = devices;
-                if (devices.Any()) I2CDeviceComboBox.SelectedIndex = 0;
+                int displayIndex = 1;
+                for (uint i = 0; i < count; i++)
+                {
+                    var sbPath = new StringBuilder(256);
+                    int res = FT260Native.FT260_GetDevicePath(sbPath, (uint)sbPath.Capacity, i);
+
+                    if (res == FT260Native.FT260_OK)
+                    {
+                        string path = sbPath.ToString();
+                        string lowerPath = path.ToLower();
+
+                        // ★ ФИЛЬТРАЦИЯ ПО VID/PID: Оставляем только FT260 (VID_0403 & PID_6030)
+                        if (!lowerPath.Contains("vid_0403") || !lowerPath.Contains("pid_6030"))
+                            continue;
+
+                        // ★ Оставляем только интерфейс I2C (mi_00)
+                        // Если mi_00 нет, но mi_01 нет тоже — значит это единственный интерфейс, берем.
+                        if (lowerPath.Contains("mi_01") && !lowerPath.Contains("mi_00"))
+                            continue;
+
+                        // ★ Формируем красивое имя из последних 8 символов пути
+                        string displayName = "Unknown";
+                        var match = Regex.Match(path, @"#([0-9a-fA-F&]+)#");
+                        if (match.Success)
+                        {
+                            displayName = match.Groups[1].Value;
+                        }
+                        else if (path.Length > 8)
+                        {
+                            displayName = path.Substring(path.Length - 8);
+                        }
+
+                        I2CDevices.Add(new I2CDeviceItem
+                        {
+                            Name = $"FT260 [{displayIndex}] ({displayName})",
+                            IsSelected = true,
+                            DevicePath = path
+                        });
+                        displayIndex++;
+                    }
+                }
+
+                if (I2CDevices.Count == 0)
+                {
+                    MessageBox.Show("Не найдено ни одного I2C переходника FT260.");
+                }
             }
             catch (Exception ex)
             {
@@ -121,9 +167,14 @@ namespace TERMINAL.DeviceHub
             IsI2CEnabled = I2CCheckBox.IsChecked == true;
 
             SelectedPortsWithBaud.Clear();
-            foreach (var p in Ports.Where(x => x.IsSelected))
+
+            // ★ Собираем порты только если RS-485 включен
+            if (IsRs485Enabled)
             {
-                SelectedPortsWithBaud.Add(new PortSetting { PortName = p.Name, BaudRate = p.BaudRate });
+                foreach (var p in Ports.Where(x => x.IsSelected))
+                {
+                    SelectedPortsWithBaud.Add(new PortSetting { PortName = p.Name, BaudRate = p.BaudRate });
+                }
             }
 
             if (SelectedPortsWithBaud.Count == 0 && IsRs485Enabled)
@@ -132,10 +183,19 @@ namespace TERMINAL.DeviceHub
                 return;
             }
 
-            // ★ СОХРАНЯЕМ ВЫБРАННЫЙ I2C-ПЕРЕХОДНИК ★
-            if (IsI2CEnabled && I2CDeviceComboBox.SelectedItem is I2CDeviceItem selectedI2C)
+            SelectedI2CDevices.Clear();
+            if (IsI2CEnabled)
             {
-                SelectedI2CDevice = selectedI2C.Name;
+                foreach (var dev in I2CDevices.Where(d => d.IsSelected))
+                {
+                    SelectedI2CDevices.Add(dev.DevicePath);
+                }
+
+                if (SelectedI2CDevices.Count == 0)
+                {
+                    MessageBox.Show("Выберите хотя бы один I2C переходник.");
+                    return;
+                }
             }
 
             DialogResult = true;

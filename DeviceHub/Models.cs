@@ -96,6 +96,7 @@ namespace TERMINAL.DeviceHub
         public string PortName { get; set; }
         public string Name { get; set; }
         public string Address { get; set; }
+        public string DevicePath { get; set; }
 
         // ★ СВОЙСТВО ДЛЯ ОТОБРАЖЕНИЯ В ДЕРЕВЕ ★
         public string DisplayName

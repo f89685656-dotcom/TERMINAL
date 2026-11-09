@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO.Ports;
 using System.Linq;
 using System.Threading;
@@ -20,12 +21,11 @@ namespace TERMINAL.DeviceHub
         public ConcurrentQueue<Action> UiUpdates { get; } = new ConcurrentQueue<Action>();
         public ConcurrentQueue<string> LogQueue { get; } = new ConcurrentQueue<string>();
 
-        public event Action<string, int, int> ScanProgressChanged;
+        public event Action<ScanProgressInfo> ScanProgressChanged;
         public event Action<DeviceNode> DeviceFound;
 
         private readonly Dictionary<string, SemaphoreSlim> _portLocks = new Dictionary<string, SemaphoreSlim>();
         private readonly object _portLocksSync = new object();
-        private static readonly SemaphoreSlim _i2cLock = new SemaphoreSlim(1, 1);
 
         private SemaphoreSlim GetPortLock(string portName)
         {
@@ -44,7 +44,7 @@ namespace TERMINAL.DeviceHub
             ObservableCollection<InterfaceNode> interfaces,
             bool isRs485,
             List<PortSetting> rs485Settings,
-            bool isI2c,
+            List<string> selectedI2CDevicePaths, // ★ Теперь это список путей
             CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
@@ -66,13 +66,17 @@ namespace TERMINAL.DeviceHub
                         }, token));
                     }
                 }
-                else if (iface.Name.Contains("I2C") && isI2c)
+                else if (iface.Name.Contains("I2C") && selectedI2CDevicePaths != null)
                 {
-                    scanTasks.Add(Task.Run(async () =>
+                    foreach (var path in selectedI2CDevicePaths)
                     {
-                        var devices = await ScanI2CAsync(iface, token);
-                        lock (foundDevices) { foundDevices.AddRange(devices); }
-                    }, token));
+                        var localPath = path;
+                        scanTasks.Add(Task.Run(async () =>
+                        {
+                            var devices = await ScanI2CAsync(iface, localPath, token);
+                            lock (foundDevices) { foundDevices.AddRange(devices); }
+                        }, token));
+                    }
                 }
             }
 
@@ -106,12 +110,24 @@ namespace TERMINAL.DeviceHub
                 int maxAddress = 247;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
+                var progress = new ScanProgressInfo
+                {
+                    PortName = $"{portName} ({baudRate} бод)",
+                    Total = maxAddress,
+                    Current = 0,
+                    StatusText = "Запуск..."
+                };
+                ScanProgressChanged?.Invoke(progress);
+
                 for (byte address = 1; address <= maxAddress; address++)
                 {
                     if (token.IsCancellationRequested) break;
 
                     sw.Restart();
-                    ScanProgressChanged?.Invoke("RS-485", address, maxAddress);
+
+                    progress.Current = address;
+                    progress.StatusText = $"Адрес {address}";
+                    ScanProgressChanged?.Invoke(progress);
 
                     try
                     {
@@ -121,9 +137,8 @@ namespace TERMINAL.DeviceHub
 
                         var newDev = new DeviceNode
                         {
-                            Address = address.ToString("D3"), // "006"
+                            Address = address.ToString("D3"),
                             PortName = portName,
-                            // ★ ДОБАВЛЯЕМ ИМЯ ПОРТА В NAME ★
                             Name = $"[{portName}|0x{id:X4}]"
                         };
 
@@ -193,6 +208,9 @@ namespace TERMINAL.DeviceHub
                     }
                 }
 
+                progress.StatusText = "Готово";
+                ScanProgressChanged?.Invoke(progress);
+
                 LogQueue.Enqueue($"[Scan] {portName}: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
             }
             catch (Exception ex)
@@ -212,86 +230,109 @@ namespace TERMINAL.DeviceHub
 
             return foundDevices;
         }
-        private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface, CancellationToken token)
+
+        private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface, string devicePath, CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
-            FT260_I2CDotNet.FT260 i2cMaster = null;
-
-            try { await _i2cLock.WaitAsync(token); }
-            catch (OperationCanceledException) { return foundDevices; }
+            IntPtr i2cHandle = IntPtr.Zero;
 
             try
             {
-                LogQueue.Enqueue("[Scan] I2C: Поиск устройств...");
-
-                i2cMaster = new FT260_I2CDotNet.FT260();
-
-                // ★ ИСПРАВЛЕНА ЛОГИКА ОТКРЫТИЯ ★
-                if (!i2cMaster.TryOpen())
+                // Извлекаем уникальный ID устройства (например, 7&37e6d6f6&0&0000)
+                string shortName = devicePath;
+                string[] pathParts = devicePath.Split('#');
+                if (pathParts.Length >= 3)
                 {
-                    LogQueue.Enqueue("[Scan] I2C: Не удалось открыть FT260.");
+                    // В пути \\?\hid#vid_0403&pid_6030#7&37e6d6f6&0&0000#{...} 
+                    // ID находится под индексом 2
+                    shortName = pathParts[2];
+                }
+                else if (shortName.Length > 20)
+                {
+                    shortName = shortName.Substring(0, 20) + "...";
+                }
+                LogQueue.Enqueue($"[Scan] I2C ({shortName}): Поиск устройств...");
+
+                int res = FT260Native.FT260_OpenByDevicePath(devicePath, out i2cHandle);
+                if (res != FT260Native.FT260_OK)
+                {
+                    LogQueue.Enqueue($"[Scan] I2C ({shortName}): Не удалось открыть FT260 (код ошибки: {res}).");
                     return foundDevices;
                 }
 
-                // ★ ПЫТАЕМСЯ ПОЛУЧИТЬ ИМЯ ПЕРЕХОДНИКА (ЕСЛИ СВОЙСТВО ЕСТЬ) ★
-                string adapterName = "FT260";
-                try
-                {
-                    // Пробуем найти свойство DevicePath или Description
-                    var prop = i2cMaster.GetType().GetProperty("DevicePath")
-                               ?? i2cMaster.GetType().GetProperty("Description")
-                               ?? i2cMaster.GetType().GetProperty("SerialNumber");
-
-                    if (prop != null)
-                    {
-                        var val = prop.GetValue(i2cMaster)?.ToString();
-                        if (!string.IsNullOrEmpty(val)) adapterName = val;
-                    }
-                }
-                catch { }
-
-                LogQueue.Enqueue($"[Scan] I2C: Открыт переходник: {adapterName}");
+                FT260Native.FT260_I2CMaster_Init(i2cHandle, 100);
+                LogQueue.Enqueue($"[Scan] I2C: Открыт переходник: {shortName}");
 
                 int maxAddress = 0x77;
                 int startAddress = 0x08;
 
+                var progress = new ScanProgressInfo
+                {
+                    PortName = $"I2C ({shortName})",
+                    Total = maxAddress - startAddress + 1,
+                    Current = 0,
+                    StatusText = "Запуск..."
+                };
+                ScanProgressChanged?.Invoke(progress);
+
                 for (byte address = 0x08; address <= 0x77; address++)
                 {
                     if (token.IsCancellationRequested) break;
-                    ScanProgressChanged?.Invoke("I2C", address - startAddress + 1, maxAddress - startAddress + 1);
+
+                    progress.Current = address - startAddress + 1;
+                    progress.StatusText = $"Адрес 0x{address:X2}";
+                    ScanProgressChanged?.Invoke(progress);
 
                     try
                     {
-                        if (!i2cMaster.I2C_Detect(address)) continue;
-                        LogQueue.Enqueue($"[Scan] I2C: ★ НАЙДЕНО ★ по адресу 0x{address:X2} (dec {address})");
+                        byte[] regAddr = new byte[] { 0x80 };
+                        int writeRes = FT260Native.FT260_I2CMaster_Write(i2cHandle, address, FT260Native.FT260_I2C_START, regAddr, 1, out _);
+                        if (writeRes != FT260Native.FT260_OK) continue;
 
-                        ushort deviceId = 0xFFFF;
-                        try
-                        {
-                            i2cMaster.Write(address, new byte[] { 0x80 }, Start: true, Stop: false);
-                            i2cMaster.Read(address, out byte[] idData, 2, RepStart: true, Stop: true);
-                            deviceId = (ushort)((idData[1] << 8) | idData[0]);
-                            LogQueue.Enqueue($"[Scan] I2C: Прочитан ID = 0x{deviceId:X4}");
-                        }
-                        catch (Exception ex)
-                        {
-                            LogQueue.Enqueue($"[Scan] I2C: Не удалось прочитать ID. Ошибка: {ex.Message}");
-                        }
+                        byte[] idData = new byte[2];
+                        // ★ Добавлен последний параметр 5000 (таймаут 5 секунд)
+                        int readRes = FT260Native.FT260_I2CMaster_Read(i2cHandle, address, FT260Native.FT260_I2C_START_AND_STOP, idData, 2, out ushort transferred, 5000);
+                        if (readRes != FT260Native.FT260_OK || transferred != 2) continue;
 
-                        // ★ ИСПОЛЬЗУЕМ ИМЯ ПЕРЕХОДНИКА ИЗ СВОЙСТВА ★
+                        ushort deviceIdRead = (ushort)((idData[1] << 8) | idData[0]);
+
+                        if (deviceIdRead != 0xC002 && deviceIdRead != 0xDBA0 && deviceIdRead != 0xDBA2 &&
+                            deviceIdRead != 0xDB80 && deviceIdRead != 0xDB81) continue;
+
+                        LogQueue.Enqueue($"[Scan] I2C ({shortName}): ★ НАЙДЕНО ★ по адресу 0x{address:X2} (ID: 0x{deviceIdRead:X4})");
+
                         var newDev = new DeviceNode
                         {
-                            Name = $"[{adapterName}|0x{deviceId:X4}]",
+                            Name = $"[{shortName}|0x{deviceIdRead:X4}]",
                             Address = address.ToString("D3"),
-                            PortName = "I2C"
+                            PortName = "I2C",        // ★ Явно указываем "I2C"
+                            DevicePath = devicePath  // ★ Сохраняем полный путь для опроса
                         };
 
-                        newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0004, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000C, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Температура процессора", Unit = "°C", RegisterAddress = 0x0026, Is32Bit = true });
-                        newDev.Channels.Add(new ChannelNode { Name = "Напряжение питания", Unit = "В", RegisterAddress = 0x0027, Is32Bit = true });
+                        if (deviceIdRead == 0xDB80 || deviceIdRead == 0xDB81)
+                        {
+                            int channelCount = (deviceIdRead == 0xDB81) ? 12 : 24;
+                            for (int i = 0; i < channelCount; i++)
+                            {
+                                newDev.Channels.Add(new ChannelNode
+                                {
+                                    Name = $"Частота канала {i:D2}",
+                                    Unit = "Гц",
+                                    RegisterAddress = (ushort)(i * 4),
+                                    Is32Bit = true,
+                                    IsDouble = true
+                                });
+                            }
+                        }
+                        else
+                        {
+                            newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура", Unit = "°C", RegisterAddress = 0x0004, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Частота давления", Unit = "Гц", RegisterAddress = 0x0008, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Частота температуры", Unit = "Гц", RegisterAddress = 0x000C, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Температура процессора", Unit = "°C", RegisterAddress = 0x0026, Is32Bit = true });
+                            newDev.Channels.Add(new ChannelNode { Name = "Напряжение питания", Unit = "В", RegisterAddress = 0x0027, Is32Bit = true });
+                        }
 
                         foundDevices.Add(newDev);
                         DeviceFound?.Invoke(newDev);
@@ -299,21 +340,25 @@ namespace TERMINAL.DeviceHub
                     catch { }
                 }
 
-                LogQueue.Enqueue($"[Scan] I2C: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
+                progress.StatusText = "Готово";
+                ScanProgressChanged?.Invoke(progress);
             }
             catch (Exception ex)
             {
-                LogQueue.Enqueue($"[Scan] I2C: Ошибка: {ex.Message}");
+                LogQueue.Enqueue($"[Scan] I2C ({devicePath}): Ошибка: {ex.Message}");
             }
             finally
             {
-                i2cMaster?.Close();
-                _i2cLock.Release();
+                if (i2cHandle != IntPtr.Zero)
+                {
+                    FT260Native.FT260_Close(i2cHandle);
+                }
             }
 
             return foundDevices;
         }
-        public void StartPolling(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c, int intervalMs = 500)
+
+        public void StartPolling(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, List<string> selectedI2CDevicePaths, int intervalMs = 500)
         {
             Stop();
             if (intervalMs < 50) intervalMs = 50;
@@ -330,25 +375,32 @@ namespace TERMINAL.DeviceHub
                     foreach (var setting in rs485Settings)
                     {
                         var localSetting = setting;
-                        // Выбираем устройства, у которых галочка не снята (true или null)
                         var devices = iface.Devices.Where(d => d.IsSelected != false).ToList();
                         if (devices.Any())
                         {
-                            _pollingTasks.Add(Task.Run(() => PollModbusLoop(localSetting.PortName, localSetting.BaudRate, devices, intervalMs, _cts.Token)));
+                            _pollingTasks.Add(PollModbusLoop(localSetting.PortName, localSetting.BaudRate, devices, intervalMs, _cts.Token));
                         }
                     }
                 }
             }
 
-            if (isI2c)
+            if (selectedI2CDevicePaths != null && selectedI2CDevicePaths.Count > 0)
             {
                 var i2cIface = interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
                 if (i2cIface != null && i2cIface.IsSelected != false)
                 {
-                    var i2cDevices = i2cIface.Devices.Where(d => d.IsSelected != false).ToList();
-                    if (i2cDevices.Any())
+                    foreach (var path in selectedI2CDevicePaths)
                     {
-                        _pollingTasks.Add(Task.Run(() => PollI2CLoop(i2cDevices, intervalMs, _cts.Token)));
+                        var localPath = path;
+                        // Ищем устройства, у которых DevicePath совпадает с тем, что выбрано в настройках
+                        var i2cDevices = i2cIface.Devices
+                            .Where(d => d.IsSelected != false && d.DevicePath == localPath)
+                            .ToList();
+
+                        if (i2cDevices.Any())
+                        {
+                            _pollingTasks.Add(PollI2CLoop(localPath, i2cDevices, intervalMs, _cts.Token));
+                        }
                     }
                 }
             }
@@ -359,7 +411,7 @@ namespace TERMINAL.DeviceHub
         private async Task PollModbusLoop(string portName, int baudRate, List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
             var sem = GetPortLock(portName);
-            try { await sem.WaitAsync(token); }
+            try { await sem.WaitAsync(token).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
 
             SerialPort port = null;
@@ -368,13 +420,24 @@ namespace TERMINAL.DeviceHub
             try
             {
                 port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-                port.ReadTimeout = 100;
-                port.Open();
+                port.ReadTimeout = 50;
+
+                try
+                {
+                    await Task.Run(() => port.Open(), token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    LogQueue.Enqueue($"[Poll] {portName}: Не удалось открыть порт: {ex.Message}");
+                    return;
+                }
+
                 var factory = new ModbusFactory();
                 master = factory.CreateRtuMaster(port);
-                master.Transport.ReadTimeout = 100;
+                master.Transport.ReadTimeout = 50;
+                master.Transport.Retries = 0;
 
-                LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут 100 мс, период {intervalMs} мс)...");
+                LogQueue.Enqueue($"[Poll] {portName}: Опрос запущен (таймаут 50 мс, период {intervalMs} мс)...");
 
                 while (!token.IsCancellationRequested)
                 {
@@ -382,66 +445,67 @@ namespace TERMINAL.DeviceHub
                     {
                         if (token.IsCancellationRequested) break;
 
+                        var activeChannels = dev.Channels.Where(c => c.IsSelected).ToList();
+                        if (activeChannels.Count == 0) continue;
+
                         try
                         {
                             byte id = byte.Parse(dev.Address);
 
-                            foreach (var ch in dev.Channels)
-                            {
-                                if (!ch.IsSelected) continue;
+                            ushort minReg = activeChannels.Min(c => c.RegisterAddress);
+                            ushort maxReg = activeChannels.Max(c => c.IsDouble ? (ushort)(c.RegisterAddress + 3) : (ushort)(c.RegisterAddress + 1));
+                            ushort numRegs = (ushort)(maxReg - minReg + 1);
 
-                                try
+                            if (numRegs > 125) numRegs = 125;
+
+                            ushort[] blockRegs = master.ReadInputRegisters(id, minReg, numRegs);
+
+                            foreach (var ch in activeChannels)
+                            {
+                                int offset = ch.RegisterAddress - minReg;
+
+                                if (ch.IsDouble)
                                 {
-                                    if (ch.IsDouble)
+                                    byte[] bytes = new byte[8];
+                                    for (int i = 0; i < 4; i++)
                                     {
-                                        ushort[] regs = master.ReadInputRegisters(id, ch.RegisterAddress, 4);
-                                        byte[] bytes = new byte[8];
-                                        for (int i = 0; i < 4; i++)
-                                        {
-                                            bytes[i * 2] = (byte)(regs[i] & 0xFF);
-                                            bytes[i * 2 + 1] = (byte)(regs[i] >> 8);
-                                        }
-                                        double val = BitConverter.ToDouble(bytes, 0);
-                                        ch.LastValue = val;
-                                        ch.Value = val;
+                                        bytes[i * 2] = (byte)(blockRegs[offset + i] & 0xFF);
+                                        bytes[i * 2 + 1] = (byte)(blockRegs[offset + i] >> 8);
                                     }
-                                    else if (ch.IsInt32)
-                                    {
-                                        ushort[] regs = master.ReadInputRegisters(id, ch.RegisterAddress, 2);
-                                        int raw = (regs[1] << 16) | regs[0];
-                                        double val = Math.Round((double)raw);
-                                        ch.LastValue = val;
-                                        ch.Value = val;
-                                    }
-                                    else
-                                    {
-                                        ushort[] regs = master.ReadInputRegisters(id, ch.RegisterAddress, 2);
-                                        byte[] bytes = new byte[4];
-                                        bytes[0] = (byte)(regs[0] & 0xFF);
-                                        bytes[1] = (byte)(regs[0] >> 8);
-                                        bytes[2] = (byte)(regs[1] & 0xFF);
-                                        bytes[3] = (byte)(regs[1] >> 8);
-                                        float val = BitConverter.ToSingle(bytes, 0);
-                                        ch.LastValue = val;
-                                        ch.Value = val;
-                                    }
+                                    double val = BitConverter.ToDouble(bytes, 0);
+                                    ch.LastValue = val;
+                                    ch.Value = val;
                                 }
-                                catch (Exception ex)
+                                else if (ch.IsInt32)
                                 {
-                                    if (!ex.Message.Contains("timed out"))
-                                    {
-                                        LogQueue.Enqueue($"[Debug] {portName}: Ошибка {ch.Name}: {ex.Message}");
-                                    }
+                                    int raw = (blockRegs[offset + 1] << 16) | blockRegs[offset];
+                                    double val = Math.Round((double)raw);
+                                    ch.LastValue = val;
+                                    ch.Value = val;
+                                }
+                                else
+                                {
+                                    byte[] bytes = new byte[4];
+                                    bytes[0] = (byte)(blockRegs[offset] & 0xFF);
+                                    bytes[1] = (byte)(blockRegs[offset] >> 8);
+                                    bytes[2] = (byte)(blockRegs[offset + 1] & 0xFF);
+                                    bytes[3] = (byte)(blockRegs[offset + 1] >> 8);
+                                    float val = BitConverter.ToSingle(bytes, 0);
+                                    ch.LastValue = val;
+                                    ch.Value = val;
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
-                            LogQueue.Enqueue($"[Debug] {portName}: Ошибка устройства {dev.Address}: {ex.Message}");
+                            if (!ex.Message.Contains("timed out"))
+                            {
+                                LogQueue.Enqueue($"[Debug] {portName}: Ошибка устройства {dev.Address}: {ex.Message}");
+                            }
                         }
                     }
 
-                    try { await Task.Delay(intervalMs, token); }
+                    try { await Task.Delay(intervalMs, token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
             }
@@ -464,21 +528,35 @@ namespace TERMINAL.DeviceHub
             }
         }
 
-        private async Task PollI2CLoop(List<DeviceNode> devices, int intervalMs, CancellationToken token)
+        private async Task PollI2CLoop(string devicePath, List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
-            FT260_I2CDotNet.FT260 i2cMaster = null;
-            try { await _i2cLock.WaitAsync(token); }
-            catch (OperationCanceledException) { return; }
+            IntPtr i2cHandle = IntPtr.Zero;
+            // Извлекаем уникальный ID устройства (например, 7&37e6d6f6&0&0000)
+            string shortName = devicePath;
+            string[] pathParts = devicePath.Split('#');
+            if (pathParts.Length >= 3)
+            {
+                // В пути \\?\hid#vid_0403&pid_6030#7&37e6d6f6&0&0000#{...} 
+                // ID находится под индексом 2
+                shortName = pathParts[2];
+            }
+            else if (shortName.Length > 20)
+            {
+                shortName = shortName.Substring(0, 20) + "...";
+            }
 
             try
             {
-                LogQueue.Enqueue("[Poll] I2C: Опрос запущен...");
-                i2cMaster = new FT260_I2CDotNet.FT260();
-                if (!i2cMaster.TryOpen())
+                LogQueue.Enqueue($"[Poll] I2C ({shortName}): Опрос запущен...");
+
+                int res = FT260Native.FT260_OpenByDevicePath(devicePath, out i2cHandle);
+                if (res != FT260Native.FT260_OK)
                 {
-                    LogQueue.Enqueue("[Poll] I2C: Не удалось открыть FT260.");
+                    LogQueue.Enqueue($"[Poll] I2C ({shortName}): Не удалось открыть FT260 (ошибка {res}).");
                     return;
                 }
+
+                FT260Native.FT260_I2CMaster_Init(i2cHandle, 100);
 
                 while (!token.IsCancellationRequested)
                 {
@@ -488,34 +566,29 @@ namespace TERMINAL.DeviceHub
 
                         try
                         {
-                            // ★ ПАРСИМ АДРЕС КАК ДЕСЯТИЧНОЕ ЧИСЛО ★
                             byte address = byte.Parse(dev.Address.Trim());
+                            var activeChannels = dev.Channels.Where(c => c.IsSelected).ToList();
 
-                            foreach (var ch in dev.Channels)
+                            foreach (var ch in activeChannels)
                             {
-                                if (!ch.IsSelected) continue;
-
                                 try
                                 {
+                                    byte[] regAddr = new byte[] { (byte)(ch.RegisterAddress & 0xFF) };
+                                    FT260Native.FT260_I2CMaster_Write(i2cHandle, address, FT260Native.FT260_I2C_START, regAddr, 1, out _);
+
                                     if (ch.IsDouble)
                                     {
-                                        i2cMaster.Write(address, new byte[] { (byte)(ch.RegisterAddress & 0xFF) }, Start: true, Stop: false);
-                                        i2cMaster.Read(address, out byte[] data, 8, RepStart: true, Stop: true);
+                                        byte[] data = new byte[8];
+                                        FT260Native.FT260_I2CMaster_Read(i2cHandle, address, FT260Native.FT260_I2C_START_AND_STOP, data, 8, out _, 5000);
                                         double val = BitConverter.ToDouble(data, 0);
                                         ch.LastValue = val;
                                         ch.Value = val;
                                     }
                                     else
                                     {
-                                        i2cMaster.Write(address, new byte[] { (byte)(ch.RegisterAddress & 0xFF) }, Start: true, Stop: false);
-                                        i2cMaster.Read(address, out byte[] data, 4, RepStart: true, Stop: true);
-
-                                        byte[] bytes = new byte[4];
-                                        bytes[0] = data[0];
-                                        bytes[1] = data[1];
-                                        bytes[2] = data[2];
-                                        bytes[3] = data[3];
-                                        float val = BitConverter.ToSingle(bytes, 0);
+                                        byte[] data = new byte[4];
+                                        FT260Native.FT260_I2CMaster_Read(i2cHandle, address, FT260Native.FT260_I2C_START_AND_STOP, data, 4, out _, 5000);
+                                        float val = BitConverter.ToSingle(data, 0);
                                         ch.LastValue = val;
                                         ch.Value = val;
                                     }
@@ -526,22 +599,25 @@ namespace TERMINAL.DeviceHub
                         catch { }
                     }
 
-                    try { await Task.Delay(intervalMs, token); }
+                    try { await Task.Delay(intervalMs, token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                LogQueue.Enqueue($"[Poll] I2C: Ошибка: {ex.Message}");
+                LogQueue.Enqueue($"[Poll] I2C ({shortName}): Ошибка: {ex.Message}");
             }
             finally
             {
-                i2cMaster?.Close();
-                _i2cLock.Release();
-                LogQueue.Enqueue("[Poll] I2C: Опрос остановлен.");
+                if (i2cHandle != IntPtr.Zero)
+                {
+                    FT260Native.FT260_Close(i2cHandle);
+                }
+                LogQueue.Enqueue($"[Poll] I2C ({shortName}): Опрос остановлен.");
             }
         }
+
         public void Stop()
         {
             var cts = _cts;
@@ -556,11 +632,6 @@ namespace TERMINAL.DeviceHub
 
             var tasks = _pollingTasks.ToArray();
             _pollingTasks.Clear();
-            if (tasks.Length > 0)
-            {
-                try { Task.WaitAll(tasks, 5000); }
-                catch (AggregateException) { }
-            }
 
             try { cts.Dispose(); } catch { }
         }
@@ -568,5 +639,35 @@ namespace TERMINAL.DeviceHub
         public void ClosePort()
         {
         }
+    }
+
+    public class ScanProgressInfo : INotifyPropertyChanged
+    {
+        private int _current;
+        private int _total;
+        private string _statusText;
+
+        public string PortName { get; set; }
+
+        public int Current
+        {
+            get => _current;
+            set { _current = value; OnPropertyChanged(nameof(Current)); }
+        }
+
+        public int Total
+        {
+            get => _total;
+            set { _total = value; OnPropertyChanged(nameof(Total)); }
+        }
+
+        public string StatusText
+        {
+            get => _statusText;
+            set { _statusText = value; OnPropertyChanged(nameof(StatusText)); }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }

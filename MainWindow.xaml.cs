@@ -447,23 +447,29 @@ namespace TERMINAL
             LoadSettings(); // ★ Читаем JSON, заполняем _loadedSettings (и _isDarkTheme, если добавили в LoadSettings)
 
             // ─── Инициализация сервиса уведомлений из сохранённых настроек ───
-            if (_notificationsEnabled
-                && !string.IsNullOrEmpty(_telegramToken)
-                && long.TryParse(_telegramChatId, out long _initChatId))
+            NotificationManager.ClearServices(); // Начинаем с чистого листа
+
+            if (_notificationsEnabled)
             {
-                try
+                // ★ Проверяем ГАЛОЧКУ Telegram (_notifyTgEnabled), а не только наличие токена
+                if (_notifyTgEnabled && !string.IsNullOrEmpty(_telegramToken) && long.TryParse(_telegramChatId, out long _initChatId))
                 {
-                    NotificationManager.SetService(
-                        new TelegramNotificationService(_telegramToken, _initChatId));
+                    try
+                    {
+                        NotificationManager.AddService(new TelegramNotificationService(_telegramToken, _initChatId));
+                    }
+                    catch { }
                 }
-                catch (Exception ex)
+
+                // Добавьте сюда инициализацию VK и остальных, если хотите, чтобы они работали сразу при запуске
+                if (_notifyVkEnabled && !string.IsNullOrEmpty(_vkToken) && _vkPeerId > 0)
                 {
-                    NotificationManager.SetService(new NullNotificationService());
-                    System.Diagnostics.Debug.WriteLine(
-                        "Уведомления: не удалось инициализировать — " + ex.Message);
+                    NotificationManager.AddService(new VkNotificationService(_vkToken, _vkPeerId));
                 }
             }
-            else
+
+            // Если ни один сервис не добавился (все галочки сняты), ставим пустышку
+            if (NotificationManager.GetServices().Count == 0)
             {
                 NotificationManager.SetService(new NullNotificationService());
             }
@@ -606,6 +612,8 @@ namespace TERMINAL
                 RefreshSensorUiFromClients();
                 UpdateSktbPanelVisibility();
                 UpdateStartButtonMode();
+
+                await RefreshPreviewTableForFirstEnabledJobAsync();
             }
             catch (Exception ex)
             {
@@ -1138,18 +1146,24 @@ namespace TERMINAL
                     // ★ Включаем авто-режим
                     xl.Run("SetAutoMode", true);
 
+                    // ★ Замер системным Stopwatch вокруг самого макроса
+                    var macroSw = System.Diagnostics.Stopwatch.StartNew();
+
                     // ★ ЗАПУСК С ТАЙМАУТОМ (2 минуты)
                     var runTask1 = Task.Run(() => xl.Run(filterMacro));
                     if (await Task.WhenAny(runTask1, Task.Delay(120000)) != runTask1)
                     {
+                        macroSw.Stop();
                         throw new TimeoutException($"Макрос «{filterMacro}» не завершился за 2 минуты. Возможно, он завис.");
                     }
                     await runTask1; // пробрасываем исключение, если оно было
 
+                    macroSw.Stop();
+
                     // ★ Выключаем авто-режим
                     xl.Run("SetAutoMode", false);
 
-                    AppendLog($"Excel: макрос «{filterMacro}» выполнен", Brushes.Green);
+                    AppendLog($"Excel: макрос «{filterMacro}» выполнен за {macroSw.ElapsedMilliseconds} мс", Brushes.Green);
                 }
                 catch (TimeoutException tex)
                 {
@@ -1202,15 +1216,20 @@ namespace TERMINAL
                 {
                     AppendLog("Excel: запуск макроса «Universal Insert»", Brushes.Blue);
 
+                    var macroSw = System.Diagnostics.Stopwatch.StartNew();
+
                     // ★ ЗАПУСК С ТАЙМАУТОМ (3 минуты)
                     var runTask2 = Task.Run(() => xl.Run("Universal_Insert_FULL_Auto"));
                     if (await Task.WhenAny(runTask2, Task.Delay(180000)) != runTask2)
                     {
+                        macroSw.Stop();
                         throw new TimeoutException("Макрос «Universal Insert» не завершился за 3 минуты. Возможно, он завис.");
                     }
                     await runTask2;
 
-                    AppendLog("Excel: макрос «Universal Insert» выполнен", Brushes.Green);
+                    macroSw.Stop();
+
+                    AppendLog($"Excel: макрос «Universal Insert» выполнен за {macroSw.ElapsedMilliseconds} мс", Brushes.Green);
                 }
                 catch (TimeoutException tex)
                 {
@@ -1337,7 +1356,7 @@ namespace TERMINAL
                     int state = (int)xl.CalculationState;
                     if (state == xlDone)
                     {
-                        AppendLog($"Excel: готов (за {sw.ElapsedMilliseconds} мс)", Brushes.Gray);
+                        AppendLog($"Excel: готов, остаток ожидания {sw.ElapsedMilliseconds} мс", Brushes.Gray);
                         return;
                     }
                     System.Threading.Thread.Sleep(100);
@@ -1349,7 +1368,6 @@ namespace TERMINAL
                 AppendLog($"Excel: WaitForExcelIdle ошибка — {ex.Message}", Brushes.Orange);
             }
         }
-
         private int GetSelectedClientCase()
         {
             var client = _connectedClients.FirstOrDefault(c => c.IsSelected);

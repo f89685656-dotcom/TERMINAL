@@ -88,6 +88,12 @@ namespace TERMINAL
                 e.PropertyName == nameof(TemperatureJob.IsCalibrationMode))
             {
                 UpdateStartButtonMode();
+
+                // ★ Вызов предпросмотра
+                if (!_batchRunning && !_isRunning)
+                {
+                    _ = RefreshPreviewTableForFirstEnabledJobAsync();
+                }
             }
 
             SaveSettings();
@@ -194,6 +200,19 @@ namespace TERMINAL
 
             _batchRunning = true;
             StartBatchStatusTimer();
+            _batchProgress.ResetTable();
+
+            // ★ Отправляем таблицу первого активного задания СРАЗУ
+            var firstJob = _batchJobs.FirstOrDefault(j => j.IsEnabled);
+            if (firstJob != null)
+            {
+                if (firstJob.IsCalibrationMode)
+                    await UpdatePressureTableInTelegramAsync();
+                else
+                    await UpdatePumpTableInTelegramAsync();
+
+                await Task.Delay(300);
+            }
 
             SetExternalButtonsEnabled(false);
             StartButton.IsEnabled = false;
@@ -278,7 +297,6 @@ namespace TERMINAL
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] ожидание стабилизации {job.StabilizationMinutes} мин...", false);
 
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
-                        await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
 
                         _lastStabNotify = DateTime.MinValue; // Сброс для первого апдейта
 
@@ -302,7 +320,6 @@ namespace TERMINAL
                         job.StatusColor = Brushes.Gold;
                         SetStatus($"[Пакет {completedCount}/{enabledCount}] проверка допуска...");
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
-                        await NotificationManager.NotifyOthersAsync($"⏳ Задание {completedCount}/{enabledCount}. Проверка допуска...");
 
                         bool inTolerance = await WaitForBatchTemperatureInToleranceAsync(completedCount, enabledCount);
                         if (!inTolerance)
@@ -337,11 +354,16 @@ namespace TERMINAL
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
                     // ★ 1. Отправляем таблицу ПЕРЕД запуском градуировки (только для Градуировки)
+                    // ★ Отправляем таблицу под режим текущего задания
                     if (job.IsCalibrationMode)
                     {
                         await UpdatePressureTableInTelegramAsync();
-                        await Task.Delay(500); // Даём Telegram время на отправку
                     }
+                    else
+                    {
+                        await UpdatePumpTableInTelegramAsync();
+                    }
+                    await Task.Delay(500);
 
                     // ★ 2. Запускаем режим
                     if (job.IsCalibrationMode)
@@ -453,7 +475,8 @@ namespace TERMINAL
 
         private async Task UpdatePressureTableInTelegramAsync()
         {
-            if (!_batchRunning || _selectedTargetPressure == null) return;
+            // ★ Разрешаем вызов и вне пакета — для предпросмотра таблицы по галочкам
+            if (_selectedTargetPressure == null) return;
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
 
             var sb = new System.Text.StringBuilder();
@@ -497,6 +520,139 @@ namespace TERMINAL
             await _batchProgress.UpdateTableAsync(sb.ToString());
         }
 
+        /// <summary>
+        /// Таблица для режима «Бароциклирование».
+        /// Показывает все циклы и их прогресс (макс → атмо).
+        /// Работает и вне пакета — для предпросмотра по галочкам.
+        /// </summary>
+        private async Task UpdatePumpTableInTelegramAsync()
+        {
+            if (_selectedTargetPressure == null) return;
+            if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
+
+            int totalCycles = 1;
+            TemperatureJob? pumpJob = null;
+
+            if (_batchRunning)
+            {
+                pumpJob = _batchJobs.FirstOrDefault(j =>
+                    j.IsEnabled && !j.IsCalibrationMode &&
+                    (j.StatusText ?? "").Contains("бароцикл", StringComparison.OrdinalIgnoreCase));
+            }
+
+            pumpJob ??= _batchJobs.FirstOrDefault(j => j.IsEnabled && !j.IsCalibrationMode);
+
+            if (pumpJob != null && int.TryParse(pumpJob.CyclesText, out int c) && c > 0)
+                totalCycles = c;
+
+            double maxPressure = steps.Max();
+
+            int currentCycle = 0;
+            try
+            {
+                string cycText = CyclesText?.Text ?? "";
+                int slash = cycText.IndexOf('/');
+                if (slash > 0)
+                {
+                    string numPart = cycText.Substring(0, slash).Replace("Цикл:", "").Trim();
+                    if (int.TryParse(numPart, out int cc)) currentCycle = cc;
+                }
+            }
+            catch { }
+
+            var sb = new System.Text.StringBuilder();
+
+            sb.AppendLine($"📊 Бароциклирование: {_selectedTargetPressure}");
+            sb.AppendLine("```");
+            sb.AppendLine("Цикл   | Макс.  | Статус");
+            sb.AppendLine("-------|--------|----------------");
+
+            for (int i = 1; i <= totalCycles; i++)
+            {
+                string mark;
+                string status;
+
+                if (currentCycle == 0)
+                {
+                    mark = (i == 1) ? "▶️" : "⏳";
+                    status = (i == 1) ? "ожидание" : "—";
+                }
+                else if (i < currentCycle)
+                {
+                    mark = "✅";
+                    status = "завершён";
+                }
+                else if (i == currentCycle)
+                {
+                    mark = "▶️";
+                    status = string.IsNullOrEmpty(_currentStepStatus) ? "таймер" : _currentStepStatus;
+                }
+                else
+                {
+                    mark = "⏳";
+                    status = "ожидание";
+                }
+
+                string pressure = maxPressure.ToString("0.##", CultureInfo.InvariantCulture).PadLeft(5);
+                sb.AppendLine($"{mark}  {i,2}/{totalCycles,-2} | {pressure}  | {status}");
+            }
+            sb.AppendLine("```");
+
+            // ★ ПРИНУДИТЕЛЬНЫЙ ВЫЗОВ БЕЗ КЭША
+            await _batchProgress.UpdateTableAsync(sb.ToString());
+        }
+        /// <summary>
+        /// Анализирует первое включённое задание в _batchJobs и показывает его таблицу
+        /// (Градуировка или Бароциклирование). Вызывается при изменении галочек/режима
+        /// ДО запуска пакета — чтобы оператор сразу видел, какой режим пойдёт первым.
+        /// </summary>
+        private async Task RefreshPreviewTableForFirstEnabledJobAsync()
+        {
+            try
+            {
+                var firstEnabled = _batchJobs.FirstOrDefault(j => j.IsEnabled);
+                if (firstEnabled == null)
+                {
+                    AppendLog("Предпросмотр: нет включённых заданий", Brushes.Gray);
+                    return;
+                }
+
+                string mode = firstEnabled.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
+                AppendLog($"Предпросмотр: выбрано первое задание — {mode}", Brushes.Blue);
+
+                // ★ ПЕРЕКЛЮЧАЕМ ПАНЕЛИ В ИНТЕРФЕЙСЕ
+                if (firstEnabled.IsCalibrationMode)
+                {
+                    CalibrationPanel.Visibility = Visibility.Visible;
+                    PumpPanel.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    CalibrationPanel.Visibility = Visibility.Collapsed;
+                    PumpPanel.Visibility = Visibility.Visible;
+
+                    UpdateMaxMinFromRange();
+                    if (CyclesText != null) CyclesText.Text = $"Цикл: 0/{firstEnabled.CyclesText}";
+                }
+
+                // Обновляем сообщения (если нужно)
+                _batchProgress.ResetTable();
+                await Task.Delay(100);
+
+                if (firstEnabled.IsCalibrationMode)
+                {
+                    await UpdatePressureTableInTelegramAsync();
+                }
+                else
+                {
+                    await UpdatePumpTableInTelegramAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Предпросмотр: ОШИБКА — {ex.Message}", Brushes.Red);
+            }
+        }
         private async Task RunPumpForBatchAsync(int cycles)
         {
             if (BatchTargetPressureCombo.SelectedItem == null)
@@ -608,7 +764,7 @@ namespace TERMINAL
                         $"осталось {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
 
                     // ★ Обновляем Telegram раз в 5 секунд
-                    if ((DateTime.Now - _lastStabNotify).TotalSeconds >= 5)
+                    if ((DateTime.Now - _lastStabNotify).TotalSeconds >= 1)
                     {
                         _lastStabNotify = DateTime.Now;
                         string timeStr = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
@@ -1161,6 +1317,7 @@ namespace TERMINAL
             SaveSettings();
             UpdateStartButtonMode();
             AppendLog($"Загружен пресет «{preset.Name}» ({preset.Jobs.Count} заданий)", Brushes.Green);
+            _ = RefreshPreviewTableForFirstEnabledJobAsync();
         }
 
         private void SavePreset_Click(object sender, RoutedEventArgs e)

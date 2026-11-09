@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace TERMINAL.Notifications
@@ -8,7 +10,7 @@ namespace TERMINAL.Notifications
         private int? _statusMsgId;
         private int? _progressMsgId;
         private string? _lastProgressText;
-        private int? _tableMsgId;       // ★ ID сообщения с таблицей
+        private int? _tableMsgId;
         private string? _lastTableText;
         private readonly object _lock = new object();
         private readonly SemaphoreSlim _tableLock = new SemaphoreSlim(1, 1);
@@ -39,7 +41,8 @@ namespace TERMINAL.Notifications
             catch { }
         }
 
-        // ★ ОБНОВЛЕНИЕ ТАБЛИЦЫ (только редактирование!)
+        // ★ Обновление таблицы — работает и для Telegram, и для VK.
+        //   VK внутри сам сделает edit или delete+send (в личке).
         public async Task UpdateTableAsync(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
@@ -52,19 +55,13 @@ namespace TERMINAL.Notifications
                 lock (_lock) { id = _tableMsgId; last = _lastTableText; }
                 if (text == last) return;
 
-                var tgService = NotificationManager.GetServices()
-                    .OfType<TelegramNotificationService>()
-                    .FirstOrDefault();
-                if (tgService == null) return;
-
                 if (id.HasValue)
                 {
-                    bool ok = await tgService.EditMessageAsync(id.Value, text);
-                    if (ok) { lock (_lock) { _lastTableText = text; } }
-                    return;
+                    bool ok = await NotificationManager.EditMessageAsync(id.Value, text);
+                    if (ok) { lock (_lock) { _lastTableText = text; } return; }
                 }
 
-                int? newId = await tgService.SendMessageAsync(text);
+                int? newId = await NotificationManager.SendMessageAsync(text);
                 lock (_lock) { _tableMsgId = newId; _lastTableText = text; }
             }
             catch
@@ -83,11 +80,13 @@ namespace TERMINAL.Notifications
             lock (_lock) { _progressMsgId = null; _lastProgressText = null; }
         }
 
-        // ★ ВАЖНО: вызов ResetTable должен происходить ТОЛЬКО в конце пакета,
-        //    чтобы при старте следующего пакета создать новую таблицу.
         public void ResetTable()
         {
-            lock (_lock) { _tableMsgId = null; _lastTableText = null; }
+            lock (_lock)
+            {
+                _tableMsgId = null;
+                _lastTableText = null;
+            }
         }
     }
 }

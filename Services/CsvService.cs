@@ -71,7 +71,16 @@ namespace TERMINAL.Services
                 }
 
                 WriteTable(sb, "# --- Погрешность ---", s.Errors);
+
+                if (s.VerificationTable != null)
+                {
+                    WriteTable(sb, "# --- Проверка ---", s.VerificationTable);
+                    sb.AppendLine();
+                }
+
                 sb.AppendLine();
+
+
 
                 // ─── ГСТ (Base64) ───
                 if (s.Gst != null && s.Gst.IsOk &&
@@ -85,6 +94,7 @@ namespace TERMINAL.Services
                     sb.AppendLine(Convert.ToBase64String(s.Gst.ChartPng));
                     sb.AppendLine();
                 }
+
             }
 
             File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
@@ -131,6 +141,7 @@ namespace TERMINAL.Services
             var lines = File.ReadAllLines(path, Encoding.UTF8);
             int i = 0;
 
+            // ─── Читаем шапку ───
             while (i < lines.Length)
             {
                 string line = lines[i].Trim();
@@ -149,6 +160,7 @@ namespace TERMINAL.Services
             if (i < lines.Length && lines[i].StartsWith("Датчик"))
                 i++;
 
+            // ─── Читаем сводную таблицу датчиков ───
             while (i < lines.Length)
             {
                 string line = lines[i].Trim();
@@ -176,15 +188,16 @@ namespace TERMINAL.Services
             string currentSection = "";
             int sensorIndex = 0;
 
+            // ─── Читаем детали по каждому датчику ───
             for (; i < lines.Length; i++)
             {
                 string line = lines[i].Trim();
 
                 if (string.IsNullOrEmpty(line)) continue;
 
+                // Новый датчик
                 if (line.StartsWith("# ═══ ДАТЧИК:"))
                 {
-                    // ← здесь заменить на код выше
                     if (sensorIndex < batch.Sensors.Count)
                     {
                         current = batch.Sensors[sensorIndex];
@@ -198,9 +211,11 @@ namespace TERMINAL.Services
                     continue;
                 }
 
+                // Заголовки таблиц (Гистерезис)
                 if (line.StartsWith("# --- Гистерезис градуировки")) { currentSection = "grad"; continue; }
                 if (line.StartsWith("# --- Гистерезис проверки")) { currentSection = "check"; continue; }
 
+                // ТЧХ
                 if (line.StartsWith("# --- ТЧХ"))
                 {
                     currentSection = "tchx";
@@ -209,11 +224,13 @@ namespace TERMINAL.Services
                     if (p1 >= 0 && p2 > p1)
                     {
                         string mode = line.Substring(p1 + 1, p2 - p1 - 1);
-                        current.Tchx = new TchxData { ChannelCount = mode };
+                        if (current != null)
+                            current.Tchx = new TchxData { ChannelCount = mode };
                     }
                     continue;
                 }
 
+                // Таблицы ТЧХ (Основная / Проверка)
                 if (line.StartsWith("# Основная") || line.StartsWith("# Проверка"))
                 {
                     bool isMain = line.StartsWith("# Основная");
@@ -232,7 +249,7 @@ namespace TERMINAL.Services
 
                     var colHeaders = lines[i].Split(';').Select(x => x.Trim()).ToArray();
 
-                    var table = new TchxTable
+                    var tchxTable = new TchxTable
                     {
                         Title = title,
                         ColumnHeaders = colHeaders
@@ -258,32 +275,40 @@ namespace TERMINAL.Services
                         i++;
                     }
 
-                    table.Values = new double?[10, 4];
+                    tchxTable.Values = new double?[10, 4];
                     for (int r = 0; r < valuesList.Count; r++)
                         for (int c = 0; c < 4; c++)
-                            table.Values[r, c] = valuesList[r][c];
+                            tchxTable.Values[r, c] = valuesList[r][c];
 
                     if (current?.Tchx != null)
                     {
-                        if (isMain) current.Tchx.MainTables.Add(table);
-                        else current.Tchx.CheckTables.Add(table);
+                        if (isMain) current.Tchx.MainTables.Add(tchxTable);
+                        else current.Tchx.CheckTables.Add(tchxTable);
                     }
                     continue;
                 }
 
+                // ★ ИСПРАВЛЕНО: раздельные проверки для Погрешности и Проверки
                 if (line.StartsWith("# --- Погрешность"))
                 {
                     currentSection = "errors";
                     continue;
                 }
 
-                // ─── ГСТ (Base64) ───
+                if (line.StartsWith("# --- Проверка"))
+                {
+                    currentSection = "verification";
+                    continue;
+                }
+
+                // ГСТ
                 if (line.StartsWith("# --- ГСТ ---"))
                 {
                     currentSection = "gst";
                     continue;
                 }
 
+                // Разбор ГСТ
                 if (currentSection == "gst")
                 {
                     if (line.StartsWith("# PNG_BASE64"))
@@ -338,6 +363,7 @@ namespace TERMINAL.Services
 
                 if (current == null) continue;
 
+                // ★ ИСПРАВЛЕНО: Объявление table перенесено сюда, чтобы не было ошибки области видимости
                 if (line.StartsWith("P;"))
                 {
                     var headers = line.Split(';')
@@ -383,15 +409,16 @@ namespace TERMINAL.Services
                         i++;
                     }
 
+                    // ★ ИСПРАВЛЕНО: Добавлено сохранение VerificationTable и убраны дубликаты
                     if (currentSection == "grad") current.GradHysteresis = table;
                     else if (currentSection == "check") current.CheckHysteresis = table;
                     else if (currentSection == "errors") current.Errors = table;
+                    else if (currentSection == "verification") current.VerificationTable = table;
                 }
             }
 
             return batch;
         }
-
         private static double ParseDouble(string s)
         {
             if (double.TryParse(s, NumberStyles.Float,

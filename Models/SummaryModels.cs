@@ -24,6 +24,7 @@ namespace TERMINAL.Models
         public TableData Errors { get; set; } = new();
         public TchxData? Tchx { get; set; }
         public GstInfo? Gst { get; set; }
+        public TableData? VerificationTable { get; set; }
     }
 
     public class TableData
