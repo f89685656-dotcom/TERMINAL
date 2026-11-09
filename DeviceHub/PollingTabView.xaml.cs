@@ -53,6 +53,9 @@ namespace TERMINAL.DeviceHub
         private double _historyMinTime = 0;
         private double _historyMaxTime = 0;
 
+        private double _historySelectedStart = 0;
+        private double _historySelectedEnd = 0;
+
         public PollingTabView()
         {
             InitializeComponent();
@@ -384,6 +387,7 @@ namespace TERMINAL.DeviceHub
             LogListView.Items.Add("Запуск параллельного сканирования...");
 
             ScanProgresses.Clear();
+            ScanProgressList.Visibility = Visibility.Visible;
 
             try
             {
@@ -451,6 +455,7 @@ namespace TERMINAL.DeviceHub
                 _scanCts = null;
                 ScanButtonIcon.Text = "\uE721";
                 ScanButton.ToolTip = "Поиск";
+                ScanProgressList.Visibility = Visibility.Collapsed;
             }
         }
         private void CopyLogMenuItem_Click(object sender, RoutedEventArgs e) => CopySelectedLogs();
@@ -662,41 +667,55 @@ namespace TERMINAL.DeviceHub
                 _historyMaxTime = DateTimeAxis.ToDouble(DateTime.Now);
             }
 
-            HistoryRangeSlider.Minimum = _historyMinTime;
-            HistoryRangeSlider.Maximum = _historyMaxTime;
-            HistoryRangeSlider.Value = _historyMinTime;
+            // Настраиваем оба ползунка
+            HistoryStartSlider.Minimum = _historyMinTime;
+            HistoryStartSlider.Maximum = _historyMaxTime;
+            HistoryEndSlider.Minimum = _historyMinTime;
+            HistoryEndSlider.Maximum = _historyMaxTime;
+
+            // Устанавливаем начальные значения (весь диапазон)
+            HistoryStartSlider.Value = _historyMinTime;
+            HistoryEndSlider.Value = _historyMaxTime;
+
+            _historySelectedStart = _historyMinTime;
+            _historySelectedEnd = _historyMaxTime;
 
             HistoryStartText.Text = $"С: {DateTimeAxis.ToDateTime(_historyMinTime):HH:mm:ss}";
             HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(_historyMaxTime):HH:mm:ss}";
         }
-
-        private void HistoryRangeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void HistoryStartSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (HistoryItemsControl.ItemsSource == null) return;
 
-            var allPoints = Interfaces.SelectMany(i => i.Devices).SelectMany(d => d.Channels).SelectMany(c => c.HistoryPoints).ToList();
-            if (!allPoints.Any()) return;
+            // ★ Не даем левому ползунку зайти за правый
+            if (HistoryStartSlider.Value >= HistoryEndSlider.Value)
+            {
+                HistoryStartSlider.Value = HistoryEndSlider.Value;
+                return;
+            }
 
-            double minTime = allPoints.Min(p => p.X);
-            double maxTime = allPoints.Max(p => p.X);
-            double duration = maxTime - minTime;
+            _historySelectedStart = HistoryStartSlider.Value;
+            ApplyHistoryTimeRange(_historySelectedStart, _historySelectedEnd);
 
-            if (duration <= 0) return;
-
-            double ratio = (e.NewValue - HistoryRangeSlider.Minimum) / (HistoryRangeSlider.Maximum - HistoryRangeSlider.Minimum);
-            if (double.IsNaN(ratio) || ratio < 0) ratio = 0;
-            if (ratio > 1) ratio = 1;
-
-            double windowDuration = duration * ratio;
-            double newMax = maxTime;
-            double newMin = newMax - windowDuration;
-
-            ApplyHistoryTimeRange(newMin, newMax);
-
-            HistoryStartText.Text = $"С: {DateTimeAxis.ToDateTime(newMin):HH:mm:ss}";
-            HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(newMax):HH:mm:ss}";
+            HistoryStartText.Text = $"С: {DateTimeAxis.ToDateTime(_historySelectedStart):HH:mm:ss}";
         }
 
+        private void HistoryEndSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HistoryItemsControl.ItemsSource == null) return;
+
+            // ★ Не даем правому ползунку зайти за левый
+            if (HistoryEndSlider.Value <= HistoryStartSlider.Value)
+            {
+                HistoryEndSlider.Value = HistoryStartSlider.Value;
+                return;
+            }
+
+            _historySelectedEnd = HistoryEndSlider.Value;
+            ApplyHistoryTimeRange(_historySelectedStart, _historySelectedEnd);
+
+            HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(_historySelectedEnd):HH:mm:ss}";
+        }
         private void ApplyHistoryTimeRange(double minX, double maxX)
         {
             if (HistoryItemsControl.ItemsSource == null) return;
@@ -727,15 +746,14 @@ namespace TERMINAL.DeviceHub
             int intervalMs = (int)(IntervalSlider.Value * 1000);
             if (intervalMs < 50) intervalMs = 50;
 
-            // Проверка интервала
             if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < intervalMs) return;
 
             _lastPlotUpdate = DateTime.Now;
             var now = DateTime.Now;
             bool needRedrawRT = false;
             bool dataWrittenToCsv = false;
+            bool dataWrittenToCsvWide = false;
 
-            // ★ Словарь для сбора текущих значений всех каналов
             Dictionary<ChannelNode, string> currentValues = new Dictionary<ChannelNode, string>();
 
             foreach (var iface in Interfaces)
@@ -744,7 +762,6 @@ namespace TERMINAL.DeviceHub
                     {
                         if (!ch.IsSelected) continue;
 
-                        // Если данные обновились, добавляем на график и в словарь
                         if (ch.IsValueSet && (now - ch.LastUpdateTime).TotalSeconds <= 3)
                         {
                             var newPoint = new DataPoint(DateTimeAxis.ToDouble(now), ch.Value);
@@ -767,12 +784,10 @@ namespace TERMINAL.DeviceHub
                                 }
                             }
 
-                            // Сохраняем реальное значение
                             currentValues[ch] = ch.Value.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
                         }
                         else
                         {
-                            // Если данных нет (устройство не отвечает), пишем NaN, чтобы не ломать структуру
                             currentValues[ch] = "NaN";
                         }
 
@@ -790,7 +805,6 @@ namespace TERMINAL.DeviceHub
                         }
                     }
 
-            // Принудительный сброс на диск (Формат 1)
             if (dataWrittenToCsv && _isCsvRecording && _csvWriter != null)
             {
                 _csvWriter.Flush();
@@ -799,13 +813,11 @@ namespace TERMINAL.DeviceHub
             // ★ ЗАПИСЬ В CSV (ФОРМАТ 2: ШИРОКАЯ ТАБЛИЦА) ★
             if (_isCsvWideRecording && _csvWideWriter != null)
             {
-                // Пишем строку, если есть хотя бы один канал в шапке
                 if (_csvWideChannels.Count > 0)
                 {
                     string timeStr = FormatDateTimeForCsv(now);
                     _csvWideWriter.Write($"{timeStr};");
 
-                    // ★ Идем строго по списку каналов из шапки, чтобы колонки не съезжали
                     foreach (var ch in _csvWideChannels)
                     {
                         string val = currentValues.ContainsKey(ch) ? currentValues[ch] : "NaN";
@@ -827,12 +839,21 @@ namespace TERMINAL.DeviceHub
                 foreach (var ch in Interfaces.SelectMany(i => i.Devices).SelectMany(d => d.Channels))
                     ch.ChartModel?.InvalidatePlot(true);
 
-            if (HistoryRangeSlider.Value >= HistoryRangeSlider.Maximum - 1)
+            // ★ ОБНОВЛЕНИЕ ПОЛЗУНКОВ ★
+            if (HistoryEndSlider.Value >= HistoryEndSlider.Maximum - 1)
             {
                 _historyMaxTime = DateTimeAxis.ToDouble(now);
-                HistoryRangeSlider.Maximum = _historyMaxTime;
-                HistoryRangeSlider.Value = _historyMaxTime;
-                HistoryRangeSlider_ValueChanged(null, new RoutedPropertyChangedEventArgs<double>(HistoryRangeSlider.Value, HistoryRangeSlider.Value));
+
+                HistoryStartSlider.Maximum = _historyMaxTime;
+                HistoryEndSlider.Maximum = _historyMaxTime;
+
+                if (_historySelectedEnd >= _historyMaxTime - 1 || HistoryEndSlider.Value >= HistoryEndSlider.Maximum - 1)
+                {
+                    HistoryEndSlider.Value = _historyMaxTime;
+                    _historySelectedEnd = _historyMaxTime;
+
+                    HistoryEndText.Text = $"По: {DateTimeAxis.ToDateTime(_historySelectedEnd):HH:mm:ss}";
+                }
             }
         }
         public void ClosePort() => _engine.ClosePort();
@@ -1042,6 +1063,9 @@ namespace TERMINAL.DeviceHub
 
                                 foreach (var pt in ch.HistoryPoints)
                                 {
+                                    // ★ Пропускаем точки вне выбранного диапазона ползунков
+                                    if (pt.X < _historySelectedStart || pt.X > _historySelectedEnd) continue;
+
                                     DateTime dt = DateTimeAxis.ToDateTime(pt.X);
                                     string timeStr = FormatDateTimeForCsv(dt);
 
@@ -1061,7 +1085,6 @@ namespace TERMINAL.DeviceHub
                 MessageBox.Show($"Не удалось сохранить файл: {ex.Message}");
             }
         }
-
         private void SaveHistoryWideButton_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new Microsoft.Win32.SaveFileDialog
@@ -1125,14 +1148,17 @@ namespace TERMINAL.DeviceHub
                     }
                     writer.WriteLine();
 
-                    // 3. Собираем все уникальные временные метки (X) из всех каналов
-                    // Используем HashSet для быстрого поиска и SortedSet для сортировки
+                    // 3. Собираем все уникальные временные метки только в выбранном диапазоне
                     SortedSet<double> allTimestamps = new SortedSet<double>();
                     foreach (var ch in historyChannels)
                     {
                         foreach (var pt in ch.HistoryPoints)
                         {
-                            allTimestamps.Add(pt.X);
+                            // ★ Фильтруем по периоду
+                            if (pt.X >= _historySelectedStart && pt.X <= _historySelectedEnd)
+                            {
+                                allTimestamps.Add(pt.X);
+                            }
                         }
                     }
 
@@ -1146,7 +1172,6 @@ namespace TERMINAL.DeviceHub
                         foreach (var ch in historyChannels)
                         {
                             // Ищем точку с такой же временной меткой
-                            // Используем FirstOrDefault, но проверяем, нашли ли мы её
                             var points = ch.HistoryPoints.Where(p => Math.Abs(p.X - timestamp) < 0.000001);
 
                             if (points.Any())

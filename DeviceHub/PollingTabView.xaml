@@ -360,31 +360,62 @@
 
                                 <TextBlock x:Name="HistoryStartText" Grid.Column="0" Text="С: --:--:--" VerticalAlignment="Center" Margin="0,0,10,0" FontSize="12" Foreground="Gray" FontFamily="Segoe UI"/>
 
-                                <Slider x:Name="HistoryRangeSlider" Grid.Column="1" Minimum="0" Maximum="100" 
-                                        ValueChanged="HistoryRangeSlider_ValueChanged"
-                                        IsSnapToTickEnabled="False"
-                                        TickPlacement="None"
-                                        Background="LightGray"
-                                        Foreground="#00BCD4">
-                                    <Slider.Template>
-                                        <ControlTemplate TargetType="Slider">
-                                            <Grid>
-                                                <Border Height="4" Background="#E0E0E0" CornerRadius="2" VerticalAlignment="Center"/>
-                                                <Track x:Name="PART_Track">
-                                                    <Track.Thumb>
-                                                        <Thumb Width="12" Height="20" Background="#888" BorderBrush="#555" BorderThickness="1" Cursor="Hand">
-                                                            <Thumb.Template>
-                                                                <ControlTemplate TargetType="Thumb">
-                                                                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="2"/>
-                                                                </ControlTemplate>
-                                                            </Thumb.Template>
-                                                        </Thumb>
-                                                    </Track.Thumb>
-                                                </Track>
-                                            </Grid>
-                                        </ControlTemplate>
-                                    </Slider.Template>
-                                </Slider>
+                                <!-- ★ КОНТЕЙНЕР ДЛЯ ДВУХ ПОЛЗУНКОВ (ОДНА ПОЛОСА) ★ -->
+                                <Grid Grid.Column="1" Height="30">
+                                    <!-- Правый ползунок (Конец) - рисуется СЗАДИ -->
+                                    <Slider x:Name="HistoryEndSlider" Minimum="0" Maximum="100" 
+                                            ValueChanged="HistoryEndSlider_ValueChanged"
+                                            IsSnapToTickEnabled="False" TickPlacement="None"
+                                            Background="LightGray" Foreground="#00BCD4"
+                                            Panel.ZIndex="1">
+                                        <!-- Делаем фон прозрачным для кликов, чтобы не мешать левому ползунку -->
+                                        <Slider.Template>
+                                            <ControlTemplate TargetType="Slider">
+                                                <Grid>
+                                                    <Border Height="4" Background="#E0E0E0" CornerRadius="2" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                                    <Track x:Name="PART_Track">
+                                                        <Track.Thumb>
+                                                            <Thumb Width="12" Height="20" Background="#888" BorderBrush="#555" BorderThickness="1" Cursor="Hand">
+                                                                <Thumb.Template>
+                                                                    <ControlTemplate TargetType="Thumb">
+                                                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="2"/>
+                                                                    </ControlTemplate>
+                                                                </Thumb.Template>
+                                                            </Thumb>
+                                                        </Track.Thumb>
+                                                    </Track>
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </Slider.Template>
+                                    </Slider>
+
+                                    <!-- Левый ползунок (Начало) - рисуется СПЕРЕДИ -->
+                                    <Slider x:Name="HistoryStartSlider" Minimum="0" Maximum="100" 
+                                            ValueChanged="HistoryStartSlider_ValueChanged"
+                                            IsSnapToTickEnabled="False" TickPlacement="None"
+                                            Background="Transparent" Foreground="#00BCD4"
+                                            Panel.ZIndex="2">
+                                        <Slider.Template>
+                                            <ControlTemplate TargetType="Slider">
+                                                <Grid>
+                                                    <!-- Фон прозрачный, чтобы был виден задний ползунок -->
+                                                    <Track x:Name="PART_Track">
+                                                        <Track.Thumb>
+                                                            <Thumb Width="12" Height="20" Background="#00BCD4" BorderBrush="#00838F" BorderThickness="1" Cursor="Hand">
+                                                                <Thumb.Template>
+                                                                    <ControlTemplate TargetType="Thumb">
+                                                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="2"/>
+                                                                    </ControlTemplate>
+                                                                </Thumb.Template>
+                                                            </Thumb>
+                                                        </Track.Thumb>
+                                                    </Track>
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </Slider.Template>
+                                    </Slider>
+                                </Grid>
+                                <!-- ★ КОНЕЦ КОНТЕЙНЕРА ★ -->
 
                                 <TextBlock x:Name="HistoryEndText" Grid.Column="2" Text="По: --:--:--" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="12" Foreground="Gray" FontFamily="Segoe UI"/>
                             </Grid>
@@ -402,7 +433,7 @@
             </Grid.RowDefinitions>
 
             <!-- Контейнер для списка прогрессов -->
-            <ItemsControl x:Name="ScanProgressList" Grid.Row="0" Margin="10,5,10,5">
+            <ItemsControl x:Name="ScanProgressList" Grid.Row="0" Margin="10,5,10,5" Visibility="Collapsed">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid Margin="0,0,0,3">
