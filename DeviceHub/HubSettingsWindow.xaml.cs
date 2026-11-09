@@ -167,9 +167,14 @@ namespace TERMINAL.DeviceHub
             IsI2CEnabled = I2CCheckBox.IsChecked == true;
 
             SelectedPortsWithBaud.Clear();
-            foreach (var p in Ports.Where(x => x.IsSelected))
+
+            // ★ Собираем порты только если RS-485 включен
+            if (IsRs485Enabled)
             {
-                SelectedPortsWithBaud.Add(new PortSetting { PortName = p.Name, BaudRate = p.BaudRate });
+                foreach (var p in Ports.Where(x => x.IsSelected))
+                {
+                    SelectedPortsWithBaud.Add(new PortSetting { PortName = p.Name, BaudRate = p.BaudRate });
+                }
             }
 
             if (SelectedPortsWithBaud.Count == 0 && IsRs485Enabled)

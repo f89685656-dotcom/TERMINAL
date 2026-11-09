@@ -196,13 +196,43 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
+                <!-- ★ ПАНЕЛЬ С КНОПКАМИ ★ -->
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Background="#F0F0F0" Margin="0,0,0,2">
+                    <!-- Кнопка Старт/Стоп графика -->
                     <Button x:Name="RecordButton" Click="RecordButton_Click" ToolTip="Начать/Остановить запись графика" 
                             Width="40" Height="40" Margin="0,0,5,0" Background="Transparent" BorderThickness="0">
                         <TextBlock x:Name="RecordIcon" Text="&#xE768;" FontFamily="Segoe MDL2 Assets" 
                                    FontSize="20" Foreground="#FF4CAF50" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Button>
 
+                    <!-- ★ БЛОК С ДИСКЕТКОЙ И КВАДРАТИКОМ СВЕРХУ ★ -->
+                    <Grid Width="40" Height="40" Margin="0,0,5,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="15"/>
+                            <!-- Маленький квадратик -->
+                            <RowDefinition Height="*"/>
+                            <!-- Дискета -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Квадратик выбора пути -->
+                        <Button x:Name="CsvPathButton" Grid.Row="0" Background="Transparent" BorderThickness="0" 
+                                Click="CsvPathButton_Click" Cursor="Hand" ToolTip="Выбрать путь для сохранения CSV">
+                            <Border x:Name="CsvPathBorder" BorderBrush="Gray" BorderThickness="1" Width="16" Height="12" Background="#E0E0E0" CornerRadius="2">
+                                <TextBlock x:Name="CsvPathText" Text="" FontSize="10" FontWeight="Bold" 
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="Black"/>
+                            </Border>
+                        </Button>
+
+                        <!-- Кнопка записи (Дискета) -->
+                        <Button x:Name="CsvRecordButton" Grid.Row="1" Click="CsvRecordButton_Click" ToolTip="Начать/Остановить запись в CSV" 
+                                Background="Transparent" BorderThickness="0">
+                            <TextBlock x:Name="CsvRecordIcon" Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" 
+                                       FontSize="18" Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                    </Grid>
+                    <!-- ★ КОНЕЦ БЛОКА ★ -->
+
+                    <!-- Остальные кнопки (Обновить, Очистить) -->
                     <Button x:Name="RefreshHistoryButton" Click="RefreshButton_Click" ToolTip="Обновить графики" 
                             Width="40" Height="40" Visibility="Collapsed" Background="Transparent" BorderThickness="0">
                         <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="20" 
@@ -330,8 +360,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- ★ ДИНАМИЧЕСКИЕ ПРОГРЕСС-БАРЫ ДЛЯ КАЖДОГО ПОРТА ★ -->
-            <!-- ★ ДИНАМИЧЕСКИЕ ПРОГРЕСС-БАРЫ ДЛЯ КАЖДОГО ПОРТА ★ -->
+            <!-- Контейнер для списка прогрессов -->
             <ItemsControl x:Name="ScanProgressList" Grid.Row="0" Margin="10,5,10,5">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>

@@ -4,6 +4,7 @@ using OxyPlot.Series;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -18,6 +19,12 @@ namespace TERMINAL.DeviceHub
     {
         private PollingEngine _engine = new PollingEngine();
         private DispatcherTimer _uiQueueTimer;
+
+        // ★ Поля для записи в CSV ★
+        private bool _isCsvRecording = false;
+        private StreamWriter _csvWriter = null;
+        private DateTime _csvStartTime = DateTime.MinValue;
+        private string _csvFilePath = null; // ★ ДОБАВЛЕНО: Путь к файлу
 
         public ObservableCollection<ScanProgressInfo> ScanProgresses { get; set; } = new();
 
@@ -71,8 +78,7 @@ namespace TERMINAL.DeviceHub
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
                 var i2cIface = Interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
 
-                // ★ Проверяем, что PortName начинается с "I2C" (так как теперь он может быть "I2C_FT260...")
-                if (dev.PortName.StartsWith("I2C"))
+                if (dev.PortName == "I2C") // ★ Теперь это железно "I2C"
                 {
                     if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
                     {
@@ -251,7 +257,6 @@ namespace TERMINAL.DeviceHub
                 int intervalMs = (int)(IntervalSlider.Value * 1000);
                 if (intervalMs < 50) intervalMs = 50;
 
-                // ★ Передаем список выбранных I2C-переходников вместо bool
                 _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _selectedI2CDevices, intervalMs);
                 _isRecording = true;
                 RecordIcon.Text = "\uE71A";
@@ -268,7 +273,46 @@ namespace TERMINAL.DeviceHub
                 LogListView.Items.Add("Запись графика остановлена.");
             }
         }
+        private void CsvRecordButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isCsvRecording)
+            {
+                if (string.IsNullOrEmpty(_csvFilePath))
+                {
+                    LogListView.Items.Add("Ошибка: Сначала выберите путь для сохранения CSV (нажмите на квадратик над дискетой).");
+                    return;
+                }
 
+                try
+                {
+                    _csvWriter = new StreamWriter(_csvFilePath, false, System.Text.Encoding.UTF8);
+                    _csvWriter.AutoFlush = true;
+
+                    _csvWriter.WriteLine("Время;№Изм;№Итер;Адрес;ID устройства;Серийный номер;Ячейка;Значение");
+
+                    _isCsvRecording = true;
+
+                    CsvRecordIcon.Foreground = new SolidColorBrush(Colors.Red); // Дискета становится красной
+                    LogListView.Items.Add($"Запись в CSV запущена: {_csvFilePath}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Не удалось создать файл: {ex.Message}");
+                }
+            }
+            else
+            {
+                _isCsvRecording = false;
+                _csvWriter?.Flush();
+                _csvWriter?.Close();
+                _csvWriter?.Dispose();
+                _csvWriter = null;
+
+                // Возвращаем синий цвет (запись остановлена, но путь выбран)
+                CsvRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3));
+                LogListView.Items.Add("Запись в CSV остановлена.");
+            }
+        }
         private void IntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (IntervalTextBox != null) IntervalTextBox.Text = e.NewValue.ToString("F2");
@@ -287,12 +331,16 @@ namespace TERMINAL.DeviceHub
             {
                 _isRs485Enabled = settingsWindow.IsRs485Enabled;
                 _rs485Ports = settingsWindow.SelectedPortsWithBaud;
-
-                // ★ Получаем список выбранных I2C-переходников
                 _selectedI2CDevices = settingsWindow.SelectedI2CDevices;
 
                 UpdateStatusText();
-                LogListView.Items.Add($"Настройки: Порты={string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))} | I2C={string.Join(", ", _selectedI2CDevices)}");
+
+                // ★ Проверяем, включен ли RS-485, и только тогда выводим порты
+                string portsStr = _isRs485Enabled && _rs485Ports.Count > 0
+                    ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))
+                    : "Выкл";
+
+                LogListView.Items.Add($"Настройки: Порты={portsStr} | I2C={string.Join(", ", _selectedI2CDevices)}");
             }
         }
 
@@ -347,16 +395,12 @@ namespace TERMINAL.DeviceHub
 
                 foreach (var dev in foundDevices)
                 {
-                    // Определяем, к какому интерфейсу относится устройство
-                    if (dev.PortName.Contains("hid#") || dev.Name.Contains("I2C"))
+                    if (dev.PortName == "I2C") // ★ Теперь это железно "I2C"
                     {
                         if (i2cIface != null)
                         {
                             dev.ParentInterface = i2cIface;
-
-                            // Проверяем, нет ли дубликата (по адресу и пути)
-                            bool exists = i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName);
-                            if (!exists)
+                            if (!i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
                             {
                                 i2cIface.Devices.Add(dev);
                             }
@@ -367,9 +411,7 @@ namespace TERMINAL.DeviceHub
                         if (rs485Iface != null)
                         {
                             dev.ParentInterface = rs485Iface;
-
-                            bool exists = rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName);
-                            if (!exists)
+                            if (!rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
                             {
                                 rs485Iface.Devices.Add(dev);
                             }
@@ -676,6 +718,7 @@ namespace TERMINAL.DeviceHub
             int intervalMs = (int)(IntervalSlider.Value * 1000);
             if (intervalMs < 50) intervalMs = 50;
 
+            // Проверка интервала: если время еще не пришло, выходим
             if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < intervalMs) return;
 
             _lastPlotUpdate = DateTime.Now;
@@ -707,7 +750,29 @@ namespace TERMINAL.DeviceHub
                                 if (miniSeries.Points.Count > 5000) miniSeries.Points.RemoveAt(0);
                             }
                         }
+
+                        // ★ ЗАПИСЬ В CSV ★
+                        if (_isCsvRecording && _csvWriter != null)
+                        {
+                            string timeStr = now.ToString("dd.MM.yyyy HH:mm:ss,fff");
+
+                            string address = dev.Address ?? "";
+                            string channelName = ch.Name;
+                            string value = ch.Value.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+
+                            // Пустые поля обозначаем просто как ;;;
+                            string line = $"{timeStr};;;{address};;;{channelName};{value}";
+
+                            _csvWriter.WriteLine(line);
+                        }
+                        // ★ КОНЕЦ ЗАПИСИ ★
                     }
+
+            // ★ ПРИНУДИТЕЛЬНЫЙ СБРОС НА ДИСК (после записи всех каналов за этот тик) ★
+            if (_isCsvRecording && _csvWriter != null)
+            {
+                _csvWriter.Flush();
+            }
 
             var cutoffRT = DateTimeAxis.ToDouble(now.AddMinutes(-2));
             foreach (var series in _seriesMapRealTime.Values)
@@ -727,7 +792,6 @@ namespace TERMINAL.DeviceHub
                 HistoryRangeSlider_ValueChanged(null, new RoutedPropertyChangedEventArgs<double>(HistoryRangeSlider.Value, HistoryRangeSlider.Value));
             }
         }
-
         public void ClosePort() => _engine.ClosePort();
 
         public void SetPollingInterval(double seconds) { if (seconds >= IntervalSlider.Minimum && seconds <= IntervalSlider.Maximum) { IntervalSlider.Value = seconds; IntervalTextBox.Text = seconds.ToString("F2"); } }
@@ -746,6 +810,30 @@ namespace TERMINAL.DeviceHub
             if (sender is Border border && border.DataContext is ChannelNode channel)
             {
                 channel.IsHovered = false;
+            }
+        }
+        private void CsvPathButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isCsvRecording) return;
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                DefaultExt = ".csv",
+                FileName = $"Данные_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                _csvFilePath = dialog.FileName;
+
+                // ★ Визуально показываем, что путь выбран (меняем текст на "...")
+                CsvPathText.Text = "...";
+                CsvPathBorder.Background = Brushes.LightGreen; // Квадратик становится зеленым
+                CsvPathButton.ToolTip = _csvFilePath; // Полный путь в подсказке
+
+                // Делаем иконку дискеты синей (готовность)
+                CsvRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3));
             }
         }
     }

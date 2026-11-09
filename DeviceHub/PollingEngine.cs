@@ -305,7 +305,8 @@ namespace TERMINAL.DeviceHub
                         {
                             Name = $"[{shortName}|0x{deviceIdRead:X4}]",
                             Address = address.ToString("D3"),
-                            PortName = devicePath
+                            PortName = "I2C",        // ★ Явно указываем "I2C"
+                            DevicePath = devicePath  // ★ Сохраняем полный путь для опроса
                         };
 
                         if (deviceIdRead == 0xDB80 || deviceIdRead == 0xDB81)
@@ -391,8 +392,9 @@ namespace TERMINAL.DeviceHub
                     foreach (var path in selectedI2CDevicePaths)
                     {
                         var localPath = path;
+                        // Ищем устройства, у которых DevicePath совпадает с тем, что выбрано в настройках
                         var i2cDevices = i2cIface.Devices
-                            .Where(d => d.IsSelected != false && d.PortName == localPath)
+                            .Where(d => d.IsSelected != false && d.DevicePath == localPath)
                             .ToList();
 
                         if (i2cDevices.Any())
