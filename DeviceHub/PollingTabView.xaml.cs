@@ -24,7 +24,12 @@ namespace TERMINAL.DeviceHub
         private bool _isCsvRecording = false;
         private StreamWriter _csvWriter = null;
         private DateTime _csvStartTime = DateTime.MinValue;
-        private string _csvFilePath = null; // ★ ДОБАВЛЕНО: Путь к файлу
+        private string _csvFilePath = null;
+
+        private bool _isCsvWideRecording = false;
+        private StreamWriter _csvWideWriter = null;
+        private string _csvWideFilePath = null;
+        private List<ChannelNode> _csvWideChannels = new List<ChannelNode>(); // Список каналов для широкой таблицы
 
         public ObservableCollection<ScanProgressInfo> ScanProgresses { get; set; } = new();
 
@@ -718,60 +723,94 @@ namespace TERMINAL.DeviceHub
             int intervalMs = (int)(IntervalSlider.Value * 1000);
             if (intervalMs < 50) intervalMs = 50;
 
-            // Проверка интервала: если время еще не пришло, выходим
+            // Проверка интервала
             if ((DateTime.Now - _lastPlotUpdate).TotalMilliseconds < intervalMs) return;
 
             _lastPlotUpdate = DateTime.Now;
             var now = DateTime.Now;
             bool needRedrawRT = false;
+            bool dataWrittenToCsv = false;
+
+            // ★ Словарь для сбора текущих значений всех каналов
+            Dictionary<ChannelNode, string> currentValues = new Dictionary<ChannelNode, string>();
 
             foreach (var iface in Interfaces)
                 foreach (var dev in iface.Devices)
                     foreach (var ch in dev.Channels)
                     {
-                        if (!ch.IsSelected || !ch.IsValueSet || (now - ch.LastUpdateTime).TotalSeconds > 3) continue;
+                        if (!ch.IsSelected) continue;
 
-                        var newPoint = new DataPoint(DateTimeAxis.ToDouble(now), ch.Value);
-
-                        if (_seriesMapRealTime.TryGetValue(ch, out var seriesRT))
+                        // Если данные обновились, добавляем на график и в словарь
+                        if (ch.IsValueSet && (now - ch.LastUpdateTime).TotalSeconds <= 3)
                         {
-                            seriesRT.Points.Add(newPoint);
-                            needRedrawRT = true;
-                        }
+                            var newPoint = new DataPoint(DateTimeAxis.ToDouble(now), ch.Value);
 
-                        ch.HistoryPoints.Add(newPoint);
-
-                        if (ch.ChartModel != null)
-                        {
-                            var miniSeries = ch.ChartModel.Series.OfType<LineSeries>().FirstOrDefault();
-                            if (miniSeries != null)
+                            if (_seriesMapRealTime.TryGetValue(ch, out var seriesRT))
                             {
-                                miniSeries.Points.Add(newPoint);
-                                if (miniSeries.Points.Count > 5000) miniSeries.Points.RemoveAt(0);
+                                seriesRT.Points.Add(newPoint);
+                                needRedrawRT = true;
                             }
+
+                            ch.HistoryPoints.Add(newPoint);
+
+                            if (ch.ChartModel != null)
+                            {
+                                var miniSeries = ch.ChartModel.Series.OfType<LineSeries>().FirstOrDefault();
+                                if (miniSeries != null)
+                                {
+                                    miniSeries.Points.Add(newPoint);
+                                    if (miniSeries.Points.Count > 5000) miniSeries.Points.RemoveAt(0);
+                                }
+                            }
+
+                            // Сохраняем реальное значение
+                            currentValues[ch] = ch.Value.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                        }
+                        else
+                        {
+                            // Если данных нет (устройство не отвечает), пишем NaN, чтобы не ломать структуру
+                            currentValues[ch] = "NaN";
                         }
 
-                        // ★ ЗАПИСЬ В CSV ★
+                        // ★ ЗАПИСЬ В CSV (ФОРМАТ 1: СТРОКИ) ★
                         if (_isCsvRecording && _csvWriter != null)
                         {
-                            string timeStr = now.ToString("dd.MM.yyyy HH:mm:ss,fff");
-
+                            string timeStr = FormatDateTimeForCsv(now);
                             string address = dev.Address ?? "";
                             string channelName = ch.Name;
-                            string value = ch.Value.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                            string value = currentValues[ch];
 
-                            // Пустые поля обозначаем просто как ;;;
                             string line = $"{timeStr};;;{address};;;{channelName};{value}";
-
                             _csvWriter.WriteLine(line);
+                            dataWrittenToCsv = true;
                         }
-                        // ★ КОНЕЦ ЗАПИСИ ★
                     }
 
-            // ★ ПРИНУДИТЕЛЬНЫЙ СБРОС НА ДИСК (после записи всех каналов за этот тик) ★
-            if (_isCsvRecording && _csvWriter != null)
+            // Принудительный сброс на диск (Формат 1)
+            if (dataWrittenToCsv && _isCsvRecording && _csvWriter != null)
             {
                 _csvWriter.Flush();
+            }
+
+            // ★ ЗАПИСЬ В CSV (ФОРМАТ 2: ШИРОКАЯ ТАБЛИЦА) ★
+            if (_isCsvWideRecording && _csvWideWriter != null)
+            {
+                // Пишем строку, если есть хотя бы один канал в шапке
+                if (_csvWideChannels.Count > 0)
+                {
+                    string timeStr = FormatDateTimeForCsv(now);
+                    _csvWideWriter.Write($"{timeStr};");
+
+                    // ★ Идем строго по списку каналов из шапки, чтобы колонки не съезжали
+                    foreach (var ch in _csvWideChannels)
+                    {
+                        string val = currentValues.ContainsKey(ch) ? currentValues[ch] : "NaN";
+                        _csvWideWriter.Write($"{val};");
+                    }
+
+                    _csvWideWriter.WriteLine();
+                    _csvWideWriter.Flush();
+                }
             }
 
             var cutoffRT = DateTimeAxis.ToDouble(now.AddMinutes(-2));
@@ -834,6 +873,139 @@ namespace TERMINAL.DeviceHub
 
                 // Делаем иконку дискеты синей (готовность)
                 CsvRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3));
+            }
+        }
+
+        private void CsvWidePathButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isCsvWideRecording) return;
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                DefaultExt = ".csv",
+                FileName = $"Данные_Широкие_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                _csvWideFilePath = dialog.FileName;
+
+                CsvWidePathText.Text = "...";
+                CsvWidePathBorder.Background = Brushes.LightGreen;
+                CsvWidePathButton.ToolTip = _csvWideFilePath;
+
+                CsvWideRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3)); // Синий
+            }
+        }
+
+        private void CsvWideRecordButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isCsvWideRecording)
+            {
+                if (string.IsNullOrEmpty(_csvWideFilePath))
+                {
+                    LogListView.Items.Add("Ошибка: Сначала выберите путь для широкой таблицы (квадратик над второй дискетой).");
+                    return;
+                }
+
+                try
+                {
+                    _csvWideWriter = new StreamWriter(_csvWideFilePath, false, System.Text.Encoding.UTF8);
+                    _csvWideWriter.AutoFlush = true;
+
+                    // ★ Собираем список всех выбранных каналов для шапки
+                    _csvWideChannels.Clear();
+                    foreach (var iface in Interfaces)
+                        foreach (var dev in iface.Devices)
+                            foreach (var ch in dev.Channels)
+                                if (ch.IsSelected) _csvWideChannels.Add(ch);
+
+                    if (_csvWideChannels.Count == 0)
+                    {
+                        LogListView.Items.Add("Ошибка: Нет выбранных каналов для записи.");
+                        _csvWideWriter.Close();
+                        return;
+                    }
+
+                    // ★ Пишем шапку 1: "Устройства:"
+                    // ★ Пишем шапку 1: "Устройства:"
+                    // Используем ; как разделитель. Название устройства пишем один раз для группы каналов.
+                    _csvWideWriter.Write("Устройства;");
+
+                    DeviceNode lastDev = null;
+                    foreach (var ch in _csvWideChannels)
+                    {
+                        if (ch.ParentDevice != lastDev)
+                        {
+                            // Экранируем кавычками на случай, если в имени есть разделитель (хотя там |)
+                            string devName = ch.FullName.Replace("\"", "\"\"");
+                            _csvWideWriter.Write($"\"{devName}\";");
+                            lastDev = ch.ParentDevice;
+                        }
+                        else
+                        {
+                            // Пустая ячейка для остальных каналов этого же устройства
+                            _csvWideWriter.Write(";");
+                        }
+                    }
+                    _csvWideWriter.WriteLine();
+
+                    // ★ Пишем шапку 2: "Каналы:"
+                    _csvWideWriter.Write("Каналы;");
+                    foreach (var ch in _csvWideChannels)
+                    {
+                        _csvWideWriter.Write($"{ch.Name};");
+                    }
+                    _csvWideWriter.WriteLine();
+
+                    _isCsvWideRecording = true;
+                    CsvWideRecordIcon.Foreground = new SolidColorBrush(Colors.Red); // Красный
+                    LogListView.Items.Add($"Запись в широкую таблицу запущена: {_csvWideFilePath}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Не удалось создать файл: {ex.Message}");
+                }
+            }
+            else
+            {
+                _isCsvWideRecording = false;
+                _csvWideWriter?.Flush();
+                _csvWideWriter?.Close();
+                _csvWideWriter?.Dispose();
+                _csvWideWriter = null;
+
+                CsvWideRecordIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x21, 0x96, 0xF3)); // Синий
+                LogListView.Items.Add("Запись в широкую таблицу остановлена.");
+            }
+        }
+
+        // ★ Получаем строку формата времени в зависимости от системного разделителя
+        private string GetTimeFormatWithSystemSeparator()
+        {
+            string separator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
+
+            // В C# формат даты/времени не принимает разделитель как часть формата напрямую,
+            // поэтому мы сначала формируем время с точкой, а потом заменяем ее, если нужно.
+            return "dd.MM.yyyy HH:mm:ss.fff"; // Базовый формат (всегда с точкой)
+        }
+
+        // ★ Применяем замену разделителя
+        private string FormatDateTimeForCsv(DateTime dt)
+        {
+            // Проверяем системный разделитель дробной части
+            string separator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
+            
+            // Если системный разделитель — запятая, используем запятую для миллисекунд
+            if (separator == ",")
+            {
+                return dt.ToString("dd.MM.yyyy HH:mm:ss,fff");
+            }
+            else
+            {
+                // Иначе — точку
+                return dt.ToString("dd.MM.yyyy HH:mm:ss.fff");
             }
         }
     }
