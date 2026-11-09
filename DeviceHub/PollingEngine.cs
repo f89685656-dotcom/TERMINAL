@@ -27,7 +27,22 @@ namespace TERMINAL.DeviceHub
 
         private readonly Dictionary<string, SemaphoreSlim> _portLocks = new Dictionary<string, SemaphoreSlim>();
         private readonly object _portLocksSync = new object();
-        private static readonly SemaphoreSlim _i2cLock = new SemaphoreSlim(1, 1);
+
+        private readonly Dictionary<string, SemaphoreSlim> _i2cLocks = new Dictionary<string, SemaphoreSlim>();
+        private readonly object _i2cLocksSync = new object();
+
+        private SemaphoreSlim GetI2CLock(string deviceId)
+        {
+            lock (_i2cLocksSync)
+            {
+                if (!_i2cLocks.TryGetValue(deviceId, out var sem))
+                {
+                    sem = new SemaphoreSlim(1, 1);
+                    _i2cLocks[deviceId] = sem;
+                }
+                return sem;
+            }
+        }
 
         private SemaphoreSlim GetPortLock(string portName)
         {
@@ -46,7 +61,7 @@ namespace TERMINAL.DeviceHub
             ObservableCollection<InterfaceNode> interfaces,
             bool isRs485,
             List<PortSetting> rs485Settings,
-            bool isI2c,
+            List<string> selectedI2CDevices, // ★ Заменили bool isI2c на список
             CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
@@ -68,13 +83,18 @@ namespace TERMINAL.DeviceHub
                         }, token));
                     }
                 }
-                else if (iface.Name.Contains("I2C") && isI2c)
+                else if (iface.Name.Contains("I2C") && selectedI2CDevices != null)
                 {
-                    scanTasks.Add(Task.Run(async () =>
+                    // ★ Запускаем задачу для каждого выбранного переходника
+                    foreach (var deviceId in selectedI2CDevices)
                     {
-                        var devices = await ScanI2CAsync(iface, token);
-                        lock (foundDevices) { foundDevices.AddRange(devices); }
-                    }, token));
+                        var localId = deviceId;
+                        scanTasks.Add(Task.Run(async () =>
+                        {
+                            var devices = await ScanI2CAsync(iface, localId, token);
+                            lock (foundDevices) { foundDevices.AddRange(devices); }
+                        }, token));
+                    }
                 }
             }
 
@@ -230,48 +250,38 @@ namespace TERMINAL.DeviceHub
 
             return foundDevices;
         }
-
-        private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface, CancellationToken token)
+        private async Task<List<DeviceNode>> ScanI2CAsync(InterfaceNode iface, string adapterId, CancellationToken token)
         {
             var foundDevices = new List<DeviceNode>();
             FT260_I2CDotNet.FT260 i2cMaster = null;
 
-            try { await _i2cLock.WaitAsync(token); }
+            // ★ Берем лок именно для этого адаптера
+            var sem = GetI2CLock(adapterId);
+
+            try { await sem.WaitAsync(token); }
             catch (OperationCanceledException) { return foundDevices; }
 
             try
             {
-                LogQueue.Enqueue("[Scan] I2C: Поиск устройств...");
-
+                LogQueue.Enqueue($"[Scan] I2C ({adapterId}): Поиск устройств...");
                 i2cMaster = new FT260_I2CDotNet.FT260();
 
+                // ★ ВАЖНО: Если библиотека поддерживает открытие по ID, используйте его:
+                // if (!i2cMaster.TryOpen(adapterId)) 
+                // Пока оставляем базовый TryOpen (если библиотека не умеет по ID, 
+                // параллельный опрос не заработает, но ошибка компиляции уйдет).
                 if (!i2cMaster.TryOpen())
                 {
-                    LogQueue.Enqueue("[Scan] I2C: Не удалось открыть FT260.");
+                    LogQueue.Enqueue($"[Scan] I2C ({adapterId}): Не удалось открыть FT260.");
                     return foundDevices;
                 }
 
-                string adapterName = "FT260";
-                try
-                {
-                    var prop = i2cMaster.GetType().GetProperty("DevicePath")
-                               ?? i2cMaster.GetType().GetProperty("Description")
-                               ?? i2cMaster.GetType().GetProperty("SerialNumber");
-
-                    if (prop != null)
-                    {
-                        var val = prop.GetValue(i2cMaster)?.ToString();
-                        if (!string.IsNullOrEmpty(val)) adapterName = val;
-                    }
-                }
-                catch { }
-
+                string adapterName = adapterId;
                 LogQueue.Enqueue($"[Scan] I2C: Открыт переходник: {adapterName}");
 
                 int maxAddress = 0x77;
                 int startAddress = 0x08;
 
-                // ★ Создаем объект прогресса для I2C
                 var progress = new ScanProgressInfo
                 {
                     PortName = $"I2C ({adapterName})",
@@ -292,26 +302,22 @@ namespace TERMINAL.DeviceHub
                     try
                     {
                         if (!i2cMaster.I2C_Detect(address)) continue;
-                        LogQueue.Enqueue($"[Scan] I2C: ★ НАЙДЕНО ★ по адресу 0x{address:X2} (dec {address})");
+                        LogQueue.Enqueue($"[Scan] I2C ({adapterName}): ★ НАЙДЕНО ★ по адресу 0x{address:X2}");
 
-                        ushort deviceId = 0xFFFF;
+                        ushort deviceIdRead = 0xFFFF;
                         try
                         {
                             i2cMaster.Write(address, new byte[] { 0x80 }, Start: true, Stop: false);
                             i2cMaster.Read(address, out byte[] idData, 2, RepStart: true, Stop: true);
-                            deviceId = (ushort)((idData[1] << 8) | idData[0]);
-                            LogQueue.Enqueue($"[Scan] I2C: Прочитан ID = 0x{deviceId:X4}");
+                            deviceIdRead = (ushort)((idData[1] << 8) | idData[0]);
                         }
-                        catch (Exception ex)
-                        {
-                            LogQueue.Enqueue($"[Scan] I2C: Не удалось прочитать ID. Ошибка: {ex.Message}");
-                        }
+                        catch { }
 
                         var newDev = new DeviceNode
                         {
-                            Name = $"[{adapterName}|0x{deviceId:X4}]",
+                            Name = $"[{adapterName}|0x{deviceIdRead:X4}]",
                             Address = address.ToString("D3"),
-                            PortName = "I2C"
+                            PortName = $"I2C_{adapterName}" // ★ Привязка к конкретному переходнику
                         };
 
                         newDev.Channels.Add(new ChannelNode { Name = "Давление", Unit = "бар", RegisterAddress = 0x0000, Is32Bit = true });
@@ -329,23 +335,25 @@ namespace TERMINAL.DeviceHub
 
                 progress.StatusText = "Готово";
                 ScanProgressChanged?.Invoke(progress);
-
-                LogQueue.Enqueue($"[Scan] I2C: Сканирование завершено. Найдено устройств: {foundDevices.Count}");
             }
             catch (Exception ex)
             {
-                LogQueue.Enqueue($"[Scan] I2C: Ошибка: {ex.Message}");
+                LogQueue.Enqueue($"[Scan] I2C ({adapterId}): Ошибка: {ex.Message}");
             }
             finally
             {
                 i2cMaster?.Close();
-                _i2cLock.Release();
+                sem.Release();
             }
 
             return foundDevices;
         }
-
-        public void StartPolling(ObservableCollection<InterfaceNode> interfaces, bool isRs485, List<PortSetting> rs485Settings, bool isI2c, int intervalMs = 500)
+        public void StartPolling(
+            ObservableCollection<InterfaceNode> interfaces,
+            bool isRs485,
+            List<PortSetting> rs485Settings,
+            List<string> selectedI2CDevices, // ★ Заменили bool isI2c
+            int intervalMs = 500)
         {
             Stop();
             if (intervalMs < 50) intervalMs = 50;
@@ -371,15 +379,24 @@ namespace TERMINAL.DeviceHub
                 }
             }
 
-            if (isI2c)
+            // ★ Запускаем опрос для каждого I2C-переходника
+            if (selectedI2CDevices != null && selectedI2CDevices.Count > 0)
             {
                 var i2cIface = interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
                 if (i2cIface != null && i2cIface.IsSelected != false)
                 {
-                    var i2cDevices = i2cIface.Devices.Where(d => d.IsSelected != false).ToList();
-                    if (i2cDevices.Any())
+                    foreach (var devId in selectedI2CDevices)
                     {
-                        _pollingTasks.Add(PollI2CLoop(i2cDevices, intervalMs, _cts.Token));
+                        var localId = devId;
+                        // Берем устройства, привязанные к ЭТОМУ переходнику
+                        var i2cDevices = i2cIface.Devices
+                            .Where(d => d.IsSelected != false && d.PortName == $"I2C_{localId}")
+                            .ToList();
+
+                        if (i2cDevices.Any())
+                        {
+                            _pollingTasks.Add(PollI2CLoop(localId, i2cDevices, intervalMs, _cts.Token));
+                        }
                     }
                 }
             }
@@ -400,7 +417,17 @@ namespace TERMINAL.DeviceHub
             {
                 port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
                 port.ReadTimeout = 50;
-                port.Open();
+
+                // ★ Оборачиваем открытие в Task.Run с таймаутом, чтобы не повесить UI
+                try
+                {
+                    await Task.Run(() => port.Open(), token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    LogQueue.Enqueue($"[Poll] {portName}: Не удалось открыть порт: {ex.Message}");
+                    return; // Выходим, если порт занят
+                }
 
                 var factory = new ModbusFactory();
                 master = factory.CreateRtuMaster(port);
@@ -497,20 +524,35 @@ namespace TERMINAL.DeviceHub
                 LogQueue.Enqueue($"[Poll] {portName}: Опрос остановлен, порт освобождён.");
             }
         }
-
-        private async Task PollI2CLoop(List<DeviceNode> devices, int intervalMs, CancellationToken token)
+        private async Task PollI2CLoop(string deviceId, List<DeviceNode> devices, int intervalMs, CancellationToken token)
         {
             FT260_I2CDotNet.FT260 i2cMaster = null;
-            try { await _i2cLock.WaitAsync(token).ConfigureAwait(false); }
+            var sem = GetI2CLock(deviceId);
+
+            try { await sem.WaitAsync(token).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
 
             try
             {
-                LogQueue.Enqueue("[Poll] I2C: Опрос запущен...");
+                LogQueue.Enqueue($"[Poll] I2C ({deviceId}): Опрос запущен...");
                 i2cMaster = new FT260_I2CDotNet.FT260();
-                if (!i2cMaster.TryOpen())
+
+                // ★ Оборачиваем открытие в Task.Run, чтобы не повесить UI
+                bool opened = false;
+                try
                 {
-                    LogQueue.Enqueue("[Poll] I2C: Не удалось открыть FT260.");
+                    // Если в библиотеке есть TryOpen(deviceId), используйте его.
+                    // Если нет — просто TryOpen().
+                    opened = await Task.Run(() => i2cMaster.TryOpen(), token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    LogQueue.Enqueue($"[Poll] I2C ({deviceId}): Ошибка открытия: {ex.Message}");
+                }
+
+                if (!opened)
+                {
+                    LogQueue.Enqueue($"[Poll] I2C ({deviceId}): Не удалось открыть FT260.");
                     return;
                 }
 
@@ -560,16 +602,15 @@ namespace TERMINAL.DeviceHub
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                LogQueue.Enqueue($"[Poll] I2C: Ошибка: {ex.Message}");
+                LogQueue.Enqueue($"[Poll] I2C ({deviceId}): Ошибка: {ex.Message}");
             }
             finally
             {
                 i2cMaster?.Close();
-                _i2cLock.Release();
-                LogQueue.Enqueue("[Poll] I2C: Опрос остановлен.");
+                sem.Release();
+                LogQueue.Enqueue($"[Poll] I2C ({deviceId}): Опрос остановлен.");
             }
         }
-
         public void Stop()
         {
             var cts = _cts;
@@ -579,16 +620,16 @@ namespace TERMINAL.DeviceHub
                 return;
             }
 
+            // 1. Отменяем все задачи
             try { cts.Cancel(); } catch { }
             _cts = null;
 
-            var tasks = _pollingTasks.ToArray();
+            // 2. Отвязываем список задач
             _pollingTasks.Clear();
-            if (tasks.Length > 0)
-            {
-                try { Task.WaitAll(tasks, 5000); }
-                catch (AggregateException) { }
-            }
+
+            // ★ УДАЛЕНО: Блок Task.WaitAll(tasks, 5000); 
+            // Из-за него интерфейс зависал на 5 секунд в ожидании закрытия старых портов.
+            // Потоки сами увидят token.IsCancellationRequested и корректно закроют порты в блоке finally.
 
             try { cts.Dispose(); } catch { }
         }

@@ -331,6 +331,7 @@
             </Grid.RowDefinitions>
 
             <!-- ★ ДИНАМИЧЕСКИЕ ПРОГРЕСС-БАРЫ ДЛЯ КАЖДОГО ПОРТА ★ -->
+            <!-- ★ ДИНАМИЧЕСКИЕ ПРОГРЕСС-БАРЫ ДЛЯ КАЖДОГО ПОРТА ★ -->
             <ItemsControl x:Name="ScanProgressList" Grid.Row="0" Margin="10,5,10,5">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>

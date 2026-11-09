@@ -32,7 +32,9 @@ namespace TERMINAL.DeviceHub
 
         private bool _isRs485Enabled = true;
         private List<PortSetting> _rs485Ports = new List<PortSetting> { new PortSetting { PortName = "COM9", BaudRate = 57600 } };
-        private bool _isI2CEnabled = true;
+
+        // ★ ТЕПЕРЬ ХРАНИМ СПИСОК ID ВЫБРАННЫХ ПЕРЕХОДНИКОВ I2C (А НЕ ПРОСТО ФЛАГ)
+        private List<string> _selectedI2CDevices = new List<string> { "FT260 [7&5fcd268&0&0000]" };
 
         private bool _isRecording = false;
         private ChannelNode _selectedChannelForPlot = null;
@@ -69,9 +71,10 @@ namespace TERMINAL.DeviceHub
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
                 var i2cIface = Interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
 
-                if (dev.PortName == "I2C")
+                // ★ Проверяем, что PortName начинается с "I2C" (так как теперь он может быть "I2C_FT260...")
+                if (dev.PortName.StartsWith("I2C"))
                 {
-                    if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address))
+                    if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
                     {
                         dev.ParentInterface = i2cIface;
                         i2cIface.Devices.Add(dev);
@@ -92,6 +95,7 @@ namespace TERMINAL.DeviceHub
             _uiQueueTimer.Start();
             UpdateStatusText();
         }
+
         // ================= ОБРАБОТЧИКИ ИНТЕРФЕЙСА =================
 
         private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -128,26 +132,18 @@ namespace TERMINAL.DeviceHub
         {
             if (sender is FrameworkElement element && element.DataContext is ChannelNode channel)
             {
-                // Сбрасываем выделение у всех
                 foreach (var iface in Interfaces)
                     foreach (var dev in iface.Devices)
                         foreach (var ch in dev.Channels)
                             ch.IsVisibleOnPlot = false;
 
-                // Выделяем текущий
                 channel.IsVisibleOnPlot = true;
                 _selectedChannelForPlot = channel;
 
-                // ★ БЕРЕМ ДАННЫЕ ИЗ МОДЕЛИ ★
                 string channelName = channel.Name;
-
-                // Берем DisplayName (которое отображается в дереве) и убираем скобки для ID
-                // Например: "[COM9|0xC002]" -> "COM9|0xC002"
                 string devInfo = channel.ParentDevice?.DisplayName?.Replace("[", "").Replace("]", "") ?? "?";
-
                 string address = channel.ParentDevice?.Address ?? "?";
 
-                // Ищем интерфейс, если ParentInterface пуст
                 string ifaceName = channel.ParentInterface?.Name;
                 if (string.IsNullOrEmpty(ifaceName))
                 {
@@ -155,14 +151,11 @@ namespace TERMINAL.DeviceHub
                     ifaceName = parentIface?.Name ?? "?";
                 }
 
-                // Для I2C заменяем "I2C|" на "FT260|" (чтобы было FT260|0xC002)
                 if (devInfo.StartsWith("I2C|"))
                     devInfo = devInfo.Replace("I2C|", "FT260|");
 
-                // Формируем строку: "Давление[адрес: 006|COM9|0xC002|RS-485 (Ц1)]"
                 _plotModelRealTime.Title = $"{channelName}[адрес: {address}|{devInfo}|{ifaceName}]";
 
-                // Устанавливаем ось Y
                 string yAxisTitle = "Значение";
                 if (channelName.Contains("Частота давления")) yAxisTitle = "Fp, Гц";
                 else if (channelName.Contains("Частота температуры")) yAxisTitle = "Ft, Гц";
@@ -182,6 +175,7 @@ namespace TERMINAL.DeviceHub
                 UpdatePlotVisibility();
             }
         }
+
         private void MiniPlot_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 2 && sender is FrameworkElement element && element.DataContext is ChannelNode channel)
@@ -257,7 +251,8 @@ namespace TERMINAL.DeviceHub
                 int intervalMs = (int)(IntervalSlider.Value * 1000);
                 if (intervalMs < 50) intervalMs = 50;
 
-                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, intervalMs);
+                // ★ Передаем список выбранных I2C-переходников вместо bool
+                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _selectedI2CDevices, intervalMs);
                 _isRecording = true;
                 RecordIcon.Text = "\uE71A";
                 RecordIcon.Foreground = new SolidColorBrush(Colors.Red);
@@ -290,8 +285,14 @@ namespace TERMINAL.DeviceHub
             var settingsWindow = new HubSettingsWindow { Owner = Window.GetWindow(this) };
             if (settingsWindow.ShowDialog() == true)
             {
-                _isRs485Enabled = settingsWindow.IsRs485Enabled; _rs485Ports = settingsWindow.SelectedPortsWithBaud; _isI2CEnabled = settingsWindow.IsI2CEnabled;
-                UpdateStatusText(); LogListView.Items.Add($"Настройки: Порты={string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))}");
+                _isRs485Enabled = settingsWindow.IsRs485Enabled;
+                _rs485Ports = settingsWindow.SelectedPortsWithBaud;
+
+                // ★ Получаем список выбранных I2C-переходников
+                _selectedI2CDevices = settingsWindow.SelectedI2CDevices;
+
+                UpdateStatusText();
+                LogListView.Items.Add($"Настройки: Порты={string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))} | I2C={string.Join(", ", _selectedI2CDevices)}");
             }
         }
 
@@ -325,21 +326,21 @@ namespace TERMINAL.DeviceHub
             ScanButton.ToolTip = "Отмена";
             LogListView.Items.Add("Запуск параллельного сканирования...");
 
-            // ★ Очищаем старые прогресс-бары
             ScanProgresses.Clear();
 
             try
             {
                 Interfaces.Clear();
                 if (_isRs485Enabled) Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
-                if (_isI2CEnabled) Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
+                if (_selectedI2CDevices.Count > 0) Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
 
                 _plotModelRealTime.Series.Clear();
                 _seriesMapRealTime.Clear();
                 _plotModelRealTime.InvalidatePlot(true);
                 HistoryItemsControl.ItemsSource = null;
 
-                var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _isI2CEnabled, _scanCts.Token);
+                // ★ Передаем список I2C-переходников
+                var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _selectedI2CDevices, _scanCts.Token);
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
 
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
@@ -347,9 +348,9 @@ namespace TERMINAL.DeviceHub
 
                 foreach (var dev in foundDevices)
                 {
-                    if (dev.PortName == "I2C")
+                    if (dev.PortName.StartsWith("I2C"))
                     {
-                        if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address))
+                        if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
                         {
                             dev.ParentInterface = i2cIface;
                             i2cIface.Devices.Add(dev);
@@ -388,6 +389,7 @@ namespace TERMINAL.DeviceHub
                 ScanButton.ToolTip = "Поиск";
             }
         }
+
         private void CopyLogMenuItem_Click(object sender, RoutedEventArgs e) => CopySelectedLogs();
         private void CopyLogCommand_Executed(object sender, ExecutedRoutedEventArgs e) => CopySelectedLogs();
 
@@ -404,7 +406,8 @@ namespace TERMINAL.DeviceHub
         private void UpdateStatusText()
         {
             var rs485Str = _isRs485Enabled ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}")) : "Выкл";
-            StatusText.Text = $"RS-485 (Ц1): {rs485Str} | I2C (Ц4): {(_isI2CEnabled ? "Вкл" : "Выкл")}";
+            var i2cStr = _selectedI2CDevices.Count > 0 ? $"{_selectedI2CDevices.Count} шт." : "Выкл";
+            StatusText.Text = $"RS-485 (Ц1): {rs485Str} | I2C (Ц4): {i2cStr}";
         }
 
         private void InitializePlot()
@@ -419,11 +422,9 @@ namespace TERMINAL.DeviceHub
                 TitleFontSize = 16,
                 TitleFontWeight = OxyPlot.FontWeights.Bold,
                 IsLegendVisible = false,
-                // ★ УБИРАЕМ ЛИШНИЙ PADDING (оставляем только небольшой сверху для заголовка) ★
                 Padding = new OxyThickness(0, 5, 0, 0)
             };
 
-            // ★ ОСЬ X ★
             _plotModelRealTime.Axes.Add(new DateTimeAxis
             {
                 Position = AxisPosition.Bottom,
@@ -433,13 +434,12 @@ namespace TERMINAL.DeviceHub
                 MinorGridlineStyle = LineStyle.Dot,
                 MajorGridlineColor = OxyColors.LightGray,
                 MinorGridlineColor = OxyColors.Gainsboro,
-                AxisTitleDistance = 5, // Прижали к цифрам
+                AxisTitleDistance = 5,
                 TitleFont = "Times New Roman",
                 TitleFontSize = 14,
                 TitleFontWeight = OxyPlot.FontWeights.Bold
             });
 
-            // ★ ОСЬ Y ★
             _plotModelRealTime.Axes.Add(new LinearAxis
             {
                 Position = AxisPosition.Left,
@@ -449,7 +449,7 @@ namespace TERMINAL.DeviceHub
                 MajorGridlineColor = OxyColors.LightGray,
                 MinorGridlineColor = OxyColors.Gainsboro,
                 StringFormat = "0.000",
-                AxisTitleDistance = 10, // Оптимальное расстояние (не наезжает на цифры, но и не улетает)
+                AxisTitleDistance = 10,
                 TitleFont = "Times New Roman",
                 TitleFontSize = 14,
                 TitleFontWeight = OxyPlot.FontWeights.Bold
@@ -457,6 +457,7 @@ namespace TERMINAL.DeviceHub
 
             PlotViewRealTime.Model = _plotModelRealTime;
         }
+
         private void CreateSeriesForAllChannels()
         {
             _plotModelRealTime.Series.Clear();
@@ -504,7 +505,6 @@ namespace TERMINAL.DeviceHub
 
             foreach (var ch in visibleChannels)
             {
-                // ★ ГАРАНТИРУЕМ, ЧТО PARENTINTERFACE УСТАНОВЛЕН ★
                 if (ch.ParentInterface == null && ch.ParentDevice != null)
                 {
                     var parentIface = Interfaces.FirstOrDefault(i => i.Devices.Contains(ch.ParentDevice));
@@ -520,6 +520,7 @@ namespace TERMINAL.DeviceHub
             HistoryItemsControl.ItemsSource = visibleChannels;
             ResetHistorySliders();
         }
+
         private PlotModel CreateMiniPlot(ChannelNode channel)
         {
             var model = new PlotModel
@@ -531,13 +532,11 @@ namespace TERMINAL.DeviceHub
                 TitleFontSize = 12,
                 TitleFont = "Times New Roman",
                 TitleFontWeight = OxyPlot.FontWeights.Bold,
-                // ★ УБИРАЕМ ЛИШНИЙ PADDING ★
                 Padding = new OxyThickness(0, 5, 0, 0)
             };
 
             string yAxisFormat = channel.IsInt32 ? "0" : "0.000";
 
-            // ★ ОСЬ Y ★
             model.Axes.Add(new LinearAxis
             {
                 Position = AxisPosition.Left,
@@ -546,13 +545,12 @@ namespace TERMINAL.DeviceHub
                 TextColor = OxyColors.Black,
                 FontSize = 10,
                 StringFormat = yAxisFormat,
-                AxisTitleDistance = 10, // Оптимальное расстояние
+                AxisTitleDistance = 10,
                 TitleFont = "Times New Roman",
                 TitleFontSize = 12,
                 TitleFontWeight = OxyPlot.FontWeights.Bold
             });
 
-            // ★ ОСЬ X ★
             model.Axes.Add(new DateTimeAxis
             {
                 Position = AxisPosition.Bottom,
@@ -584,6 +582,7 @@ namespace TERMINAL.DeviceHub
             model.Series.Add(series);
             return model;
         }
+
         private void ResetHistorySliders()
         {
             if (!_isRecording) return;

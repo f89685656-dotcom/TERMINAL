@@ -47,11 +47,24 @@ namespace TERMINAL.DeviceHub
         public event PropertyChangedEventHandler PropertyChanged;
     }
 
-    // ★ КЛАСС ДЛЯ I2C-УСТРОЙСТВ ★
-    public class I2CDeviceItem
+    // ★ КЛАСС ДЛЯ I2C-УСТРОЙСТВ (ДОБАВИЛИ INotifyPropertyChanged и IsSelected) ★
+    public class I2CDeviceItem : INotifyPropertyChanged
     {
+        private bool _isSelected;
         public string Name { get; set; }
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                _isSelected = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+            }
+        }
+
         public override string ToString() => Name;
+        public event PropertyChangedEventHandler PropertyChanged;
     }
 
     public partial class HubSettingsWindow : Window
@@ -59,10 +72,12 @@ namespace TERMINAL.DeviceHub
         public bool IsRs485Enabled { get; private set; }
         public bool IsI2CEnabled { get; private set; }
         public List<PortSetting> SelectedPortsWithBaud { get; private set; } = new List<PortSetting>();
-        public ObservableCollection<PortItem> Ports { get; set; } = new ObservableCollection<PortItem>();
 
-        // ★ СВОЙСТВО ДЛЯ ВЫБРАННОГО I2C-ПЕРЕХОДНИКА ★
-        public string SelectedI2CDevice { get; private set; } = string.Empty;
+        // ★ ВОТ ЭТО СВОЙСТВО БУДЕТ ХРАНИТЬ СПИСОК ВЫБРАННЫХ ПЕРЕХОДНИКОВ ★
+        public List<string> SelectedI2CDevices { get; private set; } = new List<string>();
+
+        public ObservableCollection<PortItem> Ports { get; set; } = new ObservableCollection<PortItem>();
+        public ObservableCollection<I2CDeviceItem> I2CDevices { get; set; } = new ObservableCollection<I2CDeviceItem>();
 
         public HubSettingsWindow()
         {
@@ -87,6 +102,9 @@ namespace TERMINAL.DeviceHub
 
             Rs485PortsList.ItemsSource = Ports;
 
+            // ★ ПРИВЯЗЫВАЕМ СПИСОК I2C
+            I2CDevicesList.ItemsSource = I2CDevices;
+
             // ★ ЗАГРУЖАЕМ СПИСОК FT260 ★
             LoadI2CDevices();
         }
@@ -96,18 +114,15 @@ namespace TERMINAL.DeviceHub
         {
             try
             {
-                // ★ ЗДЕСЬ ВЫЗЫВАЕМ МЕТОД ИЗ FT260_I2CDotNet ★
+                I2CDevices.Clear();
+
+                // ★ ЗДЕСЬ ДОЛЖЕН БЫТЬ ВЫЗОВ РЕАЛЬНОГО МЕТОДА ИЗ FT260_I2CDotNet ★
                 // Например: var devices = FT260_I2CDotNet.FT260Device.GetDevices();
-                // I2CDeviceComboBox.ItemsSource = devices;
+                // foreach (var d in devices) I2CDevices.Add(new I2CDeviceItem { Name = d, IsSelected = true });
 
-                // ЗАГЛУШКА (пока нет реального метода):
-                var devices = new List<I2CDeviceItem>
-                {
-                    new I2CDeviceItem { Name = "FT260 [7&5fcd268&0&0000]" }
-                };
-
-                I2CDeviceComboBox.ItemsSource = devices;
-                if (devices.Any()) I2CDeviceComboBox.SelectedIndex = 0;
+                // ★ ВРЕМЕННАЯ ЗАГЛУШКА (2 устройства для теста) ★
+                I2CDevices.Add(new I2CDeviceItem { Name = "FT260 [7&5fcd268&0&0000]", IsSelected = true });
+                I2CDevices.Add(new I2CDeviceItem { Name = "FT260 [7&1234567&0&0001]", IsSelected = true });
             }
             catch (Exception ex)
             {
@@ -132,10 +147,20 @@ namespace TERMINAL.DeviceHub
                 return;
             }
 
-            // ★ СОХРАНЯЕМ ВЫБРАННЫЙ I2C-ПЕРЕХОДНИК ★
-            if (IsI2CEnabled && I2CDeviceComboBox.SelectedItem is I2CDeviceItem selectedI2C)
+            // ★ СОХРАНЯЕМ СПИСОК ВЫБРАННЫХ I2C
+            SelectedI2CDevices.Clear();
+            if (IsI2CEnabled)
             {
-                SelectedI2CDevice = selectedI2C.Name;
+                foreach (var dev in I2CDevices.Where(d => d.IsSelected))
+                {
+                    SelectedI2CDevices.Add(dev.Name);
+                }
+
+                if (SelectedI2CDevices.Count == 0)
+                {
+                    MessageBox.Show("Выберите хотя бы один I2C переходник.");
+                    return;
+                }
             }
 
             DialogResult = true;
