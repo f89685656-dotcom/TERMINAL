@@ -339,7 +339,6 @@ namespace TERMINAL.DeviceHub
                 _plotModelRealTime.InvalidatePlot(true);
                 HistoryItemsControl.ItemsSource = null;
 
-                // ★ Передаем список I2C-переходников
                 var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _selectedI2CDevices, _scanCts.Token);
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
 
@@ -348,25 +347,39 @@ namespace TERMINAL.DeviceHub
 
                 foreach (var dev in foundDevices)
                 {
-                    if (dev.PortName.StartsWith("I2C"))
+                    // Определяем, к какому интерфейсу относится устройство
+                    if (dev.PortName.Contains("hid#") || dev.Name.Contains("I2C"))
                     {
-                        if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                        if (i2cIface != null)
                         {
                             dev.ParentInterface = i2cIface;
-                            i2cIface.Devices.Add(dev);
-                            i2cIface.RecalculateSelection();
+
+                            // Проверяем, нет ли дубликата (по адресу и пути)
+                            bool exists = i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName);
+                            if (!exists)
+                            {
+                                i2cIface.Devices.Add(dev);
+                            }
                         }
                     }
                     else
                     {
-                        if (rs485Iface != null && !rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                        if (rs485Iface != null)
                         {
                             dev.ParentInterface = rs485Iface;
-                            rs485Iface.Devices.Add(dev);
-                            rs485Iface.RecalculateSelection();
+
+                            bool exists = rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName);
+                            if (!exists)
+                            {
+                                rs485Iface.Devices.Add(dev);
+                            }
                         }
                     }
                 }
+
+                // Пересчитываем галочки (чтобы родительские узлы обновились)
+                rs485Iface?.RecalculateSelection();
+                i2cIface?.RecalculateSelection();
 
                 CreateSeriesForAllChannels();
                 UpdateHistoryList();
@@ -389,7 +402,6 @@ namespace TERMINAL.DeviceHub
                 ScanButton.ToolTip = "Поиск";
             }
         }
-
         private void CopyLogMenuItem_Click(object sender, RoutedEventArgs e) => CopySelectedLogs();
         private void CopyLogCommand_Executed(object sender, ExecutedRoutedEventArgs e) => CopySelectedLogs();
 

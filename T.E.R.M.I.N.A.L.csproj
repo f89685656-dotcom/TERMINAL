@@ -67,6 +67,14 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\GUI_Merge\KalibratorGUI\KalibratorGUI_WPF\KalibratorGUI_WPF.csproj" />
 	</ItemGroup>
+	<ItemGroup>
+	  <None Update="Libs\FT260_I2CDotNet.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Libs\libFT260.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
 
 	<ItemGroup>
 		<Page Update="Windows\DeviceSettingsWindow.xaml">
