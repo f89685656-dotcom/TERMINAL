@@ -475,9 +475,11 @@ namespace TERMINAL
 
         private async Task UpdatePressureTableInTelegramAsync()
         {
-            // ★ Разрешаем вызов и вне пакета — для предпросмотра таблицы по галочкам
             if (_selectedTargetPressure == null) return;
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
+
+            // ★ ОТПРАВЛЯЕМ В УВЕДОМЛЕНИЯ ТОЛЬКО ЕСЛИ ПАКЕТ ЗАПУЩЕН
+            if (!_batchRunning) return;
 
             var sb = new System.Text.StringBuilder();
 
@@ -516,10 +518,8 @@ namespace TERMINAL
             }
             sb.AppendLine("```");
 
-            // ★ await — гарантируем, что таблица обновится ДО перехода к следующему шагу
             await _batchProgress.UpdateTableAsync(sb.ToString());
         }
-
         /// <summary>
         /// Таблица для режима «Бароциклирование».
         /// Показывает все циклы и их прогресс (макс → атмо).
@@ -529,6 +529,9 @@ namespace TERMINAL
         {
             if (_selectedTargetPressure == null) return;
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
+
+            // ★ ОТПРАВЛЯЕМ В УВЕДОМЛЕНИЯ ТОЛЬКО ЕСЛИ ПАКЕТ ЗАПУЩЕН
+            if (!_batchRunning) return;
 
             int totalCycles = 1;
             TemperatureJob? pumpJob = null;
@@ -598,14 +601,12 @@ namespace TERMINAL
             }
             sb.AppendLine("```");
 
-            // ★ ПРИНУДИТЕЛЬНЫЙ ВЫЗОВ БЕЗ КЭША
             await _batchProgress.UpdateTableAsync(sb.ToString());
-        }
-        /// <summary>
-        /// Анализирует первое включённое задание в _batchJobs и показывает его таблицу
-        /// (Градуировка или Бароциклирование). Вызывается при изменении галочек/режима
-        /// ДО запуска пакета — чтобы оператор сразу видел, какой режим пойдёт первым.
-        /// </summary>
+        }        /// <summary>
+                 /// Анализирует первое включённое задание в _batchJobs и показывает его таблицу
+                 /// (Градуировка или Бароциклирование). Вызывается при изменении галочек/режима
+                 /// ДО запуска пакета — чтобы оператор сразу видел, какой режим пойдёт первым.
+                 /// </summary>
         private async Task RefreshPreviewTableForFirstEnabledJobAsync()
         {
             try
@@ -620,7 +621,7 @@ namespace TERMINAL
                 string mode = firstEnabled.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
                 AppendLog($"Предпросмотр: выбрано первое задание — {mode}", Brushes.Blue);
 
-                // ★ ПЕРЕКЛЮЧАЕМ ПАНЕЛИ В ИНТЕРФЕЙСЕ
+                // ★ ПЕРЕКЛЮЧАЕМ ПАНЕЛИ В ИНТЕРФЕЙСЕ (всегда)
                 if (firstEnabled.IsCalibrationMode)
                 {
                     CalibrationPanel.Visibility = Visibility.Visible;
@@ -635,17 +636,20 @@ namespace TERMINAL
                     if (CyclesText != null) CyclesText.Text = $"Цикл: 0/{firstEnabled.CyclesText}";
                 }
 
-                // Обновляем сообщения (если нужно)
-                _batchProgress.ResetTable();
-                await Task.Delay(100);
+                // ★ ОТПРАВЛЯЕМ В УВЕДОМЛЕНИЯ ТОЛЬКО ЕСЛИ ПАКЕТ ЗАПУЩЕН
+                if (_batchRunning)
+                {
+                    _batchProgress.ResetTable();
+                    await Task.Delay(100);
 
-                if (firstEnabled.IsCalibrationMode)
-                {
-                    await UpdatePressureTableInTelegramAsync();
-                }
-                else
-                {
-                    await UpdatePumpTableInTelegramAsync();
+                    if (firstEnabled.IsCalibrationMode)
+                    {
+                        await UpdatePressureTableInTelegramAsync();
+                    }
+                    else
+                    {
+                        await UpdatePumpTableInTelegramAsync();
+                    }
                 }
             }
             catch (Exception ex)
