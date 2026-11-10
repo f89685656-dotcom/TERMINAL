@@ -474,6 +474,9 @@ namespace TERMINAL
                 NotificationManager.SetService(new NullNotificationService());
             }
 
+            // ★ Обновляем визуальный статус уведомлений при запуске
+            UpdateNotificationStatus(_notificationsEnabled);
+
             ApplyWindowPositionOrFallback();
 
             _uiLoaded = true;
