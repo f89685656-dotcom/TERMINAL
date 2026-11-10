@@ -140,7 +140,7 @@ namespace TERMINAL
                 else
                 {
                     job.StatusText = "пропущено";
-                    job.StatusColor = Brushes.LightGray; // или Brushes.DimGray, если хотите сделать неактивные более тусклыми
+                    job.StatusColor = Brushes.LightGray;
                 }
             }
 
@@ -202,17 +202,7 @@ namespace TERMINAL
             StartBatchStatusTimer();
             _batchProgress.ResetTable();
 
-            // ★ Отправляем таблицу первого активного задания СРАЗУ
-            var firstJob = _batchJobs.FirstOrDefault(j => j.IsEnabled);
-            if (firstJob != null)
-            {
-                if (firstJob.IsCalibrationMode)
-                    await UpdatePressureTableInTelegramAsync();
-                else
-                    await UpdatePumpTableInTelegramAsync();
-
-                await Task.Delay(300);
-            }
+            // ★ УБРАНА ОТПРАВКА ТАБЛИЦЫ ЗДЕСЬ (во время стабилизации она не нужна)
 
             SetExternalButtonsEnabled(false);
             StartButton.IsEnabled = false;
@@ -241,8 +231,8 @@ namespace TERMINAL
 
                 string startMsg = $"🚀 Пакетный режим запущен.\nЗаданий: {enabledCount} (диапазон: {_selectedTargetPressure}, температуры: {tempsString}).\n{clientInfo}";
 
+                // ★ ОТПРАВЛЯЕМ ОДИН РАЗ ВО ВСЕ КАНАЛЫ (Telegram, VK, Email, SMS)
                 await _batchProgress.SendStatusAsync(startMsg);
-                await NotificationManager.NotifyOthersAsync(startMsg);
 
                 int completedCount = 0;
 
@@ -253,7 +243,6 @@ namespace TERMINAL
                         SetStatusWarning("Пакетный режим остановлен оператором");
                         string stopMsg = $"⏹ Пакетный режим остановлен оператором. Выполнено: {completedCount}/{enabledCount}";
                         await _batchProgress.SendStatusAsync(stopMsg);
-                        await NotificationManager.NotifyOthersAsync(stopMsg);
                         return;
                     }
 
@@ -280,7 +269,6 @@ namespace TERMINAL
                         SetStatusError($"[Пакет {completedCount}] не удалось записать уставку");
                         string errMsg = $"❌ Ошибка записи уставки на задании {completedCount}. Пакет прерван.";
                         await _batchProgress.SendStatusAsync(errMsg);
-                        await NotificationManager.NotifyOthersAsync(errMsg);
                         return;
                     }
 
@@ -298,11 +286,10 @@ namespace TERMINAL
 
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
 
-                        _lastStabNotify = DateTime.MinValue; // Сброс для первого апдейта
+                        _lastStabNotify = DateTime.MinValue;
 
                         bool stable = await WaitForBatchStabilizationAsync(job.StabilizationMinutes, completedCount, enabledCount);
 
-                        // ★ ИСПРАВЛЕНО: добавлена проверка !stable
                         if (!stable)
                         {
                             job.StatusText = "стабилизация прервана";
@@ -310,7 +297,6 @@ namespace TERMINAL
                             SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
                             string errMsg = $"❌ Стабилизация прервана на задании {completedCount}.";
                             await _batchProgress.SendStatusAsync(errMsg);
-                            await NotificationManager.NotifyOthersAsync(errMsg);
                             return;
                         }
                     }
@@ -329,7 +315,6 @@ namespace TERMINAL
                             SetStatusWarning($"[Пакет {completedCount}] проверка допуска прервана");
                             string errMsg = $"❌ Проверка допуска прервана на задании {completedCount}.";
                             await _batchProgress.SendStatusAsync(errMsg);
-                            await NotificationManager.NotifyOthersAsync(errMsg);
                             return;
                         }
                     }
@@ -353,8 +338,7 @@ namespace TERMINAL
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-                    // ★ 1. Отправляем таблицу ПЕРЕД запуском градуировки (только для Градуировки)
-                    // ★ Отправляем таблицу под режим текущего задания
+                    // ★ ОТПРАВЛЯЕМ ТАБЛИЦУ ПЕРЕД ЗАПУСКОМ РЕЖИМА (после стабилизации)
                     if (job.IsCalibrationMode)
                     {
                         await UpdatePressureTableInTelegramAsync();
@@ -385,7 +369,6 @@ namespace TERMINAL
                         SetStatusWarning("Пакетный режим остановлен оператором");
                         string stopMsg = $"⏹ Пакетный режим остановлен на задании {completedCount}.";
                         await _batchProgress.SendStatusAsync(stopMsg);
-                        await NotificationManager.NotifyOthersAsync(stopMsg);
                         return;
                     }
 
@@ -396,7 +379,6 @@ namespace TERMINAL
                         SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано");
                         string errMsg = $"❌ Задание {completedCount} прервано. Пакет остановлен.";
                         await _batchProgress.SendStatusAsync(errMsg);
-                        await NotificationManager.NotifyOthersAsync(errMsg);
                         return;
                     }
 
@@ -412,7 +394,6 @@ namespace TERMINAL
 
                 string endMsg = $"🏁 Пакетный режим завершён успешно. Обработано: {completedCount}/{enabledCount}";
                 await _batchProgress.SendStatusAsync(endMsg);
-                await NotificationManager.NotifyOthersAsync(endMsg);
                 await _batchProgress.ResetAsync();
 
                 if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
@@ -439,7 +420,6 @@ namespace TERMINAL
                 SetStatusError($"Пакет: необработанная ошибка — {ex.Message}");
                 string errMsg = $"❌ Пакетный режим завершён с ошибкой: {ex.Message}";
                 await _batchProgress.SendStatusAsync(errMsg);
-                await NotificationManager.NotifyOthersAsync(errMsg);
                 await _batchProgress.ResetAsync();
             }
             finally
@@ -472,7 +452,6 @@ namespace TERMINAL
                 _batchProgress.ResetTable();
             }
         }
-
         private async Task UpdatePressureTableInTelegramAsync()
         {
             // ★ РАЗРЕШАЕМ ВЫЗОВ ТОЛЬКО ВНУТРИ ПАКЕТА (для предпросмотра таблицу не шлём)
@@ -765,13 +744,33 @@ namespace TERMINAL
                         $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C, " +
                         $"осталось {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
 
-                    // ★ Обновляем Telegram раз в 5 секунд
-                    if ((DateTime.Now - _lastStabNotify).TotalSeconds >= 1)
+                    // ★ Обновляем Telegram и VK ровно раз в 5 секунд по системному времени
+                    var now = DateTime.Now;
+                    if (_lastStabNotify == DateTime.MinValue || (now - _lastStabNotify).TotalSeconds >= 5)
                     {
-                        _lastStabNotify = DateTime.Now;
+                        // Вычисляем, сколько целых 5-секундных интервалов прошло
+                        long elapsedMs = (long)(now - _lastStabNotify).TotalMilliseconds;
+                        int steps = (int)(elapsedMs / 5000);
+
+                        if (steps < 1) steps = 1; // Первый раз всегда отправляем
+
+                        // Сдвигаем метку ровно на целое количество интервалов по 5 секунд
+                        _lastStabNotify = _lastStabNotify.AddMilliseconds(steps * 5000);
+
+                        // Если сильно отстали (например, из-за долгой отправки), принудительно выравниваем
+                        if ((now - _lastStabNotify).TotalSeconds >= 2)
+                        {
+                            _lastStabNotify = now;
+                        }
+
                         string timeStr = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
                         _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
+
+                        // Обновляем Telegram (редактирует сообщение каждые 5 секунд)
                         _ = _batchProgress.UpdateProgressAsync(_lastStabStatus);
+
+                        // Обновляем VK (внутри тоже стоит троттлинг 5 секунд)
+                        _ = NotificationManager.UpdateStabilizationAsync(_lastStabStatus);
                     }
 
                     // ★ Проверка завершения — ПОСЛЕ обновления таймера
@@ -814,7 +813,6 @@ namespace TERMINAL
                 if (sleep > 0) await SafeDelayAsync(sleep);
             }
         }
-
         private async Task<bool> WaitForBatchTemperatureInToleranceAsync(int jobIndex, int totalJobs)
         {
             BatchProgressText.Text =

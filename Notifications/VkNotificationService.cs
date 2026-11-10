@@ -17,7 +17,7 @@ namespace TERMINAL.Notifications
         /// Минимальный интервал между обновлениями одного сообщения стабилизации.
         /// Работает через UpdateStabilizationMessageAsync.
         /// </summary>
-        public static TimeSpan StabilizationInterval { get; set; } = TimeSpan.FromMinutes(10);
+        public static TimeSpan StabilizationInterval { get; set; } = TimeSpan.FromMinutes(5);
 
         private readonly string _token;
         private readonly long _peerId;
