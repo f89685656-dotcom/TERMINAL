@@ -158,6 +158,7 @@ namespace TERMINAL
         private const int ConnectionLostThreshold = 5;
 
         private DateTime _lastStabNotify = DateTime.MinValue;
+        private DateTime _lastVkStabNotify = DateTime.MinValue;
 
         private int _agkFailCount = 0;
         private int _furnaceTempFailCount = 0;

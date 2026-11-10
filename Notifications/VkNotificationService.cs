@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Media;
 
 namespace TERMINAL.Notifications
 {
@@ -15,9 +16,8 @@ namespace TERMINAL.Notifications
 
         /// <summary>
         /// Минимальный интервал между обновлениями одного сообщения стабилизации.
-        /// Работает через UpdateStabilizationMessageAsync.
         /// </summary>
-        public static TimeSpan StabilizationInterval { get; set; } = TimeSpan.FromMinutes(5);
+        public static TimeSpan StabilizationInterval { get; set; } = TimeSpan.FromSeconds(5);
 
         private readonly string _token;
         private readonly long _peerId;
@@ -53,10 +53,6 @@ namespace TERMINAL.Notifications
         public async Task<int?> SendMessageAsync(string text)
             => await SendRawReturningIdAsync(text).ConfigureAwait(false);
 
-        /// <summary>
-        /// Редактирование в VK. В личке messages.edit не работает,
-        /// поэтому fallback — delete + send. Возвращает true, если удалось.
-        /// </summary>
         public async Task<bool> EditMessageAsync(int messageId, string text)
         {
             bool edited = await TryEditMessageAsync(messageId, text).ConfigureAwait(false);
@@ -69,16 +65,12 @@ namespace TERMINAL.Notifications
 
         // -------- Спец-метод для таймера стабилизации --------
 
-        /// <summary>
-        /// Обновляет ОДНО сообщение о стабилизации не чаще, чем раз в StabilizationInterval.
-        /// </summary>
         public async Task<bool> UpdateStabilizationMessageAsync(string text)
         {
             int? messageId;
             lock (_stabLock)
             {
-                if (DateTime.UtcNow - _lastStabilizationUpdateUtc < StabilizationInterval)
-                    return false;
+                // Внутреннюю проверку убрали, т.к. интервал контролируется в MainWindow
                 _lastStabilizationUpdateUtc = DateTime.UtcNow;
                 messageId = _stabilizationMessageId;
             }
@@ -87,6 +79,7 @@ namespace TERMINAL.Notifications
             {
                 bool edited = await TryEditMessageAsync(messageId.Value, text).ConfigureAwait(false);
                 if (edited) return true;
+
                 await TryDeleteMessageAsync(messageId.Value).ConfigureAwait(false);
             }
 
@@ -114,9 +107,17 @@ namespace TERMINAL.Notifications
                 using var content = new FormUrlEncodedContent(data);
                 using var response = await _http.PostAsync(url, content, cts.Token).ConfigureAwait(false);
                 string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                return response.IsSuccessStatusCode && !body.Contains("\"error\"");
+
+                bool ok = response.IsSuccessStatusCode && !body.Contains("\"error\"");
+                if (!ok)
+                    LogVk($"[VK] TryEditMessage: ошибка. HTTP {(int)response.StatusCode}. Ответ: {body}");
+                return ok;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                LogVk($"[VK] TryEditMessage: исключение — {ex.Message}");
+                return false;
+            }
         }
 
         private async Task TryDeleteMessageAsync(int messageId)
@@ -134,8 +135,15 @@ namespace TERMINAL.Notifications
             {
                 using var content = new FormUrlEncodedContent(data);
                 using var response = await _http.PostAsync(url, content, cts.Token).ConfigureAwait(false);
+                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode || body.Contains("\"error\""))
+                    LogVk($"[VK] TryDeleteMessage: ошибка. HTTP {(int)response.StatusCode}. Ответ: {body}");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogVk($"[VK] TryDeleteMessage: исключение — {ex.Message}");
+            }
         }
 
         private async Task<int?> SendRawReturningIdAsync(string text)
@@ -155,7 +163,12 @@ namespace TERMINAL.Notifications
                 using var content = new FormUrlEncodedContent(data);
                 using var response = await _http.PostAsync(url, content, cts.Token).ConfigureAwait(false);
                 string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode || body.Contains("\"error\"")) return null;
+
+                if (!response.IsSuccessStatusCode || body.Contains("\"error\""))
+                {
+                    LogVk($"[VK] SendMessage: ошибка. HTTP {(int)response.StatusCode}. Ответ: {body}");
+                    return null;
+                }
 
                 using var doc = JsonDocument.Parse(body);
                 if (!doc.RootElement.TryGetProperty("response", out var resp)) return null;
@@ -168,7 +181,21 @@ namespace TERMINAL.Notifications
                     return id2;
                 return null;
             }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                LogVk($"[VK] SendMessage: исключение — {ex.Message}");
+                return null;
+            }
+        }
+
+        // ★ Вспомогательный метод для логирования в главное окно
+        private static void LogVk(string message)
+        {
+            try
+            {
+                MainWindow.Current?.LogExternal(message, Brushes.Gray);
+            }
+            catch { }
         }
     }
 }

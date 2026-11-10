@@ -744,42 +744,60 @@ namespace TERMINAL
                         $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C, " +
                         $"осталось {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
 
-                    // ★ Обновляем Telegram и VK ровно раз в 5 секунд по системному времени
+                    // ★ ОБНОВЛЕНИЕ УВЕДОМЛЕНИЙ
                     var now = DateTime.Now;
-                    if (_lastStabNotify == DateTime.MinValue || (now - _lastStabNotify).TotalSeconds >= 5)
+
+                    // Вычисляем ровное оставшееся время (округленное до целых секунд)
+                    // Это не зависит от того, включен Telegram или VK.
+                    var exactElapsed = TimeSpan.FromSeconds(Math.Round((now - inRangeSince).TotalSeconds));
+                    var exactRemaining = TimeSpan.FromMinutes(requiredMinutes) - exactElapsed;
+                    if (exactRemaining < TimeSpan.Zero) exactRemaining = TimeSpan.Zero;
+
+                    string timeStr = $"{(int)exactRemaining.TotalHours:D2}:{exactRemaining.Minutes:D2}:{exactRemaining.Seconds:D2}";
+                    _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
+
+                    // 1. TELEGRAM (раз в 1 секунду)
+                    if (_lastStabNotify == DateTime.MinValue || (now - _lastStabNotify).TotalSeconds >= 1.0)
                     {
-                        // Вычисляем, сколько целых 5-секундных интервалов прошло
                         long elapsedMs = (long)(now - _lastStabNotify).TotalMilliseconds;
-                        int steps = (int)(elapsedMs / 5000);
+                        int steps = (int)(elapsedMs / 1000);
+                        if (steps < 1) steps = 1;
+                        _lastStabNotify = _lastStabNotify.AddMilliseconds(steps * 1000);
+                        if ((now - _lastStabNotify).TotalSeconds >= 2.0) _lastStabNotify = now;
 
-                        if (steps < 1) steps = 1; // Первый раз всегда отправляем
-
-                        // Сдвигаем метку ровно на целое количество интервалов по 5 секунд
-                        _lastStabNotify = _lastStabNotify.AddMilliseconds(steps * 5000);
-
-                        // Если сильно отстали (например, из-за долгой отправки), принудительно выравниваем
-                        if ((now - _lastStabNotify).TotalSeconds >= 2)
-                        {
-                            _lastStabNotify = now;
-                        }
-
-                        string timeStr = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
-                        _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
-
-                        // Обновляем Telegram (редактирует сообщение каждые 5 секунд)
                         _ = _batchProgress.UpdateProgressAsync(_lastStabStatus);
+                    }
 
-                        // Обновляем VK (внутри тоже стоит троттлинг 5 секунд)
+                    // 2. VK (раз в 5 секунд)
+                    if (_lastVkStabNotify == DateTime.MinValue || (now - _lastVkStabNotify).TotalSeconds >= 5.0)
+                    {
+                        long elapsedMsVk = (long)(now - _lastVkStabNotify).TotalMilliseconds;
+                        int stepsVk = (int)(elapsedMsVk / 5000);
+                        if (stepsVk < 1) stepsVk = 1;
+                        _lastVkStabNotify = _lastVkStabNotify.AddMilliseconds(stepsVk * 5000);
+                        if ((now - _lastVkStabNotify).TotalSeconds >= 3.0) _lastVkStabNotify = now;
+
                         _ = NotificationManager.UpdateStabilizationAsync(_lastStabStatus);
                     }
 
-                    // ★ Проверка завершения — ПОСЛЕ обновления таймера
-                    if (elapsed.TotalMinutes >= requiredMinutes)
+                    // 2. VK (раз в 5 секунд, независимо от Telegram)
+                    if (_lastVkStabNotify == DateTime.MinValue || (now - _lastVkStabNotify).TotalSeconds >= 5.0)
                     {
-                        _ = _batchProgress.UpdateProgressAsync(
-                            $"✅ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — завершена");
+                        long elapsedMsVk = (long)(now - _lastVkStabNotify).TotalMilliseconds;
+                        int stepsVk = (int)(elapsedMsVk / 5000);
+                        if (stepsVk < 1) stepsVk = 1;
+                        _lastVkStabNotify = _lastVkStabNotify.AddMilliseconds(stepsVk * 5000);
+                        if ((now - _lastVkStabNotify).TotalSeconds >= 3.0) _lastVkStabNotify = now;
 
-                        return true;
+                        // ★ ФОРМИРУЕМ ТЕКСТ ПО РОВНОМУ ВРЕМЕНИ ДЛЯ VK
+                        var exactElapsedVk = TimeSpan.FromSeconds(Math.Round((_lastVkStabNotify - inRangeSince).TotalSeconds));
+                        var exactRemainingVk = TimeSpan.FromMinutes(requiredMinutes) - exactElapsedVk;
+                        if (exactRemainingVk < TimeSpan.Zero) exactRemainingVk = TimeSpan.Zero;
+
+                        string timeStrVk = $"{(int)exactRemainingVk.TotalHours:D2}:{exactRemainingVk.Minutes:D2}:{exactRemainingVk.Seconds:D2}";
+                        string statusVk = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStrVk}";
+
+                        _ = NotificationManager.UpdateStabilizationAsync(statusVk);
                     }
                 }
                 else
