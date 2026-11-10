@@ -5040,7 +5040,7 @@
             {
             "AssemblyRegister" = "3:1"
             "AssemblyIsInGAC" = "11:FALSE"
-            "AssemblyAsmDisplayName" = "8:TERMINAL, Version=1.7.102.0, Culture=neutral, processorArchitecture=AMD64"
+            "AssemblyAsmDisplayName" = "8:TERMINAL, Version=1.7.104.0, Culture=neutral, processorArchitecture=AMD64"
                 "ScatterAssemblies"
                 {
                     "_B38466AAE90948D4B5B29F87ACBA96E0"
@@ -6004,15 +6004,15 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:TERMINAL"
-        "ProductCode" = "8:{B4C4AF37-5726-4C87-AB7D-6E41ED7DBC69}"
-        "PackageCode" = "8:{48E423F3-8107-4498-A401-03B1A5F45B70}"
+        "ProductCode" = "8:{A9FE49CF-C9A9-4A7F-A225-5D7E44032158}"
+        "PackageCode" = "8:{4D3D1E1E-08F7-4A8E-AC9F-6FDEEEE0DBC1}"
         "UpgradeCode" = "8:{DBB8FC8C-99EA-4026-83FE-3F919E865466}"
         "AspNetVersion" = "8:2.0.50727.0"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:FALSE"
-        "ProductVersion" = "8:1.7.103"
+        "ProductVersion" = "8:1.7.106"
         "Manufacturer" = "8:IvanoFF"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"

@@ -747,23 +747,22 @@ namespace TERMINAL
                     // ★ ОБНОВЛЕНИЕ УВЕДОМЛЕНИЙ
                     var now = DateTime.Now;
 
-                    // Вычисляем ровное оставшееся время (округленное до целых секунд)
-                    // Это не зависит от того, включен Telegram или VK.
-                    var exactElapsed = TimeSpan.FromSeconds(Math.Round((now - inRangeSince).TotalSeconds));
-                    var exactRemaining = TimeSpan.FromMinutes(requiredMinutes) - exactElapsed;
-                    if (exactRemaining < TimeSpan.Zero) exactRemaining = TimeSpan.Zero;
-
-                    string timeStr = $"{(int)exactRemaining.TotalHours:D2}:{exactRemaining.Minutes:D2}:{exactRemaining.Seconds:D2}";
-                    _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
-
                     // 1. TELEGRAM (раз в 1 секунду)
                     if (_lastStabNotify == DateTime.MinValue || (now - _lastStabNotify).TotalSeconds >= 1.0)
                     {
                         long elapsedMs = (long)(now - _lastStabNotify).TotalMilliseconds;
                         int steps = (int)(elapsedMs / 1000);
                         if (steps < 1) steps = 1;
+
                         _lastStabNotify = _lastStabNotify.AddMilliseconds(steps * 1000);
                         if ((now - _lastStabNotify).TotalSeconds >= 2.0) _lastStabNotify = now;
+
+                        var exactElapsed = TimeSpan.FromSeconds(Math.Round((_lastStabNotify - inRangeSince).TotalSeconds));
+                        var exactRemaining = TimeSpan.FromMinutes(requiredMinutes) - exactElapsed;
+                        if (exactRemaining < TimeSpan.Zero) exactRemaining = TimeSpan.Zero;
+
+                        string timeStr = $"{(int)exactRemaining.TotalHours:D2}:{exactRemaining.Minutes:D2}:{exactRemaining.Seconds:D2}";
+                        _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
 
                         _ = _batchProgress.UpdateProgressAsync(_lastStabStatus);
                     }
@@ -774,22 +773,13 @@ namespace TERMINAL
                         long elapsedMsVk = (long)(now - _lastVkStabNotify).TotalMilliseconds;
                         int stepsVk = (int)(elapsedMsVk / 5000);
                         if (stepsVk < 1) stepsVk = 1;
+
+                        // Сдвигаем таймер VK ровно на 5 секунд
                         _lastVkStabNotify = _lastVkStabNotify.AddMilliseconds(stepsVk * 5000);
                         if ((now - _lastVkStabNotify).TotalSeconds >= 3.0) _lastVkStabNotify = now;
 
-                        _ = NotificationManager.UpdateStabilizationAsync(_lastStabStatus);
-                    }
-
-                    // 2. VK (раз в 5 секунд, независимо от Telegram)
-                    if (_lastVkStabNotify == DateTime.MinValue || (now - _lastVkStabNotify).TotalSeconds >= 5.0)
-                    {
-                        long elapsedMsVk = (long)(now - _lastVkStabNotify).TotalMilliseconds;
-                        int stepsVk = (int)(elapsedMsVk / 5000);
-                        if (stepsVk < 1) stepsVk = 1;
-                        _lastVkStabNotify = _lastVkStabNotify.AddMilliseconds(stepsVk * 5000);
-                        if ((now - _lastVkStabNotify).TotalSeconds >= 3.0) _lastVkStabNotify = now;
-
-                        // ★ ФОРМИРУЕМ ТЕКСТ ПО РОВНОМУ ВРЕМЕНИ ДЛЯ VK
+                        // ★ ВАЖНО: Используем ТОЛЬКО что сдвинутое время (_lastVkStabNotify)
+                        // для вычисления таймера. Это гарантирует, что цифры всегда ровные.
                         var exactElapsedVk = TimeSpan.FromSeconds(Math.Round((_lastVkStabNotify - inRangeSince).TotalSeconds));
                         var exactRemainingVk = TimeSpan.FromMinutes(requiredMinutes) - exactElapsedVk;
                         if (exactRemainingVk < TimeSpan.Zero) exactRemainingVk = TimeSpan.Zero;
