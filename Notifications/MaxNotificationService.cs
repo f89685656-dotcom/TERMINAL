@@ -20,30 +20,29 @@ namespace TERMINAL.Notifications
 
         public async Task SendAsync(string text)
         {
-            // Базовый URL API МАКС (обязательно platform-api2.max.ru) [citation:1]
             string url = "https://platform-api2.max.ru/messages";
-
-            var payload = new
-            {
-                chat_id = _chatId,
-                text = text ?? ""
-            };
+            var payload = new { chat_id = _chatId, text = text ?? "" };
             string json = JsonSerializer.Serialize(payload);
 
+            using var cts = new CancellationTokenSource(5000); // ★ ДОБАВИТЬ
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            // Токен передается в заголовке Authorization [citation:1]
             request.Headers.Add("Authorization", _token);
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            using var response = await _http.SendAsync(request);
-
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                string body = await response.Content.ReadAsStringAsync();
-                throw new HttpRequestException($"MAX API вернул {(int)response.StatusCode}: {body}");
+                using var response = await _http.SendAsync(request, cts.Token).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    throw new HttpRequestException($"MAX API вернул {(int)response.StatusCode}: {body}");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("MAX: таймаут отправки (5 сек)");
             }
         }
-
         public async Task<int?> SendMessageAsync(string text)
         {
             string url = "https://platform-api2.max.ru/messages";

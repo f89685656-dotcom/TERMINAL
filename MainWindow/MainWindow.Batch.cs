@@ -475,11 +475,11 @@ namespace TERMINAL
 
         private async Task UpdatePressureTableInTelegramAsync()
         {
+            // ★ РАЗРЕШАЕМ ВЫЗОВ ТОЛЬКО ВНУТРИ ПАКЕТА (для предпросмотра таблицу не шлём)
+            if (!_batchRunning) return;
+
             if (_selectedTargetPressure == null) return;
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
-
-            // ★ ОТПРАВЛЯЕМ В УВЕДОМЛЕНИЯ ТОЛЬКО ЕСЛИ ПАКЕТ ЗАПУЩЕН
-            if (!_batchRunning) return;
 
             var sb = new System.Text.StringBuilder();
 
@@ -518,31 +518,30 @@ namespace TERMINAL
             }
             sb.AppendLine("```");
 
+            // await — гарантируем, что таблица обновится ДО перехода к следующему шагу
             await _batchProgress.UpdateTableAsync(sb.ToString());
-        }
-        /// <summary>
-        /// Таблица для режима «Бароциклирование».
-        /// Показывает все циклы и их прогресс (макс → атмо).
-        /// Работает и вне пакета — для предпросмотра по галочкам.
-        /// </summary>
+        }        /// <summary>
+                 /// Таблица для режима «Бароциклирование».
+                 /// Показывает все циклы и их прогресс (макс → атмо).
+                 /// Работает и вне пакета — для предпросмотра по галочкам.
+                 /// </summary>
         private async Task UpdatePumpTableInTelegramAsync()
         {
+            // ★ РАЗРЕШАЕМ ВЫЗОВ ТОЛЬКО ВНУТРИ ПАКЕТА
+            if (!_batchRunning) return;
+
             if (_selectedTargetPressure == null) return;
             if (!_stepsByTarget.TryGetValue(_selectedTargetPressure, out var steps)) return;
-
-            // ★ ОТПРАВЛЯЕМ В УВЕДОМЛЕНИЯ ТОЛЬКО ЕСЛИ ПАКЕТ ЗАПУЩЕН
-            if (!_batchRunning) return;
 
             int totalCycles = 1;
             TemperatureJob? pumpJob = null;
 
-            if (_batchRunning)
-            {
-                pumpJob = _batchJobs.FirstOrDefault(j =>
-                    j.IsEnabled && !j.IsCalibrationMode &&
-                    (j.StatusText ?? "").Contains("бароцикл", StringComparison.OrdinalIgnoreCase));
-            }
+            // Внутри пакета ищем активное задание с Бароциклированием
+            pumpJob = _batchJobs.FirstOrDefault(j =>
+                j.IsEnabled && !j.IsCalibrationMode &&
+                (j.StatusText ?? "").Contains("бароцикл", StringComparison.OrdinalIgnoreCase));
 
+            // Fallback: первое включённое с Бароциклированием
             pumpJob ??= _batchJobs.FirstOrDefault(j => j.IsEnabled && !j.IsCalibrationMode);
 
             if (pumpJob != null && int.TryParse(pumpJob.CyclesText, out int c) && c > 0)
@@ -602,11 +601,10 @@ namespace TERMINAL
             sb.AppendLine("```");
 
             await _batchProgress.UpdateTableAsync(sb.ToString());
-        }        /// <summary>
-                 /// Анализирует первое включённое задание в _batchJobs и показывает его таблицу
-                 /// (Градуировка или Бароциклирование). Вызывается при изменении галочек/режима
-                 /// ДО запуска пакета — чтобы оператор сразу видел, какой режим пойдёт первым.
-                 /// </summary>
+        }                 /// Анализирует первое включённое задание в _batchJobs и показывает его таблицу
+                          /// (Градуировка или Бароциклирование). Вызывается при изменении галочек/режима
+                          /// ДО запуска пакета — чтобы оператор сразу видел, какой режим пойдёт первым.
+                          /// </summary>
         private async Task RefreshPreviewTableForFirstEnabledJobAsync()
         {
             try
@@ -621,7 +619,7 @@ namespace TERMINAL
                 string mode = firstEnabled.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
                 AppendLog($"Предпросмотр: выбрано первое задание — {mode}", Brushes.Blue);
 
-                // ★ ПЕРЕКЛЮЧАЕМ ПАНЕЛИ В ИНТЕРФЕЙСЕ (всегда)
+                // ★ ПЕРЕКЛЮЧАЕМ ПАНЕЛИ В ИНТЕРФЕЙСЕ (это делаем всегда, даже вне пакета)
                 if (firstEnabled.IsCalibrationMode)
                 {
                     CalibrationPanel.Visibility = Visibility.Visible;
