@@ -1,0 +1,44 @@
+﻿<Window x:Class="TERMINAL.Windows.ScriptEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Редактор скриптов IronPython" Height="600" Width="800"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackground}">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <Button x:Name="RunScriptButton" Content="▶ Запустить" Width="100" Height="30" Click="RunScriptButton_Click" Background="#FF4CAF50" Foreground="White" FontWeight="Bold"/>
+            <Button x:Name="LoadScriptButton" Content="📂 Загрузить" Width="100" Height="30" Margin="10,0,0,0" Click="LoadScriptButton_Click"/>
+            <Button x:Name="SaveScriptButton" Content="💾 Сохранить" Width="100" Height="30" Margin="10,0,0,0" Click="SaveScriptButton_Click"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Редактор кода -->
+            <TextBox x:Name="ScriptCodeBox" Grid.Column="0" 
+                     AcceptsReturn="True" AcceptsTab="True" 
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                     FontFamily="Consolas" FontSize="14" 
+                     Padding="5" TextWrapping="NoWrap"
+                     Background="#1E1E1E" Foreground="#D4D4D4" BorderThickness="0"/>
+
+            <!-- Панель вывода -->
+            <Border Grid.Column="1" Width="300" Background="#2D2D30" BorderBrush="#555" BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBlock x:Name="OutputTextBlock" Foreground="#D4D4D4" FontFamily="Consolas" Padding="5" TextWrapping="Wrap"/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <TextBlock Grid.Row="2" x:Name="StatusTextBlock" Margin="0,10,0,0" Foreground="Gray" Text="Готов"/>
+    </Grid>
+</Window>

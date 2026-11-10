@@ -11,7 +11,10 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
-        <!-- ★ СТИЛЬ ДЛЯ TreeViewItem (ЧЁРНЫЙ ТРЕУГОЛЬНИК, СКРЫТ У КАНАЛОВ) ★ -->
+        <!-- ★ Конвертер: 0 -> Collapsed, иначе Visible -->
+        <local:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
+
+        <!-- ★ СТИЛЬ ДЛЯ TreeViewItem -->
         <Style TargetType="TreeViewItem">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
             <Setter Property="Template">
@@ -23,7 +26,6 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <!-- ★ ЧЁРНЫЙ ТРЕУГОЛЬНИК СЛЕВА ★ -->
                                 <ToggleButton x:Name="Expander" 
                                               IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
                                               ClickMode="Press"
@@ -41,17 +43,14 @@
                                         </ControlTemplate>
                                     </ToggleButton.Template>
                                 </ToggleButton>
-                                <!-- ★ КОНТЕНТ ★ -->
                                 <ContentPresenter Grid.Column="1" ContentSource="Header" Margin="5,0,0,0"/>
                             </Grid>
-                            <!-- ★ ДЕТИ (С ОТСТУПОМ 40) ★ -->
                             <ItemsPresenter x:Name="ItemsHost" Margin="40,0,0,0"/>
                         </StackPanel>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsExpanded" Value="False">
                                 <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
                             </Trigger>
-                            <!-- ★ СКРЫВАЕМ ТРЕУГОЛЬНИК, ЕСЛИ НЕТ ДЕТЕЙ (КАНАЛЫ) ★ -->
                             <Trigger Property="HasItems" Value="False">
                                 <Setter TargetName="Expander" Property="Visibility" Value="Collapsed"/>
                             </Trigger>
@@ -99,122 +98,196 @@
         <!-- ОСНОВНАЯ ЗОНА -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <!-- ★ ВОЗВРАЩАЕМ ШИРИНУ 320 ★ -->
                 <ColumnDefinition Width="320"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- ДЕРЕВО УСТРОЙСТВ -->
             <Border Grid.Column="0" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,0,1,0" Margin="5">
-                <!-- ★ ОТКЛЮЧАЕМ ГОРИЗОНТАЛЬНЫЙ СКРОЛЛ И СТАВИМ КОМПАКТНЫЙ ШРИФТ ★ -->
-                <TreeView x:Name="DevicesTree" Background="Transparent" ItemsSource="{Binding Interfaces}" 
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                          FontFamily="Segoe UI" FontSize="12">
-                    <TreeView.Resources>
-                        <!-- 1. Интерфейс -->
-                        <HierarchicalDataTemplate DataType="{x:Type local:InterfaceNode}" ItemsSource="{Binding Devices}">
-                            <StackPanel Orientation="Horizontal">
-                                <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource TextForeground}" FontFamily="Segoe UI"/>
-                            </StackPanel>
-                        </HierarchicalDataTemplate>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                        <!-- 2. Устройство -->
-                        <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding ChannelsView}">
-                            <StackPanel Orientation="Horizontal">
-                                <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextForeground}" FontFamily="Segoe UI"/>
-                                <TextBlock Text="{Binding Address, StringFormat='адрес: {0}'}" Foreground="Gray" Margin="5,0,0,0" FontFamily="Segoe UI" FontSize="12"/>
-                                <ToggleButton IsChecked="{Binding ShowOnlySelected, Mode=TwoWay}" 
-                                              Width="16" Height="16" Margin="5,0,0,0" Background="Transparent" BorderThickness="0"
-                                              ToolTip="Скрыть/показать неотмеченные каналы">
-                                    <ToggleButton.Template>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Grid>
-                                                <Path x:Name="ArrowUp" Fill="Black" Data="M 0 4 L 8 4 L 4 0 Z" 
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                <Path x:Name="ArrowDown" Fill="Black" Data="M 0 0 L 8 0 L 4 4 Z" 
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
-                                            </Grid>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="ArrowUp" Property="Visibility" Value="Collapsed"/>
-                                                    <Setter TargetName="ArrowDown" Property="Visibility" Value="Visible"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </ToggleButton.Template>
-                                </ToggleButton>
-                            </StackPanel>
-                        </HierarchicalDataTemplate>
+                    <!-- 1. Основные устройства (RS-485, I2C и т.д.) -->
+                    <TreeView x:Name="DevicesTree" Grid.Row="0"
+                              Background="Transparent"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              FontFamily="Segoe UI" FontSize="12"
+                              ItemsSource="{Binding Interfaces}">
 
-                        <!-- 3. Канал (С ВИЗУАЛЬНЫМ ВЫДЕЛЕНИЕМ) -->
-                        <DataTemplate DataType="{x:Type local:ChannelNode}">
-                            <Grid x:Name="ChannelGrid" Margin="0,1" Background="Transparent" Focusable="True" MouseLeftButtonDown="ChannelRow_MouseLeftButtonDown">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
+                        <TreeView.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Открыть редактор скриптов" Click="OpenScriptEditorMenuItem_Click"/>
+                                <MenuItem Header="Загрузить и выполнить скрипт..." Click="LoadScriptMenuItem_Click"/>
+                            </ContextMenu>
+                        </TreeView.ContextMenu>
 
-                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource TextForeground}" FontFamily="Segoe UI"/>
+                        <TreeView.Resources>
+                            <!-- 1. Интерфейс -->
+                            <HierarchicalDataTemplate DataType="{x:Type local:InterfaceNode}" ItemsSource="{Binding Devices}">
+                                <StackPanel Orientation="Horizontal">
+                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource TextForeground}" FontFamily="Segoe UI"/>
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
 
-                                <TextBlock Grid.Column="2" 
-                                           FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0" 
-                                           Foreground="{DynamicResource TextForeground}" FontFamily="Segoe UI">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="{Binding Value, StringFormat=\{0:F3\}}"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsInt32}" Value="True">
-                                                    <Setter Property="Text" Value="{Binding Value, StringFormat=\{0:F0\}}"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </Grid>
+                            <!-- 2. Устройство -->
+                            <HierarchicalDataTemplate DataType="{x:Type local:DeviceNode}" ItemsSource="{Binding ChannelsView}">
+                                <StackPanel Orientation="Horizontal">
+                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextForeground}" FontFamily="Segoe UI"/>
+                                    <TextBlock Text="{Binding Address, StringFormat='адрес: {0}'}" Foreground="Gray" Margin="5,0,0,0" FontFamily="Segoe UI" FontSize="12"/>
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
 
-                            <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsVisibleOnPlot}" Value="True">
-                                    <Setter TargetName="ChannelGrid" Property="Background" Value="#E0F7FA"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding IsHovered}" Value="True">
-                                    <Setter TargetName="ChannelGrid" Property="Background" Value="#FFF9C4"/>
-                                </DataTrigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
-                    </TreeView.Resources>
-                </TreeView>
+                            <!-- 3. Канал -->
+                            <DataTemplate DataType="{x:Type local:ChannelNode}">
+                                <Grid x:Name="ChannelGrid" Margin="0,1" Background="Transparent" Focusable="True" MouseLeftButtonDown="ChannelRow_MouseLeftButtonDown">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource TextForeground}" FontFamily="Segoe UI"/>
+
+                                    <TextBlock Grid.Column="2" 
+                                               FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0" 
+                                               Foreground="{DynamicResource TextForeground}" FontFamily="Segoe UI">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="{Binding Value, StringFormat=\{0:F3\}}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsInt32}" Value="True">
+                                                        <Setter Property="Text" Value="{Binding Value, StringFormat=\{0:F0\}}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsVisibleOnPlot}" Value="True">
+                                        <Setter TargetName="ChannelGrid" Property="Background" Value="#E0F7FA"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsHovered}" Value="True">
+                                        <Setter TargetName="ChannelGrid" Property="Background" Value="#FFF9C4"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </TreeView.Resources>
+                    </TreeView>
+
+                    <!-- 2. Вычисляемые выражения (скрипты) -->
+                    <!-- ★ Заменили StackPanel на Grid -->
+                    <Grid Grid.Row="1"
+      Visibility="{Binding ScriptNodes.Count, Converter={StaticResource ZeroToCollapsedConverter}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Заголовок с каскадной галочкой -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5,8,0,2">
+                            <CheckBox x:Name="AllScriptsCheckBox" 
+                  IsChecked="True"
+                  Click="AllScriptsCheckBox_Click"
+                  VerticalAlignment="Center"
+                  Margin="0,0,5,0"/>
+                            <TextBlock Text="Вычисляемые выражения"
+                   FontWeight="Bold" FontSize="12"
+                   Foreground="{DynamicResource TextForeground}"
+                   FontFamily="Segoe UI"/>
+                        </StackPanel>
+
+                        <TreeView x:Name="ScriptsTree" Grid.Row="1"
+              Background="Transparent"
+              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+              HorizontalContentAlignment="Stretch"
+              FontFamily="Segoe UI" FontSize="12"
+              ItemsSource="{Binding ScriptNodes}">
+
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="{x:Type TreeViewItem}">
+                                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <!-- ★ Важно -->
+                                    <EventSetter Event="MouseDoubleClick" Handler="ScriptTreeItem_MouseDoubleClick"/>
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+
+                            <TreeView.Resources>
+                                <DataTemplate DataType="{x:Type local:ScriptNode}">
+                                    <!-- ★ Привязываем ширину Grid к ширине самого TreeView, чтобы колонка * работала -->
+                                    <Grid x:Name="ScriptGrid" Margin="0,1" Background="Transparent" 
+                      Focusable="True" MouseLeftButtonDown="ScriptRow_MouseLeftButtonDown"
+                      Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                      ToolTip="{Binding Name}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <CheckBox Grid.Column="0"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                              Margin="0,0,5,0"
+                              VerticalAlignment="Center"/>
+
+                                        <TextBlock Grid.Column="1"
+                               Text="{Binding Name}"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextForeground}"
+                               FontFamily="Segoe UI"
+                               TextTrimming="CharacterEllipsis" 
+                               TextWrapping="NoWrap"/>
+
+                                        <TextBlock Grid.Column="2"
+                               Text="{Binding DisplayValue}"
+                               FontWeight="Bold"
+                               Foreground="#FF2196F3"
+                               Margin="10,0,10,0" 
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Right"
+                               FontFamily="Consolas"/>
+                                    </Grid>
+
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsVisibleOnPlot}" Value="True">
+                                            <Setter TargetName="ScriptGrid" Property="Background" Value="#E0F7FA"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </TreeView.Resources>
+                        </TreeView>
+                    </Grid>
+                </Grid>
             </Border>
 
-            <!-- ★ ГРАФИКИ (С УМЕНЬШЕННЫМИ ОТСТУПАМИ) ★ -->
+            <!-- ★ ГРАФИКИ ★ -->
             <Grid Grid.Column="1" Margin="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- ★ ПАНЕЛЬ С КНОПКАМИ ★ -->
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Background="#F0F0F0" Margin="0,0,0,2">
-                    <!-- Кнопка Старт/Стоп графика -->
                     <Button x:Name="RecordButton" Click="RecordButton_Click" ToolTip="Начать/Остановить запись графика" 
                             Width="40" Height="40" Margin="0,0,5,0" Background="Transparent" BorderThickness="0">
                         <TextBlock x:Name="RecordIcon" Text="&#xE768;" FontFamily="Segoe MDL2 Assets" 
                                    FontSize="20" Foreground="#FF4CAF50" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Button>
 
-                    <!-- ★ БЛОК С ДИСКЕТКОЙ И КВАДРАТИКОМ СВЕРХУ ★ -->
                     <Grid Width="40" Height="40" Margin="0,0,5,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="15"/>
-                            <!-- Маленький квадратик -->
                             <RowDefinition Height="*"/>
-                            <!-- Дискета -->
                         </Grid.RowDefinitions>
-
-                        <!-- Квадратик выбора пути -->
                         <Button x:Name="CsvPathButton" Grid.Row="0" Background="Transparent" BorderThickness="0" 
                                 Click="CsvPathButton_Click" Cursor="Hand" ToolTip="Выбрать путь для сохранения CSV">
                             <Border x:Name="CsvPathBorder" BorderBrush="Gray" BorderThickness="1" Width="16" Height="12" Background="#E0E0E0" CornerRadius="2">
@@ -222,26 +295,18 @@
                                            HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="Black"/>
                             </Border>
                         </Button>
-
-                        <!-- Кнопка записи (Дискета) -->
                         <Button x:Name="CsvRecordButton" Grid.Row="1" Click="CsvRecordButton_Click" ToolTip="Начать/Остановить запись в CSV" 
                                 Background="Transparent" BorderThickness="0">
                             <TextBlock x:Name="CsvRecordIcon" Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" 
                                        FontSize="18" Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
-                    <!-- ★ КОНЕЦ БЛОКА ★ -->
 
-                    <!-- ★ НОВЫЙ БЛОК (ФОРМАТ 2: ШИРОКАЯ ТАБЛИЦА) ★ -->
                     <Grid Width="40" Height="40" Margin="0,0,5,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="15"/>
-                            <!-- Маленький квадратик -->
                             <RowDefinition Height="*"/>
-                            <!-- Дискета -->
                         </Grid.RowDefinitions>
-
-                        <!-- Квадратик выбора пути -->
                         <Button x:Name="CsvWidePathButton" Grid.Row="0" Background="Transparent" BorderThickness="0" 
                                 Click="CsvWidePathButton_Click" Cursor="Hand" ToolTip="Выбрать путь для сохранения широкой таблицы">
                             <Border x:Name="CsvWidePathBorder" BorderBrush="Gray" BorderThickness="1" Width="16" Height="12" Background="#E0E0E0" CornerRadius="2">
@@ -249,8 +314,6 @@
                                            HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="Black"/>
                             </Border>
                         </Button>
-
-                        <!-- Кнопка записи (Дискета) -->
                         <Button x:Name="CsvWideRecordButton" Grid.Row="1" Click="CsvWideRecordButton_Click" ToolTip="Начать/Остановить запись широкой таблицы" 
                                 Background="Transparent" BorderThickness="0">
                             <TextBlock x:Name="CsvWideRecordIcon" Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" 
@@ -258,27 +321,23 @@
                         </Button>
                     </Grid>
 
-                    <!-- Остальные кнопки (Обновить, Очистить) -->
                     <Button x:Name="RefreshHistoryButton" Click="RefreshButton_Click" ToolTip="Обновить графики" 
                             Width="40" Height="40" Visibility="Collapsed" Background="Transparent" BorderThickness="0">
                         <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="20" 
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Button>
 
-                    <!-- ★ НОВАЯ КНОПКА: СОХРАНИТЬ ИСТОРИЮ (СТРОКИ) ★ -->
                     <Button x:Name="SaveHistoryRowsButton" Click="SaveHistoryRowsButton_Click" ToolTip="Сохранить историю (построчно)" 
                             Width="40" Height="40" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Margin="5,0,0,0">
                         <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="20" 
                                    HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF2196F3"/>
                     </Button>
 
-                    <!-- ★ НОВАЯ КНОПКА: СОХРАНИТЬ ИСТОРИЮ (ШИРОКАЯ ТАБЛИЦА) ★ -->
                     <Button x:Name="SaveHistoryWideButton" Click="SaveHistoryWideButton_Click" ToolTip="Сохранить историю (широкая таблица)" 
                             Width="40" Height="40" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Margin="5,0,0,0">
                         <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="20" 
                                    HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FF00BCD4"/>
                     </Button>
-                    <!-- ★ КОНЕЦ НОВЫХ КНОПОК ★ -->
 
                     <Button x:Name="ClearHistoryButton" Click="ClearHistoryButton_Click" ToolTip="Очистить всю историю" 
                             Width="40" Height="40" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Margin="5,0,0,0">
@@ -291,58 +350,29 @@
                     <TabItem Header="Реальное время">
                         <oxy:PlotView x:Name="PlotViewRealTime" Background="{DynamicResource PanelBackground}"/>
                     </TabItem>
-
                     <TabItem Header="История">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-
                             <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="2">
-                                <ItemsControl x:Name="HistoryItemsControl" 
-                                              VirtualizingStackPanel.IsVirtualizing="False" 
-                                              VirtualizingStackPanel.VirtualizationMode="Standard">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
+                                <ItemsControl x:Name="HistoryItemsControl">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Border x:Name="HistoryCard" BorderBrush="LightGray" BorderThickness="1" Margin="0,0,0,5" CornerRadius="4"
                                                     MouseLeftButtonDown="MiniPlot_MouseLeftButtonDown"
                                                     MouseEnter="HistoryCard_MouseEnter" MouseLeave="HistoryCard_MouseLeave">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="White"/>
-                                                        <Setter Property="BorderBrush" Value="LightGray"/>
-                                                        <Setter Property="BorderThickness" Value="1"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsVisibleOnPlot}" Value="True">
-                                                                <Setter Property="Background" Value="#E0F7FA"/>
-                                                                <Setter Property="BorderBrush" Value="#00BCD4"/>
-                                                                <Setter Property="BorderThickness" Value="2"/>
-                                                            </DataTrigger>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="Background" Value="#F5F5F5"/>
-                                                            </Trigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-
                                                 <Grid>
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="180"/>
                                                     </Grid.RowDefinitions>
-
                                                     <StackPanel Orientation="Horizontal" Margin="5" Background="#F0F0F0">
-                                                        <TextBlock Text="{Binding FullName}" FontWeight="Bold" FontSize="12" Margin="0,0,10,0" FontFamily="Segoe UI"/>
-                                                        <TextBlock Text="{Binding Value, StringFormat={}{0:F3}}" FontWeight="Bold" Foreground="Blue" FontSize="12" FontFamily="Segoe UI"/>
-                                                        <TextBlock Text="{Binding Unit}" Margin="5,0,0,0" FontSize="12" FontFamily="Segoe UI"/>
+                                                        <TextBlock Text="{Binding FullName}" FontWeight="Bold" FontSize="12" Margin="0,0,10,0"/>
+                                                        <TextBlock Text="{Binding Value, StringFormat={}{0:F3}}" FontWeight="Bold" Foreground="Blue" FontSize="12"/>
+                                                        <TextBlock Text="{Binding Unit}" Margin="5,0,0,0" FontSize="12"/>
                                                     </StackPanel>
-
                                                     <oxy:PlotView Grid.Row="1" Model="{Binding ChartModel}" IsHitTestVisible="False" Background="White"/>
                                                 </Grid>
                                             </Border>
@@ -350,25 +380,15 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </ScrollViewer>
-
                             <Grid Grid.Row="1" Margin="10,5,10,10" VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-
-                                <TextBlock x:Name="HistoryStartText" Grid.Column="0" Text="С: --:--:--" VerticalAlignment="Center" Margin="0,0,10,0" FontSize="12" Foreground="Gray" FontFamily="Segoe UI"/>
-
-                                <!-- ★ КОНТЕЙНЕР ДЛЯ ДВУХ ПОЛЗУНКОВ (ОДНА ПОЛОСА) ★ -->
+                                <TextBlock x:Name="HistoryStartText" Grid.Column="0" Text="С: --:--:--" VerticalAlignment="Center" Margin="0,0,10,0" FontSize="12" Foreground="Gray"/>
                                 <Grid Grid.Column="1" Height="30">
-                                    <!-- Правый ползунок (Конец) - рисуется СЗАДИ -->
-                                    <Slider x:Name="HistoryEndSlider" Minimum="0" Maximum="100" 
-                                            ValueChanged="HistoryEndSlider_ValueChanged"
-                                            IsSnapToTickEnabled="False" TickPlacement="None"
-                                            Background="LightGray" Foreground="#00BCD4"
-                                            Panel.ZIndex="1">
-                                        <!-- Делаем фон прозрачным для кликов, чтобы не мешать левому ползунку -->
+                                    <Slider x:Name="HistoryEndSlider" Minimum="0" Maximum="100" ValueChanged="HistoryEndSlider_ValueChanged" IsSnapToTickEnabled="False" TickPlacement="None" Background="LightGray" Panel.ZIndex="1">
                                         <Slider.Template>
                                             <ControlTemplate TargetType="Slider">
                                                 <Grid>
@@ -388,17 +408,10 @@
                                             </ControlTemplate>
                                         </Slider.Template>
                                     </Slider>
-
-                                    <!-- Левый ползунок (Начало) - рисуется СПЕРЕДИ -->
-                                    <Slider x:Name="HistoryStartSlider" Minimum="0" Maximum="100" 
-                                            ValueChanged="HistoryStartSlider_ValueChanged"
-                                            IsSnapToTickEnabled="False" TickPlacement="None"
-                                            Background="Transparent" Foreground="#00BCD4"
-                                            Panel.ZIndex="2">
+                                    <Slider x:Name="HistoryStartSlider" Minimum="0" Maximum="100" ValueChanged="HistoryStartSlider_ValueChanged" IsSnapToTickEnabled="False" TickPlacement="None" Background="Transparent" Panel.ZIndex="2">
                                         <Slider.Template>
                                             <ControlTemplate TargetType="Slider">
                                                 <Grid>
-                                                    <!-- Фон прозрачный, чтобы был виден задний ползунок -->
                                                     <Track x:Name="PART_Track">
                                                         <Track.Thumb>
                                                             <Thumb Width="12" Height="20" Background="#00BCD4" BorderBrush="#00838F" BorderThickness="1" Cursor="Hand">
@@ -415,9 +428,7 @@
                                         </Slider.Template>
                                     </Slider>
                                 </Grid>
-                                <!-- ★ КОНЕЦ КОНТЕЙНЕРА ★ -->
-
-                                <TextBlock x:Name="HistoryEndText" Grid.Column="2" Text="По: --:--:--" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="12" Foreground="Gray" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="HistoryEndText" Grid.Column="2" Text="По: --:--:--" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="12" Foreground="Gray"/>
                             </Grid>
                         </Grid>
                     </TabItem>
@@ -431,8 +442,6 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-
-            <!-- Контейнер для списка прогрессов -->
             <ItemsControl x:Name="ScanProgressList" Grid.Row="0" Margin="10,5,10,5" Visibility="Collapsed">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -442,35 +451,19 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="120"/>
                             </Grid.ColumnDefinitions>
-
-                            <!-- Имя порта (например, COM3 (57600 бод)) -->
-                            <TextBlock Grid.Column="0" Text="{Binding PortName}" VerticalAlignment="Center" FontWeight="Bold" FontSize="11" Foreground="{DynamicResource TextForeground}"/>
-
-                            <!-- Прогресс-бар -->
+                            <TextBlock Grid.Column="0" Text="{Binding PortName}" VerticalAlignment="Center" FontWeight="Bold" FontSize="11"/>
                             <ProgressBar Grid.Column="1" Height="15" Minimum="0" Maximum="{Binding Total}" Value="{Binding Current}" Margin="5,0" Foreground="#33adff" Background="#222222"/>
-
-                            <!-- Статус (например, Адрес 15) -->
-                            <TextBlock Grid.Column="2" Text="{Binding StatusText}" VerticalAlignment="Center" Margin="5,0" FontSize="11" Foreground="{DynamicResource TextForeground}"/>
+                            <TextBlock Grid.Column="2" Text="{Binding StatusText}" VerticalAlignment="Center" Margin="5,0" FontSize="11"/>
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-
-            <ListView Grid.Row="1" x:Name="LogListView" Margin="10,0,10,10" 
-                      Background="{DynamicResource PanelBackground}" 
-                      Foreground="{DynamicResource TextForeground}"
-                      SelectionMode="Extended">
+            <ListView Grid.Row="1" x:Name="LogListView" Margin="10,0,10,10" Background="{DynamicResource PanelBackground}" Foreground="{DynamicResource TextForeground}">
                 <ListView.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Header="Копировать" Click="CopyLogMenuItem_Click" InputGestureText="Ctrl+C"/>
+                        <MenuItem Header="Копировать" Click="CopyLogMenuItem_Click"/>
                     </ContextMenu>
                 </ListView.ContextMenu>
-                <ListView.InputBindings>
-                    <KeyBinding Key="C" Modifiers="Control" Command="ApplicationCommands.Copy"/>
-                </ListView.InputBindings>
-                <ListView.CommandBindings>
-                    <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyLogCommand_Executed"/>
-                </ListView.CommandBindings>
             </ListView>
         </Grid>
     </Grid>

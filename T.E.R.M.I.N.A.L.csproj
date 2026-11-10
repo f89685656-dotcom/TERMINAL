@@ -64,6 +64,8 @@
 		<PackageReference Include="LibUsbDotNet" Version="2.2.29" />
 		<PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.1.0-dev-798" />
 		<PackageReference Include="System.IO.Ports" Version="8.0.0" />
+		<PackageReference Include="IronPython" Version="3.4.2" />
+		<PackageReference Include="IronPython.StdLib" Version="3.4.2" />
 	</ItemGroup>
 
 	<!-- Ссылки на проекты -->
