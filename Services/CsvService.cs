@@ -25,7 +25,7 @@ namespace TERMINAL.Services
             sb.AppendLine();
 
             sb.AppendLine("# ═══ СВОДКА ═══");
-            sb.AppendLine("Датчик;Опис_Град;Пров_1;Пров_2;Пров_3;Пров_4;Пров_5");
+            sb.AppendLine("Датчик;Опис_Град;Пров_1;Пров_2;Пров_3;Пров_4;Пров_5;Номер_текст");
 
             foreach (var s in batch.Sensors)
             {
@@ -38,6 +38,11 @@ namespace TERMINAL.Services
                         i < s.CheckDescriptions.Length ? s.CheckDescriptions[i] : null));
                     if (i < 4) sb.Append(';');
                 }
+                sb.Append(';');
+
+                // Сохраняем исходный текст номера (для "25-229" и т.п.)
+                sb.Append(s.NumberText ?? "");
+
                 sb.AppendLine();
             }
 
@@ -46,6 +51,11 @@ namespace TERMINAL.Services
             foreach (var s in batch.Sensors)
             {
                 sb.AppendLine($"# ═══ ДАТЧИК: {s.Number} ═══");
+                sb.AppendLine();
+
+                // Резонатор — нужен для ГСТ
+                sb.AppendLine("# РЕЗОНАТОР_НОМЕР: " + (s.ResonatorNumber ?? ""));
+                sb.AppendLine("# РЕЗОНАТОР_МОДЕЛЬ: " + (s.ResonatorModel ?? ""));
                 sb.AppendLine();
 
                 WriteTable(sb, "# --- Гистерезис градуировки ---", s.GradHysteresis);
@@ -80,8 +90,6 @@ namespace TERMINAL.Services
 
                 sb.AppendLine();
 
-
-
                 // ─── ГСТ (Base64) ───
                 if (s.Gst != null && s.Gst.IsOk &&
                     s.Gst.ChartPng != null && s.Gst.ChartPng.Length > 0)
@@ -94,7 +102,6 @@ namespace TERMINAL.Services
                     sb.AppendLine(Convert.ToBase64String(s.Gst.ChartPng));
                     sb.AppendLine();
                 }
-
             }
 
             File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
@@ -170,7 +177,8 @@ namespace TERMINAL.Services
                 var parts = line.Split(';');
                 if (parts.Length >= 7 && int.TryParse(parts[0], out int num))
                 {
-                    var sensor = new SensorSummary { Number = num };
+                    var sensor = new SensorSummary { Number = num, HasValidNumber = true };
+
                     sensor.GradDescription = ParseNullable(parts[1]);
 
                     for (int k = 0; k < 5; k++)
@@ -179,6 +187,16 @@ namespace TERMINAL.Services
                         sensor.CheckDescriptions[k] =
                             idx < parts.Length ? ParseNullable(parts[idx]) : null;
                     }
+
+                    // Колонка NumberText (индекс 7) — есть только в новых CSV
+                    if (parts.Length >= 8)
+                    {
+                        string numberText = parts[7].Trim();
+                        sensor.NumberText = numberText;
+                        if (!string.IsNullOrEmpty(numberText))
+                            sensor.HasValidNumber = false;
+                    }
+
                     batch.Sensors.Add(sensor);
                 }
                 i++;
@@ -208,6 +226,23 @@ namespace TERMINAL.Services
                         current = null;
                     }
                     currentSection = "";
+                    continue;
+                }
+
+                // Резонатор — отдельными строками
+                if (line.StartsWith("# РЕЗОНАТОР_НОМЕР:"))
+                {
+                    if (current != null)
+                        current.ResonatorNumber =
+                            line.Substring("# РЕЗОНАТОР_НОМЕР:".Length).Trim();
+                    continue;
+                }
+
+                if (line.StartsWith("# РЕЗОНАТОР_МОДЕЛЬ:"))
+                {
+                    if (current != null)
+                        current.ResonatorModel =
+                            line.Substring("# РЕЗОНАТОР_МОДЕЛЬ:".Length).Trim();
                     continue;
                 }
 
@@ -288,13 +323,14 @@ namespace TERMINAL.Services
                     continue;
                 }
 
-                // ★ ИСПРАВЛЕНО: раздельные проверки для Погрешности и Проверки
+                // Погрешность
                 if (line.StartsWith("# --- Погрешность"))
                 {
                     currentSection = "errors";
                     continue;
                 }
 
+                // Проверка
                 if (line.StartsWith("# --- Проверка"))
                 {
                     currentSection = "verification";
@@ -323,6 +359,8 @@ namespace TERMINAL.Services
                                 {
                                     if (current.Gst == null) current.Gst = new GstInfo();
                                     current.Gst.ChartPng = Convert.FromBase64String(base64);
+                                    // IsOk read-only — вычисляется из ChartPng,
+                                    // присваивать не нужно.
                                 }
                             }
                             catch (Exception ex)
@@ -363,7 +401,6 @@ namespace TERMINAL.Services
 
                 if (current == null) continue;
 
-                // ★ ИСПРАВЛЕНО: Объявление table перенесено сюда, чтобы не было ошибки области видимости
                 if (line.StartsWith("P;"))
                 {
                     var headers = line.Split(';')
@@ -371,7 +408,7 @@ namespace TERMINAL.Services
                         .Select(x => ParseDouble(x))
                         .ToList();
 
-                    // ★ Если заголовки пустые или сломаны, подставляем индексы
+                    // Если заголовки пустые или сломаны, подставляем индексы
                     if (headers.Count == 0 || headers.All(h => h == 0))
                     {
                         for (int h = 0; h < 4; h++) headers.Add(h + 1);
@@ -415,7 +452,6 @@ namespace TERMINAL.Services
                         i++;
                     }
 
-                    // ★ ИСПРАВЛЕНО: Добавлено сохранение VerificationTable и убраны дубликаты
                     if (currentSection == "grad") current.GradHysteresis = table;
                     else if (currentSection == "check") current.CheckHysteresis = table;
                     else if (currentSection == "errors") current.Errors = table;
@@ -425,6 +461,10 @@ namespace TERMINAL.Services
 
             return batch;
         }
+
+        // ═══════════════════════════════════════════════════════
+        // ПАРСЕРЫ (были ниже LoadFromCsv в исходнике — оставляю тут же)
+        // ═══════════════════════════════════════════════════════
         private static double ParseDouble(string s)
         {
             if (double.TryParse(s, NumberStyles.Float,

@@ -14,17 +14,22 @@ namespace TERMINAL.Models
     public class SensorSummary
     {
         public int Number { get; set; }
-        public double? GradDescription { get; set; }
-        public double?[] CheckDescriptions { get; set; } = new double?[5];
+        public string? NumberText { get; set; }       // ★ исходный текст из F1 (например, "25-229")
+        public bool HasValidNumber { get; set; } = true;  // ★ false, если F1 не парсится
+
         public string? ResonatorNumber { get; set; }
         public string? ResonatorModel { get; set; }
 
+        public double? GradDescription { get; set; }
+        public double?[] CheckDescriptions { get; set; } = new double?[5];
+
         public TableData GradHysteresis { get; set; } = new();
         public TableData CheckHysteresis { get; set; } = new();
+        public TableData? VerificationTable { get; set; }
         public TableData Errors { get; set; } = new();
+
         public TchxData? Tchx { get; set; }
         public GstInfo? Gst { get; set; }
-        public TableData? VerificationTable { get; set; }
     }
 
     public class TableData

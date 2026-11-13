@@ -135,14 +135,56 @@ namespace TERMINAL.Services
                 dynamic wsBCH = workbook.Sheets["БЧХ"];
                 dynamic wsTerminal = workbook.Sheets["TERMINAL"];
 
-                // Номер датчика
+                // ─── Номер датчика (F1). Может быть числом, строкой, "25-229", "Д-229" и т.п.
+                //     ★ НЕ бросаем исключение — датчик должен читаться дальше,
+                //       даже если F1 сломан. Гистерезис/погрешность/ТЧХ/ГСТ важнее.
                 try
                 {
                     var numVal = wsData.Range("F1").Value;
-                    if (numVal != null)
-                        sensor.Number = (int)Math.Round(Convert.ToDouble(numVal));
+                    string text = numVal?.ToString()?.Trim() ?? "";
+
+                    if (numVal is double d)
+                    {
+                        sensor.Number = (int)Math.Round(d);
+                        sensor.HasValidNumber = true;
+                    }
+                    else if (numVal is int i)
+                    {
+                        sensor.Number = i;
+                        sensor.HasValidNumber = true;
+                    }
+                    else if (int.TryParse(text, out int parsedInt))
+                    {
+                        sensor.Number = parsedInt;
+                        sensor.HasValidNumber = true;
+                    }
+                    else
+                    {
+                        // Попытка вытащить первое целое: "25-229" → 25, "Д-229" → 229
+                        var match = System.Text.RegularExpressions.Regex.Match(text, @"\d+");
+                        if (match.Success && int.TryParse(match.Value, out int firstNum))
+                        {
+                            sensor.Number = firstNum;
+                            sensor.HasValidNumber = true;
+                        }
+                        else
+                        {
+                            sensor.Number = 0;
+                            sensor.HasValidNumber = false;
+                        }
+
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[SummaryService] Некорректный номер F1: '{text}', взят {sensor.Number}");
+                    }
                 }
-                catch (Exception ex) { throw new Exception("Ошибка чтения F1: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    // ★ НЕ бросаем — датчик читается дальше
+                    sensor.Number = 0;
+                    sensor.HasValidNumber = false;
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SummaryService] Ошибка чтения F1: {ex.Message}");
+                }
 
                 // ─── Номер резонатора (F2) и модель (F3, объединённая с G3) ───
                 try
@@ -152,7 +194,15 @@ namespace TERMINAL.Services
                     dynamic mergedCell = wsData.Range("F3").MergeArea;
                     sensor.ResonatorModel = (mergedCell.Cells[1, 1].Value?.ToString() ?? "").Trim();
                 }
-                catch (Exception ex) { throw new Exception("Ошибка чтения F2/F3: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    // ★ НЕ бросаем — без резонатора ГСТ просто не прочитается,
+                    //   но остальные таблицы останутся.
+                    sensor.ResonatorNumber = "";
+                    sensor.ResonatorModel = "";
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SummaryService] Ошибка чтения F2/F3: {ex.Message}");
+                }
 
                 // Описываемость
                 try
@@ -164,7 +214,12 @@ namespace TERMINAL.Services
                         sensor.CheckDescriptions[i] = ToNullableDouble(wsBCH.Range(cell).Value);
                     }
                 }
-                catch (Exception ex) { throw new Exception("Ошибка чтения БЧХ.J18:J23: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SummaryService] Ошибка чтения БЧХ.J18:J23: {ex.Message}");
+                    // Продолжаем — GradDescription/CheckDescriptions останутся null
+                }
 
                 // Погрешность
                 try
@@ -176,7 +231,12 @@ namespace TERMINAL.Services
                         dataRowStart: 4, dataColStart: 3,
                         dataRows: 16, dataCols: 10);
                 }
-                catch (Exception ex) { throw new Exception("Ошибка чтения Погрешности: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SummaryService] Ошибка чтения Погрешности: {ex.Message}");
+                    sensor.Errors = new TableData();
+                }
 
                 // Гистерезис градуировки
                 try
@@ -188,7 +248,12 @@ namespace TERMINAL.Services
                         dataRowStart: 5, dataColStart: 15,
                         dataRows: 6, dataCols: 10);
                 }
-                catch (Exception ex) { throw new Exception("Ошибка чтения Гистерезиса градуировки: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SummaryService] Ошибка чтения Гистерезиса градуировки: {ex.Message}");
+                    sensor.GradHysteresis = new TableData();
+                }
 
                 // Гистерезис проверки
                 try
@@ -200,30 +265,51 @@ namespace TERMINAL.Services
                         dataRowStart: 15, dataColStart: 15,
                         dataRows: 6, dataCols: 5);
                 }
-                catch (Exception ex) { throw new Exception("Ошибка чтения Гистерезиса проверки: " + ex.Message); }
-
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SummaryService] Ошибка чтения Гистерезиса проверки: {ex.Message}");
+                    sensor.CheckHysteresis = new TableData();
+                }
 
                 // ★ Чтение таблицы Проверки
                 try
                 {
                     sensor.VerificationTable = ReadTable(
                         wsTerminal,
-                        tempRow: 22, tempColStart: 3, tempColCount: 5, // Температуры (C22:G22)
-                        pressRowStart: 23, pressRowCount: 16, pressCol: 2, // Давления (B23:B38)
-                        dataRowStart: 23, dataColStart: 3, // Данные (C23:G38)
+                        tempRow: 22, tempColStart: 3, tempColCount: 5,
+                        pressRowStart: 23, pressRowCount: 16, pressCol: 2,
+                        dataRowStart: 23, dataColStart: 3,
                         dataRows: 16, dataCols: 5);
                 }
-                catch (Exception ex) { throw new Exception("Ошибка чтения Проверки: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SummaryService] Ошибка чтения Проверки: {ex.Message}");
+                    sensor.VerificationTable = null;
+                }
             }
             catch (Exception ex)
             {
+                // Сюда попадаем, только если не открылись ЛИСТЫ "Данные"/"БЧХ"/"TERMINAL"
+                // (файл битый / не тот формат). Тогда датчик действительно не прочитать.
                 throw new Exception("Датчик: " + ex.Message, ex);
             }
-            sensor.Tchx = ReadTchx(workbook);
+
+            // ТЧХ — отдельная попытка, не валит датчик
+            try
+            {
+                sensor.Tchx = ReadTchx(workbook);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[SummaryService] Ошибка чтения ТЧХ: {ex.Message}");
+                sensor.Tchx = null;
+            }
 
             return sensor;
         }
-
         public static SensorSummary?[] ReadAllFiles(
     string[] files,
     Action<int, int, string, bool, string?>? progress = null)
