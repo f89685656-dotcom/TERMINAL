@@ -237,11 +237,8 @@ namespace TERMINAL
                 string startMsg = $"🚀 Пакетный режим запущен.\nЗаданий: {enabledCount} (диапазон: {_selectedTargetPressure}, температуры: {tempsString}).\n{clientInfo}";
 
                 // ★ Стартовое сообщение — всем каналам.
-                await _batchProgress.SendStatusAsync(startMsg);
+                await _batchProgress.SendStatusAsync(startMsg, broadcastToEditChannels: true);
 
-                // ★★ С этого момента VK получает ТОЛЬКО таблицу/прогресс,
-                //    а шаги в него не идут — иначе они мешают таблице.
-                _batchProgress.SetStepsSuppressed<VkNotificationService>(true);
 
                 int completedCount = 0;
 
@@ -253,8 +250,7 @@ namespace TERMINAL
                         string stopMsg = $"⏹ Пакетный режим остановлен оператором. Выполнено: {completedCount}/{enabledCount}";
 
                         // ★ Разрешаем VK увидеть сообщение об остановке.
-                        _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
-                        await _batchProgress.SendStatusAsync(stopMsg);
+                        await _batchProgress.SendStatusAsync(stopMsg, broadcastToEditChannels: true);
                         return;
                     }
 
@@ -282,8 +278,7 @@ namespace TERMINAL
                         string errMsg = $"❌ Ошибка записи уставки на задании {completedCount}. Пакет прерван.";
 
                         // ★ Разрешаем VK увидеть ошибку.
-                        _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
-                        await _batchProgress.SendStatusAsync(errMsg);
+                        await _batchProgress.SendStatusAsync(errMsg, broadcastToEditChannels: true);
                         return;
                     }
 
@@ -312,9 +307,7 @@ namespace TERMINAL
                             job.StatusColor = Brushes.OrangeRed;
                             SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
                             string errMsg = $"❌ Стабилизация прервана на задании {completedCount}.";
-
-                            _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
-                            await _batchProgress.SendStatusAsync(errMsg);
+                            await _batchProgress.SendStatusAsync(errMsg, broadcastToEditChannels: true);
                             return;
                         }
                     }
@@ -333,8 +326,7 @@ namespace TERMINAL
                             SetStatusWarning($"[Пакет {completedCount}] проверка допуска прервана");
                             string errMsg = $"❌ Проверка допуска прервана на задании {completedCount}.";
 
-                            _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
-                            await _batchProgress.SendStatusAsync(errMsg);
+                            await _batchProgress.SendStatusAsync(errMsg, broadcastToEditChannels: true);
                             return;
                         }
                     }
@@ -389,8 +381,7 @@ namespace TERMINAL
                         SetStatusWarning("Пакетный режим остановлен оператором");
                         string stopMsg = $"⏹ Пакетный режим остановлен на задании {completedCount}.";
 
-                        _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
-                        await _batchProgress.SendStatusAsync(stopMsg);
+                        await _batchProgress.SendStatusAsync(stopMsg, broadcastToEditChannels: true);
                         return;
                     }
 
@@ -401,8 +392,7 @@ namespace TERMINAL
                         SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано");
                         string errMsg = $"❌ Задание {completedCount} прервано. Пакет остановлен.";
 
-                        _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
-                        await _batchProgress.SendStatusAsync(errMsg);
+                        await _batchProgress.SendStatusAsync(errMsg, broadcastToEditChannels: true);
                         return;
                     }
 
@@ -417,10 +407,9 @@ namespace TERMINAL
                 SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
 
                 string endMsg = $"🏁 Пакетный режим завершён успешно. Обработано: {completedCount}/{enabledCount}";
-                await _batchProgress.SendStatusAsync(endMsg);
+                await _batchProgress.SendStatusAsync(endMsg, broadcastToEditChannels: true);
 
                 // ★ Разрешаем VK увидеть финальное сообщение ResetAsync.
-                _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                 await _batchProgress.ResetAsync();
 
                 if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
@@ -448,8 +437,7 @@ namespace TERMINAL
                 string errMsg = $"❌ Пакетный режим завершён с ошибкой: {ex.Message}";
 
                 // ★ Разрешаем VK увидеть ошибку.
-                _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
-                await _batchProgress.SendStatusAsync(errMsg);
+                await _batchProgress.SendStatusAsync(errMsg, broadcastToEditChannels: true);
                 await _batchProgress.ResetAsync();
             }
             finally
@@ -480,7 +468,6 @@ namespace TERMINAL
                 UpdateStartButtonMode();
 
                 // ★ Гарантированно разрешаем шаги в VK (даже если вышли через return).
-                _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
 
                 // ★ Очищаем id таблицы/прогресса — старые сообщения могли быть удалены.
                 _batchProgress.ResetTable();

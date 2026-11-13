@@ -12,7 +12,6 @@ namespace TERMINAL.Notifications
         {
             public int? MessageId;
             public string? LastText;
-            public DateTime LastSendUtc = DateTime.MinValue;
             public DateTime LastEditUtc = DateTime.MinValue;
         }
 
@@ -21,41 +20,38 @@ namespace TERMINAL.Notifications
         private readonly object _lock = new object();
         private readonly SemaphoreSlim _tableLock = new SemaphoreSlim(1, 1);
 
-        // ★ Ключи сервисов, которым сейчас НЕ шлём «шаги» (SendStatusAsync).
-        //   Заполняется, когда для сервиса уже идёт таблица/прогресс.
-        private readonly HashSet<string> _suppressSteps = new();
-        private readonly object _suppressLock = new object();
+        /// <summary>
+        /// Сервис умеет редактировать сообщение (Telegram, VK).
+        /// Email/Max/SMS — не умеют, для них используется SendStatusAsync.
+        /// </summary>
+        private static bool SupportsEdit(INotificationService svc)
+            => svc is TelegramNotificationService || svc is VkNotificationService;
 
-        /// <summary>Включить/выключить подавление «шагов» для типа сервиса.</summary>
-        public void SetStepsSuppressed<T>(bool suppressed) where T : INotificationService
-        {
-            lock (_suppressLock)
-            {
-                if (suppressed) _suppressSteps.Add(typeof(T).Name);
-                else _suppressSteps.Remove(typeof(T).Name);
-            }
-        }
-
-        private bool IsStepsSuppressed(INotificationService svc)
-        {
-            lock (_suppressLock) { return _suppressSteps.Contains(svc.GetType().Name); }
-        }
-
-        public async Task SendStatusAsync(string text)
+        public async Task SendStatusAsync(string text, bool broadcastToEditChannels = false)
         {
             foreach (var svc in NotificationManager.GetServices())
             {
-                if (IsStepsSuppressed(svc)) continue;    // ★ не мешаем таблице
+                if (SupportsEdit(svc) && !broadcastToEditChannels)
+                    continue;
+
                 try { await svc.SendAsync(text).ConfigureAwait(false); } catch { }
             }
         }
 
+        /// <summary>
+        /// Обновить «живое» сообщение о прогрессе (таймер стабилизации).
+        /// Только для каналов с поддержкой edit (TG, VK).
+        /// </summary>
         public async Task UpdateProgressAsync(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
             await UpdateChannelAsync(_progressChannels, "progress", text).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Обновить «живое» сообщение-таблицу.
+        /// Только для каналов с поддержкой edit (TG, VK).
+        /// </summary>
         public async Task UpdateTableAsync(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
@@ -81,6 +77,9 @@ namespace TERMINAL.Notifications
 
             foreach (var svc in services)
             {
+                // ★ Email/Max/SMS не умеют edit — не спамим им таблицей/прогрессом
+                if (!SupportsEdit(svc)) continue;
+
                 string key = svc.GetType().Name;
 
                 ChannelState state;
@@ -93,11 +92,18 @@ namespace TERMINAL.Notifications
                     }
                 }
 
-                if (!ShouldPush(svc, state, text)) continue;
+                // Текст не изменился — не дёргаем сеть
+                if (state.LastText == text) continue;
+
+                // VK — не чаще раза в 30 секунд
+                if (svc is VkNotificationService)
+                {
+                    if ((DateTime.UtcNow - state.LastEditUtc) < TimeSpan.FromSeconds(30))
+                        continue;
+                }
 
                 try
                 {
-                    // 1) Редактируем своё сообщение, если было
                     int? existingId;
                     lock (_lock) { existingId = state.MessageId; }
 
@@ -124,11 +130,9 @@ namespace TERMINAL.Notifications
                             continue;
                         }
 
-                        // id протух — сбрасываем, попробуем отправить новое
                         lock (_lock) { state.MessageId = null; }
                     }
 
-                    // 2) Отправляем новое
                     int? newId = null;
                     try
                     {
@@ -144,7 +148,6 @@ namespace TERMINAL.Notifications
                     {
                         state.MessageId = newId;
                         state.LastText = text;
-                        state.LastSendUtc = DateTime.UtcNow;
                         state.LastEditUtc = DateTime.UtcNow;
                     }
                 }
@@ -156,30 +159,10 @@ namespace TERMINAL.Notifications
             }
         }
 
-        /// <summary>
-        /// Решает, надо ли сейчас что-то отправлять в этот канал.
-        /// Для VK — жёсткий интервал (30 сек), чтобы не улететь в бан.
-        /// </summary>
-        private static bool ShouldPush(INotificationService svc, ChannelState state, string text)
-        {
-            // Текст не изменился — не надо.
-            if (state.LastText == text) return false;
-
-            // Для VK — не чаще раза в 30 сек.
-            if (svc is VkNotificationService)
-            {
-                var since = DateTime.UtcNow - state.LastEditUtc;
-                if (since < TimeSpan.FromSeconds(30)) return false;
-            }
-
-            return true;
-        }
-
         public async Task ResetAsync()
         {
             foreach (var svc in NotificationManager.GetServices())
             {
-                if (IsStepsSuppressed(svc)) continue;
                 try { await svc.SendAsync("✅ Все шаги завершены.").ConfigureAwait(false); }
                 catch { }
             }
@@ -211,7 +194,10 @@ namespace TERMINAL.Notifications
             lock (_lock)
             {
                 foreach (var st in _progressChannels.Values)
-                { st.MessageId = null; st.LastText = null; }
+                {
+                    st.MessageId = null;
+                    st.LastText = null;
+                }
             }
         }
     }

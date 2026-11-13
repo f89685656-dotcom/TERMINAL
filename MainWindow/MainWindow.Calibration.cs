@@ -829,6 +829,11 @@ namespace TERMINAL
             _currentStepIndexForNotify = stepIndex;
             _currentTimerRemaining = remaining;
 
+            // ★ Таблицу обновляем не чаще раза в 2 секунды.
+            //   Для TG — edit, для VK — ShouldPush отсеет до 30 сек,
+            //   для Email/Max — SupportsEdit = false, они таблицу не получают.
+            var lastTableUpdate = DateTime.MinValue;
+
             if (!waitForState)
             {
                 _currentStepStatus = "таймер";
@@ -850,6 +855,13 @@ namespace TERMINAL
                     long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
                     AddTickTiming("timer-idle", pureMs);
 
+                    // ★ Обновляем таблицу раз в 2 секунды
+                    if ((DateTime.Now - lastTableUpdate).TotalSeconds >= 2)
+                    {
+                        lastTableUpdate = DateTime.Now;
+                        try { await UpdatePressureTableInTelegramAsync(); } catch { }
+                    }
+
                     int sleep = 1000 - (int)pureMs;
                     if (sleep > 0) await SafeDelayAsync(sleep);
                 }
@@ -866,7 +878,7 @@ namespace TERMINAL
             _currentStepStatus = "ожидание";
             SetStatus($"До начала съёма данных: таймер запущен на {remaining} сек");
 
-            // ★ Таймаут ожидания стабилизации (до первого ok;)
+            // ★ Таймаут ожидания первой стабилизации
             var waitingForFirstOkSince = DateTime.Now;
             int firstOkTimeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
 
@@ -893,8 +905,8 @@ namespace TERMINAL
                 if (stateOk)
                 {
                     firstOkReceived = true;
-                    waitingForFirstOkSince = DateTime.MinValue;   // сброс таймера ожидания
-                    waitingForRecoverySince = DateTime.MinValue;  // сброс таймера восстановления
+                    waitingForFirstOkSince = DateTime.MinValue;
+                    waitingForRecoverySince = DateTime.MinValue;
 
                     remaining--;
                     _currentTimerRemaining = remaining;
@@ -912,7 +924,6 @@ namespace TERMINAL
                         if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                             _stepItems[stepIndex].TimerText = remaining.ToString();
 
-                        // ★ Запускаем (или продолжаем) отсчёт «ожидание восстановления»
                         if (waitingForRecoverySince == DateTime.MinValue)
                             waitingForRecoverySince = DateTime.Now;
                     }
@@ -959,7 +970,7 @@ namespace TERMINAL
                             return;
                         }
 
-                        // Прогресс в статусной строке: сколько ещё ждать
+                        // Прогресс в статусной строке
                         if (waitingForRecoverySince != DateTime.MinValue)
                         {
                             var waited = DateTime.Now - waitingForRecoverySince;
@@ -983,6 +994,13 @@ namespace TERMINAL
                                 log: false);
                         }
 
+                        // ★ Обновляем таблицу раз в 2 секунды, чтобы было видно «ожидание»
+                        if ((DateTime.Now - lastTableUpdate).TotalSeconds >= 2)
+                        {
+                            lastTableUpdate = DateTime.Now;
+                            try { await UpdatePressureTableInTelegramAsync(); } catch { }
+                        }
+
                         await SafeDelayAsync(1000);
 
                         lock (_agkStateLock) snap = _agkState;
@@ -998,7 +1016,6 @@ namespace TERMINAL
                 else
                 {
                     // stateOk == false, stateWait == false (error / нет данных)
-                    // Считаем это как «продолжаем ждать», но если долго — таймаут.
                     if (waitingForFirstOkSince == DateTime.MinValue && !firstOkReceived)
                         waitingForFirstOkSince = DateTime.Now;
 
@@ -1023,6 +1040,13 @@ namespace TERMINAL
                 if (pureMs > 1000)
                 {
                     AppendLog($"⚠ Долгий такт timer-step: {pureMs} мс", Brushes.OrangeRed);
+                }
+
+                // ★ Обновляем таблицу раз в 2 секунды
+                if ((DateTime.Now - lastTableUpdate).TotalSeconds >= 2)
+                {
+                    lastTableUpdate = DateTime.Now;
+                    try { await UpdatePressureTableInTelegramAsync(); } catch { }
                 }
 
                 int sleep = 1000 - (int)pureMs;

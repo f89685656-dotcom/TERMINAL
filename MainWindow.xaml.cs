@@ -518,9 +518,6 @@ namespace TERMINAL
                 VkNotificationService.MinRequestInterval = TimeSpan.FromSeconds(3);
                 VkNotificationService.StabilizationInterval = TimeSpan.FromSeconds(10);
 
-                // ★ На старте шаги не подавлены — включим, когда реально начнётся таблица.
-                _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
-
                 AskForStartupMode();
                 StartBroadcastServer();
 
@@ -1608,7 +1605,6 @@ namespace TERMINAL
 
             _batchProgress.ResetTable();
             _batchProgress.ResetProgress();
-            _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
 
             NotificationManager.ClearServices();
 
