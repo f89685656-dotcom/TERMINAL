@@ -209,8 +209,6 @@ namespace TERMINAL
             foreach (var vk in NotificationManager.GetServices().OfType<VkNotificationService>())
                 vk.ResetStabilizationMessage();
 
-            // ★ УБРАНА ОТПРАВКА ТАБЛИЦЫ ЗДЕСЬ (во время стабилизации она не нужна)
-
             SetExternalButtonsEnabled(false);
             StartButton.IsEnabled = false;
             AddBatchJobButton.IsEnabled = false;
@@ -241,7 +239,7 @@ namespace TERMINAL
                 // ★ Стартовое сообщение — всем каналам.
                 await _batchProgress.SendStatusAsync(startMsg);
 
-                // ★★ ВАЖНО: с этого момента VK получает ТОЛЬКО таблицу/прогресс,
+                // ★★ С этого момента VK получает ТОЛЬКО таблицу/прогресс,
                 //    а шаги в него не идут — иначе они мешают таблице.
                 _batchProgress.SetStepsSuppressed<VkNotificationService>(true);
 
@@ -253,6 +251,9 @@ namespace TERMINAL
                     {
                         SetStatusWarning("Пакетный режим остановлен оператором");
                         string stopMsg = $"⏹ Пакетный режим остановлен оператором. Выполнено: {completedCount}/{enabledCount}";
+
+                        // ★ Разрешаем VK увидеть сообщение об остановке.
+                        _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                         await _batchProgress.SendStatusAsync(stopMsg);
                         return;
                     }
@@ -279,6 +280,9 @@ namespace TERMINAL
                         job.StatusColor = Brushes.OrangeRed;
                         SetStatusError($"[Пакет {completedCount}] не удалось записать уставку");
                         string errMsg = $"❌ Ошибка записи уставки на задании {completedCount}. Пакет прерван.";
+
+                        // ★ Разрешаем VK увидеть ошибку.
+                        _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                         await _batchProgress.SendStatusAsync(errMsg);
                         return;
                     }
@@ -298,6 +302,7 @@ namespace TERMINAL
                         await _batchProgress.UpdateProgressAsync($"⏳ Задание {completedCount}/{enabledCount}. Ожидание стабилизации {job.StabilizationMinutes} мин...");
 
                         _lastStabNotify = DateTime.MinValue;
+                        _lastVkStabNotify = DateTime.MinValue;
 
                         bool stable = await WaitForBatchStabilizationAsync(job.StabilizationMinutes, completedCount, enabledCount);
 
@@ -307,6 +312,8 @@ namespace TERMINAL
                             job.StatusColor = Brushes.OrangeRed;
                             SetStatusWarning($"[Пакет {completedCount}] стабилизация прервана");
                             string errMsg = $"❌ Стабилизация прервана на задании {completedCount}.";
+
+                            _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                             await _batchProgress.SendStatusAsync(errMsg);
                             return;
                         }
@@ -325,6 +332,8 @@ namespace TERMINAL
                             job.StatusColor = Brushes.OrangeRed;
                             SetStatusWarning($"[Пакет {completedCount}] проверка допуска прервана");
                             string errMsg = $"❌ Проверка допуска прервана на задании {completedCount}.";
+
+                            _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                             await _batchProgress.SendStatusAsync(errMsg);
                             return;
                         }
@@ -349,20 +358,18 @@ namespace TERMINAL
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-                    // ★ Перед таблицей — сбрасываем табличное состояние (новый пакет, новый id).
-                    _batchProgress.ResetTable();
+                    // ★ ResetTable() тут НЕ вызываем: один пакет = одно «живое» сообщение-таблица,
+                    //   которая редактируется при переходе между заданиями. Сброс был один раз
+                    //   в начале RunBatchAsync.
 
                     if (job.IsCalibrationMode)
-                    {
-                        await UpdatePressureTableInTelegramAsync();   // внутри — _batchProgress.UpdateTableAsync
-                    }
+                        await UpdatePressureTableInTelegramAsync();
                     else
-                    {
                         await UpdatePumpTableInTelegramAsync();
-                    }
+
                     await Task.Delay(500);
 
-                    // ★ 2. Запускаем режим
+                    // ★ Запускаем режим
                     if (job.IsCalibrationMode)
                     {
                         int startStep = job.StartStep;
@@ -381,6 +388,8 @@ namespace TERMINAL
                     {
                         SetStatusWarning("Пакетный режим остановлен оператором");
                         string stopMsg = $"⏹ Пакетный режим остановлен на задании {completedCount}.";
+
+                        _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                         await _batchProgress.SendStatusAsync(stopMsg);
                         return;
                     }
@@ -391,6 +400,8 @@ namespace TERMINAL
                         job.StatusColor = Brushes.OrangeRed;
                         SetStatusError($"[Пакет {completedCount}/{enabledCount}] задание прервано");
                         string errMsg = $"❌ Задание {completedCount} прервано. Пакет остановлен.";
+
+                        _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                         await _batchProgress.SendStatusAsync(errMsg);
                         return;
                     }
@@ -407,6 +418,9 @@ namespace TERMINAL
 
                 string endMsg = $"🏁 Пакетный режим завершён успешно. Обработано: {completedCount}/{enabledCount}";
                 await _batchProgress.SendStatusAsync(endMsg);
+
+                // ★ Разрешаем VK увидеть финальное сообщение ResetAsync.
+                _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                 await _batchProgress.ResetAsync();
 
                 if (_autoStopFurnace && !_batchStopRequested && !_stopRequested)
@@ -432,6 +446,9 @@ namespace TERMINAL
 
                 SetStatusError($"Пакет: необработанная ошибка — {ex.Message}");
                 string errMsg = $"❌ Пакетный режим завершён с ошибкой: {ex.Message}";
+
+                // ★ Разрешаем VK увидеть ошибку.
+                _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
                 await _batchProgress.SendStatusAsync(errMsg);
                 await _batchProgress.ResetAsync();
             }
@@ -442,7 +459,6 @@ namespace TERMINAL
                 StopBatchStatusTimer();
                 _batchRunDoneSignal = null;
                 _batchStopRequested = false;
-                StopBatchStatusTimer();
 
                 StartButton.IsEnabled = true;
                 AddBatchJobButton.IsEnabled = true;
@@ -463,7 +479,7 @@ namespace TERMINAL
                 BatchProgressText.Text = "";
                 UpdateStartButtonMode();
 
-                // ★ Разрешаем шаги в VK снова.
+                // ★ Гарантированно разрешаем шаги в VK (даже если вышли через return).
                 _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
 
                 // ★ Очищаем id таблицы/прогресса — старые сообщения могли быть удалены.
@@ -620,7 +636,7 @@ namespace TERMINAL
                 string mode = firstEnabled.IsCalibrationMode ? "Градуировка" : "Бароциклирование";
                 AppendLog($"Предпросмотр: выбрано первое задание — {mode}", Brushes.Blue);
 
-                // ★ ПЕРЕКЛЮЧАЕМ ПАНЕЛИ В ИНТЕРФЕЙСЕ (это делаем всегда, даже вне пакета)
+                // ★ ПЕРЕКЛЮЧАЕМ ПАНЕЛИ В ИНТЕРФЕЙСЕ (всегда, даже вне пакета)
                 if (firstEnabled.IsCalibrationMode)
                 {
                     CalibrationPanel.Visibility = Visibility.Visible;
@@ -638,17 +654,12 @@ namespace TERMINAL
                 // ★ ОТПРАВЛЯЕМ В УВЕДОМЛЕНИЯ ТОЛЬКО ЕСЛИ ПАКЕТ ЗАПУЩЕН
                 if (_batchRunning)
                 {
-                    _batchProgress.ResetTable();
-                    await Task.Delay(100);
-
+                    // ResetTable НЕ нужен: RunBatchAsync уже сбросил состояние,
+                    // а UpdateTableAsync сам отредактирует сообщение, если id есть.
                     if (firstEnabled.IsCalibrationMode)
-                    {
                         await UpdatePressureTableInTelegramAsync();
-                    }
                     else
-                    {
                         await UpdatePumpTableInTelegramAsync();
-                    }
                 }
             }
             catch (Exception ex)
@@ -759,7 +770,24 @@ namespace TERMINAL
 
                     var elapsed = DateTime.Now - inRangeSince;
                     var remaining = TimeSpan.FromMinutes(requiredMinutes) - elapsed;
-                    if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+
+                    // ★★★ КЛЮЧЕВОЙ ФИКС: выход по завершении стабилизации ★★★
+                    if (remaining <= TimeSpan.Zero)
+                    {
+                        BatchProgressText.Text =
+                            $"Задание {jobIndex}/{totalJobs}: стабилизация завершена " +
+                            $"({requiredMinutes} мин при {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C)";
+
+                        _lastStabStatus = $"✅ Задание {jobIndex}/{totalJobs}: стабилизация " +
+                                          $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C завершена";
+                        _ = _batchProgress.UpdateProgressAsync(_lastStabStatus);
+
+                        AppendLog($"Стабилизация {requiredMinutes} мин при " +
+                                  $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — завершена",
+                                  Brushes.Green);
+
+                        return true;
+                    }
 
                     BatchProgressText.Text =
                         $"Задание {jobIndex}/{totalJobs}: стабилизация " +
@@ -769,9 +797,9 @@ namespace TERMINAL
                     // ★ ОБНОВЛЕНИЕ УВЕДОМЛЕНИЙ
                     var now = DateTime.Now;
 
-                    // ★ Один блок для всех каналов. Telegram редактирует на каждом тике,
-                    //   VK — с 30-секундным троттлингом (внутри ShouldPush BatchProgressNotifier),
-                    //   Email/Max получают новые сообщения — это норма для них.
+                    // Один блок для всех каналов. Telegram редактирует на каждом тике,
+                    // VK — с 30-секундным троттлингом (внутри ShouldPush BatchProgressNotifier),
+                    // Email/Max получают новые сообщения — это норма для них.
                     if (_lastStabNotify == DateTime.MinValue || (now - _lastStabNotify).TotalSeconds >= 1.0)
                     {
                         long elapsedMs = (long)(now - _lastStabNotify).TotalMilliseconds;
@@ -791,11 +819,9 @@ namespace TERMINAL
 
                         _ = _batchProgress.UpdateProgressAsync(_lastStabStatus);
                     }
-
-                    // ★ VK-блок УДАЛЁН — UpdateStabilizationAsync больше не нужен.
-                    //   VK-троттлинг обеспечивает сам BatchProgressNotifier (ShouldPush, 30 сек).                }
-                    else
-                    {
+                }
+                else
+                {
                     if (outOfRangeSince == DateTime.MinValue)
                         outOfRangeSince = DateTime.Now;
 
