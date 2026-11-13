@@ -591,7 +591,13 @@ namespace TERMINAL
                 }
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем максимальное давление");
-                await RunTimerWithRightBlockAsync(300, true);
+                bool maxHoldOk = await RunTimerWithRightBlockAsync(300, true);
+                if (!maxHoldOk)
+                {
+                    AppendLog($"[Цикл {cycle}] выдержка максимума прервана (таймаут набора давления) — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
 
                 SetStatus($"[Цикл {cycle}] сброс (vent)");
                 bool ventOk = await GoToVentAsync();
@@ -615,7 +621,13 @@ namespace TERMINAL
                 }
 
                 SetStatus($"[Цикл {cycle}] Выдерживаем атмосферное давление");
-                await RunTimerWithRightBlockAsync(300, false);
+                bool atmoHoldOk = await RunTimerWithRightBlockAsync(300, false);
+                if (!atmoHoldOk)
+                {
+                    AppendLog($"[Цикл {cycle}] выдержка атмосферы прервана — прерывание",
+                              Brushes.OrangeRed);
+                    return false;
+                }
             }
 
             MaxArrow.Text = "  ";
@@ -628,21 +640,25 @@ namespace TERMINAL
         }
         /// <summary>
         /// Таймер выдержки. Идёт по часам (DateTime), не зависит от get_state_in_point.
-        /// 
+        ///
         /// Максимум (isMax = true):
-        ///   • раз в секунду проверяет get_state_in_point;
+        ///   • раз в 3 секунды проверяет get_state_in_point;
         ///   • при срыве (ok → не ok) прибавляет +30 сек к оставшемуся времени;
-        ///   • если ok; не приходит — штраф больше не начисляется, просто ждём;
-        ///   • если ok; снова пришёл и снова пропал — новый +30.
-        /// 
+        ///   • ★ если ok; не приходит дольше AgkPressureTimeoutMinutes — прерывание
+        ///     (и для «первого ok», и для «восстановления после срыва»);
+        ///
         /// Атмосфера (isMax = false):
         ///   • get_state_in_point; НЕ проверяется вообще;
         ///   • чистый отсчёт времени.
-        /// 
+        ///
         /// Пауза останавливает таймер (сдвигает startTime).
         /// UI обновляется только при смене значения.
+        ///
+        /// Возвращает:
+        ///   true  — таймер досчитал до 0;
+        ///   false — прервано по _stopRequested или таймауту набора давления.
         /// </summary>
-        private async Task RunTimerWithRightBlockAsync(int seconds, bool isMax)
+        private async Task<bool> RunTimerWithRightBlockAsync(int seconds, bool isMax)
         {
             var startTime = DateTime.Now;
             int lastDisplayed = seconds;
@@ -653,12 +669,20 @@ namespace TERMINAL
             SetStatus($"{(isMax ? "Максимум" : "Атмосфера")}: таймер запущен на {seconds} сек");
 
             var lastStateCheck = DateTime.MinValue;
-            bool lastStateOk = true;   // считаем, что в начале всё ок
+
+            // ★ Для максимума: пока не пришёл первый ok; — считаем, что давление НЕ набрано.
+            //   Для атмосферы неважно.
+            bool lastStateOk = !isMax;   // isMax=false → true (не проверяем); isMax=true → false (ждём ok;)
+
+            // ★ Таймаут ожидания первого ok; и восстановления после срыва
+            int stateTimeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
+            var waitingForFirstOkSince = isMax ? DateTime.Now : DateTime.MinValue;
+            var waitingForRecoverySince = DateTime.MinValue;
 
             while (true)
             {
-                if (_stopRequested) return;
-                if (!await WaitIfPausedAsync()) return;
+                if (_stopRequested) return false;
+                if (!await WaitIfPausedAsync()) return false;
 
                 // ─── Пауза: сдвигаем старт, чтобы «потерянное» время не считалось ───
                 if (_pauseRequested)
@@ -667,9 +691,16 @@ namespace TERMINAL
                     while (_pauseRequested && !_stopRequested)
                         await Task.Delay(100);
 
-                    if (_stopRequested) return;
+                    if (_stopRequested) return false;
 
-                    startTime += (DateTime.Now - pauseStart);
+                    var pausedFor = DateTime.Now - pauseStart;
+                    startTime += pausedFor;
+
+                    // ★ Пауза не должна сжигать таймауты набора давления
+                    if (waitingForFirstOkSince != DateTime.MinValue)
+                        waitingForFirstOkSince += pausedFor;
+                    if (waitingForRecoverySince != DateTime.MinValue)
+                        waitingForRecoverySince += pausedFor;
                 }
 
                 // ─── Проверка state_in_point — ТОЛЬКО для максимума ───
@@ -681,13 +712,6 @@ namespace TERMINAL
                     bool stateOk = stateResponse != null &&
                                    stateResponse.Contains("ok;", StringComparison.Ordinal);
 
-                    // ★ Временно: логируем сырой ответ
-                    //    (только первые 30 секунд после запуска таймера, чтобы не залить журнал)
-                    //if ((DateTime.Now - startTime).TotalSeconds < 30)
-                    //{
-                    //    AppendLog($"Максимум: state='{stateResponse}'", Brushes.Gray);
-                    //}
-
                     if (!stateOk)
                     {
                         if (lastStateOk)
@@ -696,6 +720,7 @@ namespace TERMINAL
                             AppendLog($"Максимум: срыв с регулировки → +30 сек", Brushes.OrangeRed);
 
                             startTime += TimeSpan.FromSeconds(30);
+                            waitingForRecoverySince = DateTime.Now;
 
                             int newRemaining = seconds - (int)((DateTime.Now - startTime).TotalSeconds);
                             if (newRemaining > 0)
@@ -706,11 +731,70 @@ namespace TERMINAL
                         }
 
                         lastStateOk = false;
-                        // не выходим, продолжаем таймер
+
+                        // ★ Таймаут «ждать первое ok;»
+                        if (waitingForFirstOkSince != DateTime.MinValue &&
+                            (DateTime.Now - waitingForFirstOkSince).TotalMilliseconds >= stateTimeoutMs)
+                        {
+                            AppendLog(
+                                $"Максимум: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                                $"давление так и не набралось. Возможен срыв кольца или утечка. " +
+                                $"Прерывание бароциклирования.",
+                                Brushes.Red);
+                            SetStatusError(
+                                $"Бароциклирование: таймаут набора давления " +
+                                $"({_agkPressureTimeoutMinutes} мин). Прерывание.");
+                            return false;
+                        }
+
+                        // ★ Таймаут «ждать восстановление после срыва»
+                        if (waitingForRecoverySince != DateTime.MinValue &&
+                            (DateTime.Now - waitingForRecoverySince).TotalMilliseconds >= stateTimeoutMs)
+                        {
+                            AppendLog(
+                                $"Максимум: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                                $"после срыва давление не восстановилось. Возможен срыв кольца или утечка. " +
+                                $"Прерывание бароциклирования.",
+                                Brushes.Red);
+                            SetStatusError(
+                                $"Бароциклирование: давление не восстановилось за " +
+                                $"{_agkPressureTimeoutMinutes} мин после срыва. Прерывание.");
+                            return false;
+                        }
+
+                        // Прогресс в статусной строке: сколько ещё ждать
+                        if (waitingForRecoverySince != DateTime.MinValue)
+                        {
+                            var left = TimeSpan.FromMinutes(_agkPressureTimeoutMinutes) -
+                                       (DateTime.Now - waitingForRecoverySince);
+                            if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+                            SetStatus(
+                                $"Максимум: ожидание восстановления давления — " +
+                                $"осталось {left.Minutes:D2}:{left.Seconds:D2} " +
+                                $"({_agkPressureTimeoutMinutes} мин лимит)",
+                                log: false);
+                        }
+                        else if (waitingForFirstOkSince != DateTime.MinValue)
+                        {
+                            var left = TimeSpan.FromMinutes(_agkPressureTimeoutMinutes) -
+                                       (DateTime.Now - waitingForFirstOkSince);
+                            if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+                            SetStatus(
+                                $"Максимум: ожидание набора давления — " +
+                                $"осталось {left.Minutes:D2}:{left.Seconds:D2} " +
+                                $"({_agkPressureTimeoutMinutes} мин лимит)",
+                                log: false);
+                        }
                     }
                     else
                     {
+                        // ★ Давление в норме — сбрасываем оба таймаута
+                        if (!lastStateOk)
+                            AppendLog("Максимум: давление восстановлено", Brushes.Green);
+
                         lastStateOk = true;
+                        waitingForFirstOkSince = DateTime.MinValue;
+                        waitingForRecoverySince = DateTime.MinValue;
                     }
                 }
 
@@ -722,7 +806,7 @@ namespace TERMINAL
                 {
                     if (isMax) MaxTimerText.Text = "0";
                     else MinTimerText.Text = "0";
-                    return;
+                    return true;
                 }
 
                 // ─── Обновляем UI только когда значение изменилось ───
@@ -757,7 +841,7 @@ namespace TERMINAL
                     var cycleStart = DateTime.Now;
 
                     remaining--;
-                    _currentTimerRemaining = remaining; // ★ Обновляем для Telegram
+                    _currentTimerRemaining = remaining;
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
@@ -777,9 +861,18 @@ namespace TERMINAL
             }
 
             // ─── waitForState == true ───
+
             bool firstOkReceived = false;
             _currentStepStatus = "ожидание";
             SetStatus($"До начала съёма данных: таймер запущен на {remaining} сек");
+
+            // ★ Таймаут ожидания стабилизации (до первого ok;)
+            var waitingForFirstOkSince = DateTime.Now;
+            int firstOkTimeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
+
+            // ★ Таймаут ожидания ВОССТАНОВЛЕНИЯ после срыва
+            var waitingForRecoverySince = DateTime.MinValue;
+            int recoveryTimeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
 
             while (remaining > 0)
             {
@@ -787,32 +880,25 @@ namespace TERMINAL
 
                 var cycleStart = DateTime.Now;
 
-                long refreshMs = 0;
-                long unitsMs = 0;
-                long stateMs = 0;
-
-                var t1 = DateTime.Now;
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
-                _lastKnownPressure = snap.Pressure;
-                refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
 
-                var t2 = DateTime.Now;
+                _lastKnownPressure = snap.Pressure;
                 if (!string.IsNullOrEmpty(snap.Units))
                     UpdateUnits(snap.Units);
-                unitsMs = (long)(DateTime.Now - t2).TotalMilliseconds;
 
-                var t3 = DateTime.Now;
                 bool stateOk = snap.StateInPointOk;
                 bool stateWait = snap.StateInPointWait;
-                stateMs = (long)(DateTime.Now - t3).TotalMilliseconds;
 
                 if (stateOk)
                 {
                     firstOkReceived = true;
+                    waitingForFirstOkSince = DateTime.MinValue;   // сброс таймера ожидания
+                    waitingForRecoverySince = DateTime.MinValue;  // сброс таймера восстановления
+
                     remaining--;
-                    _currentTimerRemaining = remaining; // ★ Обновляем для Telegram
-                    _currentStepStatus = "таймер";      // ★ Обновляем для Telegram
+                    _currentTimerRemaining = remaining;
+                    _currentStepStatus = "таймер";
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
                 }
@@ -821,30 +907,113 @@ namespace TERMINAL
                     if (firstOkReceived)
                     {
                         remaining += 30;
-                        _currentTimerRemaining = remaining; // ★
+                        _currentTimerRemaining = remaining;
                         SetStatus($"Срыв! Таймер +30 сек. Осталось: {remaining}");
                         if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                             _stepItems[stepIndex].TimerText = remaining.ToString();
+
+                        // ★ Запускаем (или продолжаем) отсчёт «ожидание восстановления»
+                        if (waitingForRecoverySince == DateTime.MinValue)
+                            waitingForRecoverySince = DateTime.Now;
                     }
                     else
                     {
-                        _currentStepStatus = "ожидание стабилизации"; // ★
+                        _currentStepStatus = "ожидание стабилизации";
                         SetStatus("Ожидание стабилизации давления...");
                     }
 
+                    // ─── Внутренний цикл: ждём StateInPointOk, но с таймаутом ───
                     while (true)
                     {
                         if (_stopRequested) return;
 
-                        SetStatus($"До начала съёма данных: {remaining} сек", log: false);
+                        // ★ Таймаут до первой стабилизации
+                        if (waitingForFirstOkSince != DateTime.MinValue &&
+                            (DateTime.Now - waitingForFirstOkSince).TotalMilliseconds >= firstOkTimeoutMs)
+                        {
+                            AppendLog(
+                                $"RunTimerWithStepAsync: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                                $"давление так и не стабилизировалось (шаг {stepIndex + 1}). " +
+                                $"Возможен срыв кольца или утечка. Прерывание.",
+                                Brushes.Red);
+                            SetStatusError(
+                                $"Шаг {stepIndex + 1}: таймаут ожидания стабилизации давления " +
+                                $"({_agkPressureTimeoutMinutes} мин). Прерывание градуировки.");
+                            _currentStepStatus = "таймаут";
+                            return;
+                        }
+
+                        // ★ Таймаут восстановления после срыва
+                        if (waitingForRecoverySince != DateTime.MinValue &&
+                            (DateTime.Now - waitingForRecoverySince).TotalMilliseconds >= recoveryTimeoutMs)
+                        {
+                            AppendLog(
+                                $"RunTimerWithStepAsync: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                                $"после срыва давление не восстановилось (шаг {stepIndex + 1}). " +
+                                $"Возможен срыв кольца или утечка. Прерывание.",
+                                Brushes.Red);
+                            SetStatusError(
+                                $"Шаг {stepIndex + 1}: давление не восстановилось за " +
+                                $"{_agkPressureTimeoutMinutes} мин после срыва. Прерывание градуировки.");
+                            _currentStepStatus = "таймаут";
+                            return;
+                        }
+
+                        // Прогресс в статусной строке: сколько ещё ждать
+                        if (waitingForRecoverySince != DateTime.MinValue)
+                        {
+                            var waited = DateTime.Now - waitingForRecoverySince;
+                            var left = TimeSpan.FromMinutes(_agkPressureTimeoutMinutes) - waited;
+                            if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+                            SetStatus(
+                                $"Ожидание восстановления давления: " +
+                                $"осталось {left.Minutes:D2}:{left.Seconds:D2} " +
+                                $"({_agkPressureTimeoutMinutes} мин лимит)",
+                                log: false);
+                        }
+                        else
+                        {
+                            var waited = DateTime.Now - waitingForFirstOkSince;
+                            var left = TimeSpan.FromMinutes(_agkPressureTimeoutMinutes) - waited;
+                            if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+                            SetStatus(
+                                $"Ожидание стабилизации давления: " +
+                                $"осталось {left.Minutes:D2}:{left.Seconds:D2} " +
+                                $"({_agkPressureTimeoutMinutes} мин лимит)",
+                                log: false);
+                        }
+
                         await SafeDelayAsync(1000);
 
                         lock (_agkStateLock) snap = _agkState;
                         if (snap.StateInPointOk)
                         {
                             firstOkReceived = true;
+                            waitingForFirstOkSince = DateTime.MinValue;
+                            waitingForRecoverySince = DateTime.MinValue;
                             break;
                         }
+                    }
+                }
+                else
+                {
+                    // stateOk == false, stateWait == false (error / нет данных)
+                    // Считаем это как «продолжаем ждать», но если долго — таймаут.
+                    if (waitingForFirstOkSince == DateTime.MinValue && !firstOkReceived)
+                        waitingForFirstOkSince = DateTime.Now;
+
+                    if (waitingForFirstOkSince != DateTime.MinValue &&
+                        (DateTime.Now - waitingForFirstOkSince).TotalMilliseconds >= firstOkTimeoutMs)
+                    {
+                        AppendLog(
+                            $"RunTimerWithStepAsync: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                            $"нет данных о стабилизации давления (шаг {stepIndex + 1}). Прерывание.",
+                            Brushes.Red);
+                        SetStatusError(
+                            $"Шаг {stepIndex + 1}: таймаут ожидания данных о стабилизации " +
+                            $"({_agkPressureTimeoutMinutes} мин). Прерывание градуировки.");
+                        _currentStepStatus = "таймаут";
+                        return;
                     }
                 }
 
@@ -853,9 +1022,7 @@ namespace TERMINAL
 
                 if (pureMs > 1000)
                 {
-                    AppendLog($"⚠ Долгий такт timer-step: {pureMs} мс " +
-                              $"(refr {refreshMs}, units {unitsMs}, state {stateMs})",
-                              Brushes.OrangeRed);
+                    AppendLog($"⚠ Долгий такт timer-step: {pureMs} мс", Brushes.OrangeRed);
                 }
 
                 int sleep = 1000 - (int)pureMs;

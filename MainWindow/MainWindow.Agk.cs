@@ -14,6 +14,9 @@ namespace TERMINAL
 {
     public partial class MainWindow
     {
+
+        private int _agkCacheStaleStreak = 0;   // поле класса
+
         private async Task ConnectToDeviceLoopAsync()
         {
             while (!_cts.IsCancellationRequested)
@@ -82,6 +85,8 @@ namespace TERMINAL
                 await Task.Delay(5000);
             }
         }
+
+        
 
         /// <summary>
         /// Проверка связи с АГК: отправляет get_ping; и ждёт ответ "ok;".
@@ -431,17 +436,30 @@ namespace TERMINAL
         private async Task<bool> WaitForStateInPointAsync(double targetPressure = 0)
         {
             var start = DateTime.Now;
+            var pausedTotal = TimeSpan.Zero;
+            var pauseStartedAt = DateTime.MinValue;
             int timeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
             int okCount = 0;
 
             while (true)
             {
                 if (_stopRequested) return false;
-                if (!await WaitIfPausedAsync()) return false;
 
-                var elapsed = DateTime.Now - start;
+                // ─── Пауза: вычитаем из elapsed ───
+                if (_pauseRequested)
+                {
+                    if (pauseStartedAt == DateTime.MinValue) pauseStartedAt = DateTime.Now;
+                    await Task.Delay(100);
+                    continue;
+                }
+                else if (pauseStartedAt != DateTime.MinValue)
+                {
+                    pausedTotal += DateTime.Now - pauseStartedAt;
+                    pauseStartedAt = DateTime.MinValue;
+                }
 
-                // ★ Единственный таймаут — глобальный из настроек
+                var elapsed = DateTime.Now - start - pausedTotal;
+
                 if (elapsed.TotalMilliseconds >= timeoutMs)
                 {
                     AppendLog($"WaitForStateInPoint: таймаут {_agkPressureTimeoutMinutes} мин — " +
@@ -450,20 +468,15 @@ namespace TERMINAL
                     return false;
                 }
 
-                // ★ Читаем из кэша
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
 
-                // ★ Защита от того, что фон умер
-                if ((DateTime.Now - snap.UpdatedAt).TotalSeconds > 5)
+                if ((DateTime.Now - snap.UpdatedAt).TotalSeconds > 15)   // ★ 15, не 5
                 {
-                    AppendLog("WaitForStateInPoint: КЭШ АГК НЕ ОБНОВЛЯЕТСЯ (>5 сек)!", Brushes.Red);
+                    AppendLog("WaitForStateInPoint: КЭШ АГК НЕ ОБНОВЛЯЕТСЯ (>15 сек)!", Brushes.Red);
                     return false;
                 }
 
-                // ★ Логика:
-                // - Если "ok;" -> набираем счетчик
-                // - Если "error;" (атмосфера) или "wait;" -> сбрасываем счетчик и ждем
                 if (snap.StateInPointOk)
                 {
                     okCount++;
@@ -479,7 +492,6 @@ namespace TERMINAL
                     okCount = 0;
                 }
 
-                // Обновляем статус внизу экрана
                 int elapsedMin = (int)elapsed.TotalMinutes;
                 string stateText = snap.StateInPointOk ? "ok" : (snap.StateInPointWait ? "wait" : "error/нет данных");
                 SetStatus($"Ожидание стабилизации: {okCount}/5 (АГК: {stateText}) " +
@@ -488,7 +500,6 @@ namespace TERMINAL
                 await Task.Delay(1000);
             }
         }
-
         /// <summary>
         /// Ждёт снижения давления ниже порога после vent.
         /// Прерывается по таймауту (AgkPressureTimeoutMinutes) или по переданному лимиту.

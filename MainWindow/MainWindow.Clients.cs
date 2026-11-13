@@ -544,9 +544,28 @@ namespace TERMINAL
 
         private async Task<bool> TakePointUntilOkAsync(ConnectedClient client)
         {
+            // ★ Общий таймаут на все попытки: 3× таймаут АГК, минимум 30 минут.
+            int totalTimeoutMs = Math.Max(
+                _agkPressureTimeoutMinutes * 60 * 1000 * 3,
+                30 * 60 * 1000);
+
+            var since = DateTime.Now;
+
             while (!_stopRequested)
             {
                 if (!await WaitIfPausedAsync()) return false;
+
+                if ((DateTime.Now - since).TotalMilliseconds >= totalTimeoutMs)
+                {
+                    AppendLog(
+                        $"TakePointUntilOkAsync: общий таймаут {totalTimeoutMs / 60000} мин — " +
+                        $"клиент {client.Sid} так и не ответил DONE_OK. Прерывание.",
+                        Brushes.Red);
+                    SetStatusError(
+                        $"КОСА: клиент {client.Sid} не подтвердил съём за " +
+                        $"{totalTimeoutMs / 60000} мин. Прерывание градуировки.");
+                    return false;
+                }
 
                 client.LastDoneOk = false;
                 client.LastDoneFail = false;
@@ -574,7 +593,6 @@ namespace TERMINAL
             }
             return false;
         }
-
         private async Task KosaWaitAsync(int seconds, bool waitForState, int stepIndex)
         {
             int remaining = seconds;
@@ -609,48 +627,67 @@ namespace TERMINAL
             // ─── waitForState == true ───
             bool firstOkReceived = false;
 
+            // ★ Таймаут ожидания первой стабилизации
+            var waitingForFirstOkSince = DateTime.Now;
+            int firstOkTimeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
+
+            // ★ Таймаут восстановления после срыва
+            var waitingForRecoverySince = DateTime.MinValue;
+            int recoveryTimeoutMs = _agkPressureTimeoutMinutes * 60 * 1000;
+
             while (!firstOkReceived)
             {
+                if (_stopRequested) return;
 
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
 
                 if (snap.StateInPointOk)
-                    firstOkReceived = true;
-                else
                 {
-                    SetStatus("КОСА: ожидание стабилизации давления...",
-                              running: true, log: false);
-                    await SafeDelayAsync(1000);
+                    firstOkReceived = true;
+                    break;
                 }
+
+                if ((DateTime.Now - waitingForFirstOkSince).TotalMilliseconds >= firstOkTimeoutMs)
+                {
+                    AppendLog(
+                        $"KosaWaitAsync: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                        $"давление так и не стабилизировалось (шаг {stepIndex + 1}). Прерывание.",
+                        Brushes.Red);
+                    SetStatusError(
+                        $"КОСА, шаг {stepIndex + 1}: таймаут ожидания стабилизации давления " +
+                        $"({_agkPressureTimeoutMinutes} мин). Прерывание градуировки.");
+                    return;
+                }
+
+                var waited = DateTime.Now - waitingForFirstOkSince;
+                var left = TimeSpan.FromMinutes(_agkPressureTimeoutMinutes) - waited;
+                if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+                SetStatus(
+                    $"КОСА: ожидание стабилизации давления — осталось " +
+                    $"{left.Minutes:D2}:{left.Seconds:D2} " +
+                    $"({_agkPressureTimeoutMinutes} мин лимит)",
+                    running: true, log: false);
+
+                await SafeDelayAsync(1000);
             }
 
             while (remaining > 0)
             {
+                if (_stopRequested) return;
+                if (!await WaitIfPausedAsync()) return;
+
                 var cycleStart = DateTime.Now;
 
-                long refreshMs = 0;
-                long stateMs = 0;
-                long uiMs = 0;
-
-                // ─── RefreshPressure (из кэша, мгновенно) ───
-                var t1 = DateTime.Now;
-                refreshMs = (long)(DateTime.Now - t1).TotalMilliseconds;
-
-                // ─── get_state_in_point — из кэша ───
-                var t2 = DateTime.Now;
                 AgkSnapshot snap;
                 lock (_agkStateLock) snap = _agkState;
                 bool stateOk = snap.StateInPointOk;
                 bool stateWait = snap.StateInPointWait;
-                stateMs = (long)(DateTime.Now - t2).TotalMilliseconds;
-
-                // ─── UI и логика ───
-                var t3 = DateTime.Now;
 
                 if (stateOk)
                 {
                     remaining--;
+                    waitingForRecoverySince = DateTime.MinValue;
                     SetStatus($"КОСА: пауза {remaining} сек", running: true, log: false);
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
@@ -664,27 +701,53 @@ namespace TERMINAL
                     if (stepIndex >= 0 && stepIndex < _stepItems.Count)
                         _stepItems[stepIndex].TimerText = remaining.ToString();
 
-                    // Ждём, пока StateInPointOk снова не станет true
+                    if (waitingForRecoverySince == DateTime.MinValue)
+                        waitingForRecoverySince = DateTime.Now;
+
+                    // Ждём восстановления, но с таймаутом
                     while (true)
                     {
+                        if (_stopRequested) return;
+
+                        if ((DateTime.Now - waitingForRecoverySince).TotalMilliseconds >= recoveryTimeoutMs)
+                        {
+                            AppendLog(
+                                $"KosaWaitAsync: таймаут {_agkPressureTimeoutMinutes} мин — " +
+                                $"после срыва давление не восстановилось (шаг {stepIndex + 1}). " +
+                                $"Возможен срыв кольца или утечка. Прерывание.",
+                                Brushes.Red);
+                            SetStatusError(
+                                $"КОСА, шаг {stepIndex + 1}: давление не восстановилось за " +
+                                $"{_agkPressureTimeoutMinutes} мин после срыва. Прерывание градуировки.");
+                            return;
+                        }
+
+                        var waitedRec = DateTime.Now - waitingForRecoverySince;
+                        var leftRec = TimeSpan.FromMinutes(_agkPressureTimeoutMinutes) - waitedRec;
+                        if (leftRec < TimeSpan.Zero) leftRec = TimeSpan.Zero;
+                        SetStatus(
+                            $"КОСА: ожидание восстановления давления — осталось " +
+                            $"{leftRec.Minutes:D2}:{leftRec.Seconds:D2} " +
+                            $"({_agkPressureTimeoutMinutes} мин лимит)",
+                            running: true, log: false);
+
                         await SafeDelayAsync(1000);
 
                         lock (_agkStateLock) snap = _agkState;
-                        if (snap.StateInPointOk) break;
+                        if (snap.StateInPointOk)
+                        {
+                            waitingForRecoverySince = DateTime.MinValue;
+                            break;
+                        }
                     }
                 }
-                // Если ни ok, ни wait — ничего не делаем, ждём следующий тик.
-
-                uiMs = (long)(DateTime.Now - t3).TotalMilliseconds;
 
                 long pureMs = (long)(DateTime.Now - cycleStart).TotalMilliseconds;
                 AddTickTiming("kosa", pureMs);
 
                 if (pureMs > 1000)
                 {
-                    AppendLog($"⚠ Долгий такт kosa: {pureMs} мс " +
-                              $"(refr {refreshMs}, state {stateMs}, ui {uiMs})",
-                              Brushes.OrangeRed);
+                    AppendLog($"⚠ Долгий такт kosa: {pureMs} мс", Brushes.OrangeRed);
                 }
 
                 int sleep = 1000 - (int)pureMs;
