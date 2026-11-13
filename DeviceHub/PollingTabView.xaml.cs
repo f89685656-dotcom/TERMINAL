@@ -13,6 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TERMINAL.Models;
+using TERMINAL.Windows;
 
 namespace TERMINAL.DeviceHub
 {
@@ -33,6 +34,7 @@ namespace TERMINAL.DeviceHub
         private string _csvWideFilePath = null;
         private List<ChannelNode> _csvWideChannels = new List<ChannelNode>();
         private HashSet<ScriptNode> _activeScriptsForPlot = new HashSet<ScriptNode>();
+        private List<ScriptEditorWindow> _openEditors = new List<ScriptEditorWindow>();
 
         public ObservableCollection<ScanProgressInfo> ScanProgresses { get; set; } = new();
         public ObservableCollection<InterfaceNode> Interfaces { get; set; } = new();
@@ -48,6 +50,10 @@ namespace TERMINAL.DeviceHub
         private CancellationTokenSource _scanCts;
 
         private bool _isRs485Enabled = true;
+
+        private bool _isUartEnabled = true; // Включаем UART по умолчанию
+        private List<PortSetting> _uartPorts = new List<PortSetting> { new PortSetting { PortName = "COM39", BaudRate = 57600 } };
+
         private List<PortSetting> _rs485Ports = new List<PortSetting> { new PortSetting { PortName = "COM9", BaudRate = 57600 } };
         private List<string> _selectedI2CDevices = new List<string> { "FT260 [7&5fcd268&0&0000]" };
 
@@ -63,6 +69,15 @@ namespace TERMINAL.DeviceHub
         {
             InitializeComponent();
             DataContext = this;
+
+            // ★ ЗАГРУЖАЕМ НАСТРОЙКИ ПРИ СТАРТЕ ★
+            var settings = AppSettings.Load();
+            _isRs485Enabled = settings.IsRs485Enabled;
+            _rs485Ports = settings.Rs485Ports;
+            _isUartEnabled = settings.IsUartEnabled;
+            _uartPorts = settings.UartPorts;
+            _selectedI2CDevices = settings.I2CDevices;
+
             InitializePlot();
 
             ScanProgressList.ItemsSource = ScanProgresses;
@@ -85,14 +100,24 @@ namespace TERMINAL.DeviceHub
             _engine.DeviceFound += (dev) => Dispatcher.Invoke(() =>
             {
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
+                var uartIface = Interfaces.FirstOrDefault(i => i.Name.Contains("UART"));
                 var i2cIface = Interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
 
+                // Определяем, куда добавлять, по имени порта
                 if (dev.PortName == "I2C")
                 {
-                    if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                    if (i2cIface != null && !i2cIface.Devices.Any(d => d.Address == dev.Address))
                     {
                         dev.ParentInterface = i2cIface;
                         i2cIface.Devices.Add(dev);
+                    }
+                }
+                else if (_uartPorts.Any(p => p.PortName == dev.PortName))
+                {
+                    if (uartIface != null && !uartIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                    {
+                        dev.ParentInterface = uartIface;
+                        uartIface.Devices.Add(dev);
                     }
                 }
                 else
@@ -120,7 +145,7 @@ namespace TERMINAL.DeviceHub
             editor.ShowDialog();
         }
 
-        private async void LoadScriptMenuItem_Click(object sender, RoutedEventArgs e)
+        private void LoadScriptMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
@@ -139,13 +164,11 @@ namespace TERMINAL.DeviceHub
                         string code = File.ReadAllText(fileName);
                         string name = Path.GetFileNameWithoutExtension(fileName);
 
-                        // Создаем скрипт (это теперь быстро, так как нет Compile())
+                        // ★ Теперь это сработает моментально! 
+                        // Тяжелая работа внутри ScriptNode ушла в Task.Run.
                         var scriptNode = new ScriptNode(name, code);
                         ScriptNodes.Add(scriptNode);
                         successCount++;
-
-                        // ★ Даем UI "вздохнуть" между добавлениями
-                        await Task.Yield();
                     }
                     catch (Exception ex)
                     {
@@ -393,7 +416,7 @@ namespace TERMINAL.DeviceHub
                 if (intervalMs < 50) intervalMs = 50;
 
                 // Запускаем опрос
-                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _selectedI2CDevices, intervalMs);
+                _engine.StartPolling(Interfaces, _isRs485Enabled, _rs485Ports, _isUartEnabled, _uartPorts, _selectedI2CDevices, intervalMs);
 
                 _isRecording = true;
                 RecordIcon.Text = "\uE71A";
@@ -598,23 +621,43 @@ namespace TERMINAL.DeviceHub
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            var settingsWindow = new HubSettingsWindow { Owner = Window.GetWindow(this) };
+            var settingsWindow = new HubSettingsWindow(_isRs485Enabled, _rs485Ports, _isUartEnabled, _uartPorts, _selectedI2CDevices)
+            {
+                Owner = Window.GetWindow(this)
+            };
+
             if (settingsWindow.ShowDialog() == true)
             {
                 _isRs485Enabled = settingsWindow.IsRs485Enabled;
                 _rs485Ports = settingsWindow.SelectedPortsWithBaud;
+                _isUartEnabled = settingsWindow.IsUartEnabled;
+                _uartPorts = settingsWindow.SelectedUartPortsWithBaud;
                 _selectedI2CDevices = settingsWindow.SelectedI2CDevices;
+
+                // ★ СОХРАНЯЕМ В ФАЙЛ ★
+                var settings = new AppSettings
+                {
+                    IsRs485Enabled = _isRs485Enabled,
+                    Rs485Ports = _rs485Ports,
+                    IsUartEnabled = _isUartEnabled,
+                    UartPorts = _uartPorts,
+                    I2CDevices = _selectedI2CDevices
+                };
+                settings.Save();
 
                 UpdateStatusText();
 
-                string portsStr = _isRs485Enabled && _rs485Ports.Count > 0
+                string rs485Str = _isRs485Enabled && _rs485Ports.Count > 0
                     ? string.Join(", ", _rs485Ports.Select(p => $"{p.PortName}@{p.BaudRate}"))
                     : "Выкл";
 
-                LogListView.Items.Add($"Настройки: Порты={portsStr} | I2C={string.Join(", ", _selectedI2CDevices)}");
+                string uartStr = _isUartEnabled && _uartPorts.Count > 0
+                    ? string.Join(", ", _uartPorts.Select(p => $"{p.PortName}@{p.BaudRate}"))
+                    : "Выкл";
+
+                LogListView.Items.Add($"Настройки сохранены: RS-485={rs485Str} | UART={uartStr} | I2C={string.Join(", ", _selectedI2CDevices)}");
             }
         }
-
         private async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
             if (_isRecording)
@@ -653,6 +696,7 @@ namespace TERMINAL.DeviceHub
                 Interfaces.Clear();
 
                 if (_isRs485Enabled) Interfaces.Add(new InterfaceNode { Name = "RS-485 (Ц1)" });
+                if (_isUartEnabled) Interfaces.Add(new InterfaceNode { Name = "UART (Ц2)" });
                 if (_selectedI2CDevices.Count > 0) Interfaces.Add(new InterfaceNode { Name = "I2C (Ц4)" });
 
                 _plotModelRealTime.Series.Clear();
@@ -660,39 +704,48 @@ namespace TERMINAL.DeviceHub
                 _plotModelRealTime.InvalidatePlot(true);
                 HistoryItemsControl.ItemsSource = null;
 
-                var foundDevices = await _engine.ScanAllAsync(Interfaces, _isRs485Enabled, _rs485Ports, _selectedI2CDevices, _scanCts.Token);
+                var foundDevices = await _engine.ScanAllAsync(
+                    Interfaces,
+                    _isRs485Enabled,
+                    _rs485Ports,
+                    _isUartEnabled,      // ← добавили флаг UART
+                    _uartPorts,          // ← добавили порты UART
+                    _selectedI2CDevices,
+                    _scanCts.Token
+                );
                 LogListView.Items.Add($"[Scan] Найдено устройств: {foundDevices.Count}");
 
                 var rs485Iface = Interfaces.FirstOrDefault(i => i.Name.Contains("RS-485"));
+                var uartIface = Interfaces.FirstOrDefault(i => i.Name.Contains("UART"));
                 var i2cIface = Interfaces.FirstOrDefault(i => i.Name.Contains("I2C"));
 
                 foreach (var dev in foundDevices)
                 {
-                    if (dev.PortName == "I2C")
+                    // Если устройство пришло с порта, который есть в настройках UART
+                    bool isUartDev = _uartPorts.Any(p => p.PortName == dev.PortName);
+
+                    if (isUartDev && uartIface != null)
                     {
-                        if (i2cIface != null)
-                        {
-                            dev.ParentInterface = i2cIface;
-                            if (!i2cIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
-                            {
-                                i2cIface.Devices.Add(dev);
-                            }
-                        }
+                        dev.ParentInterface = uartIface;
+                        if (!uartIface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                            uartIface.Devices.Add(dev);
                     }
-                    else
+                    else if (dev.PortName == "I2C" && i2cIface != null)
                     {
-                        if (rs485Iface != null)
-                        {
-                            dev.ParentInterface = rs485Iface;
-                            if (!rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
-                            {
-                                rs485Iface.Devices.Add(dev);
-                            }
-                        }
+                        dev.ParentInterface = i2cIface;
+                        if (!i2cIface.Devices.Any(d => d.Address == dev.Address))
+                            i2cIface.Devices.Add(dev);
+                    }
+                    else if (rs485Iface != null)
+                    {
+                        dev.ParentInterface = rs485Iface;
+                        if (!rs485Iface.Devices.Any(d => d.Address == dev.Address && d.PortName == dev.PortName))
+                            rs485Iface.Devices.Add(dev);
                     }
                 }
 
                 rs485Iface?.RecalculateSelection();
+                uartIface?.RecalculateSelection();
                 i2cIface?.RecalculateSelection();
 
                 CreateSeriesForAllChannels();
@@ -1508,15 +1561,15 @@ namespace TERMINAL.DeviceHub
 
         private void ScriptTreeItem_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            // Проверяем, что кликнули именно по TreeViewItem, и достаем из него ScriptNode
             if (sender is TreeViewItem item && item.DataContext is ScriptNode script)
             {
-                // Открываем редактор
                 var editor = new TERMINAL.Windows.ScriptEditorWindow(this, script);
                 editor.Owner = Window.GetWindow(this);
-                editor.ShowDialog();
 
-                // Помечаем событие обработанным, чтобы клик не проваливался в ScriptRow_MouseLeftButtonDown
+                _openEditors.Add(editor);
+                editor.Closed += (s, args) => _openEditors.Remove(editor); // Убираем из списка при закрытии
+
+                editor.Show(); // Открываем немодально
                 e.Handled = true;
             }
         }

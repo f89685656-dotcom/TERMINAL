@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Dynamic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -40,7 +41,7 @@ namespace TERMINAL.Windows
             HysteresisContent.Content = null;
             TchxContent.Content = null;
             ErrorsContent.Content = null;
-            VerificationGrid.ItemsSource = null;
+            VerificationGrid.Content = null;
             GstContent.Content = null;
 
             // ★ Применяем текущую тему из MainWindow
@@ -999,7 +1000,7 @@ namespace TERMINAL.Windows
                 HysteresisContent.Content = null;
                 TchxContent.Content = null;
                 ErrorsContent.Content = null;
-                VerificationGrid.ItemsSource = null;
+                VerificationGrid.Content = null; // ★ Очищаем Content (а не ItemsSource)
                 GstContent.Content = null;
 
                 return;
@@ -1008,63 +1009,71 @@ namespace TERMINAL.Windows
             DetailHeaderText.Text = $"Детали: Датчик №{row.Number}    " +
                                     $"Опис.град.: {row.GradDescription?.ToString("0.0000") ?? "—"}";
 
-            // Заполняем все вкладки сразу (скрытые просто не будут видны)
-            // Это быстрее, чем пересоздавать при каждом переключении
             HysteresisContent.Content = BuildHysteresisPanel(row);
             TchxContent.Content = BuildTchxPanel(row);
             ErrorsContent.Content = BuildSingleTablePanel(row.Source.Errors);
-            UpdateVerificationGrid(row.Source);
-            GstContent.Content = BuildGstPanel(row);
-        }
 
-        // ═══════════════════════════════════════════════════
+            // ★ Вызываем метод, который отвечает за вкладку "Проверка"
+            UpdateVerificationGrid(row.Source);
+
+            GstContent.Content = BuildGstPanel(row);
+        }        // ═══════════════════════════════════════════════════
         // Заполнить таблицу Проверки
         // ═══════════════════════════════════════════════════
         private void UpdateVerificationGrid(SensorSummary sensor)
         {
-            if (sensor.VerificationTable == null)
+            // Очищаем DataContext (если он использовался для привязок в XAML)
+            VerificationGrid.DataContext = sensor.VerificationTable;
+
+            if (sensor.VerificationTable == null || sensor.VerificationTable.ColumnHeaders.Count == 0)
             {
-                VerificationGrid.ItemsSource = null;
+                VerificationGrid.Content = new TextBlock
+                {
+                    Text = "Нет данных проверки",
+                    Margin = new Thickness(10),
+                    FontStyle = FontStyles.Italic
+                };
                 return;
             }
 
-            var dt = new System.Data.DataTable();
-
-            // Первая колонка — давление
-            dt.Columns.Add("P, кгс/см²", typeof(string));
-
-            // Добавляем колонки для температур
-            foreach (var temp in sensor.VerificationTable.ColumnHeaders)
+            // ★ 1. Создаем копию TableData с защитой заголовков от дубликатов
+            var sanitizedTable = new TableData
             {
-                dt.Columns.Add(temp.ToString("0.###"), typeof(string));
-            }
+                RowHeaders = sensor.VerificationTable.RowHeaders,
+                Values = sensor.VerificationTable.Values
+            };
 
-            // Заполняем строки
-            for (int r = 0; r < sensor.VerificationTable.Values.GetLength(0); r++)
+            var uniqueNames = new HashSet<string>();
+            for (int i = 0; i < sensor.VerificationTable.ColumnHeaders.Count; i++)
             {
-                var row = dt.NewRow();
+                string colName = sensor.VerificationTable.ColumnHeaders[i].ToString("0.###", CultureInfo.InvariantCulture);
 
-                // Давление (из RowHeaders)
-                string p = r < sensor.VerificationTable.RowHeaders.Count
-                    ? sensor.VerificationTable.RowHeaders[r].ToString("0.###")
-                    : "";
-                row[0] = p;
-
-                // Значения
-                for (int c = 0; c < sensor.VerificationTable.Values.GetLength(1); c++)
+                // Если заголовок пустой (0 или NaN), даем ему понятное имя
+                if (string.IsNullOrWhiteSpace(colName) || colName == "0" || colName == "NaN")
                 {
-                    var val = sensor.VerificationTable.Values[r, c];
-                    row[c + 1] = val.HasValue ? val.Value.ToString("0.0000") : "";
+                    colName = $"Колонка {i + 1}";
                 }
 
-                dt.Rows.Add(row);
+                // Защита от дубликатов
+                string originalName = colName;
+                int suffix = 1;
+                while (uniqueNames.Contains(colName))
+                {
+                    colName = $"{originalName}_{suffix}";
+                    suffix++;
+                }
+                uniqueNames.Add(colName);
+
+                // Сохраняем заголовок обратно в List<double> (так как TableData требует double)
+                if (double.TryParse(colName, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+                    sanitizedTable.ColumnHeaders.Add(parsed);
+                else
+                    sanitizedTable.ColumnHeaders.Add(0);
             }
 
-            VerificationGrid.ItemsSource = dt.DefaultView;
-        }
-
-        // ═══════════════════════════════════════════════════
-        // Панель ТЧХ
+            // ★ 2. Передаем в BuildTableGrid для отрисовки с полосками
+            VerificationGrid.Content = BuildTableGrid(sanitizedTable);
+        }        // Панель ТЧХ
         // ═══════════════════════════════════════════════════
         private UIElement BuildTchxPanel(SummaryRow row)
         {

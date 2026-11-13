@@ -307,7 +307,8 @@ namespace TERMINAL.DeviceHub
 
         public bool Is32Bit { get; set; } = true;
         public bool IsInt32 { get; set; } = false;
-        public bool IsDouble { get; set; } = false;
+        public bool IsFloat { get; set; } = false;   // ★ NEW: Single (2 регистра)
+        public bool IsDouble { get; set; } = false;   // 64-bit (4 регистра), оставить для др. устройств
         public double LastValue { get; set; }
         public ushort RegisterAddress { get; set; }
         public double Multiplier { get; set; } = 1.0;

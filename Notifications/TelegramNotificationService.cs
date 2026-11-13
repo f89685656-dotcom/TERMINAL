@@ -67,13 +67,27 @@ namespace TERMINAL.Notifications
                     using var doc = JsonDocument.Parse(body);
                     if (doc.RootElement.TryGetProperty("result", out var result) &&
                         result.TryGetProperty("message_id", out var msgId))
-                        return msgId.GetInt32();
+                    {
+                        // ★ Telegram отдаёт message_id как число; в новых чатах он может
+                        //   превысить int.MaxValue — читаем как long и приводим.
+                        if (msgId.TryGetInt64(out long idLong))
+                            return unchecked((int)idLong);
+
+                        // На всякий случай — если вдруг строка
+                        if (msgId.ValueKind == JsonValueKind.String &&
+                            long.TryParse(msgId.GetString(), out long idFromStr))
+                            return unchecked((int)idFromStr);
+                    }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TG Send] parse error: {ex.Message}; body={body}");
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[TG Send] message_id not found; body={body}");
                 return null;
             }
         }
-
         public async Task<bool> EditMessageAsync(int messageId, string newText)
         {
             string url = $"https://api.telegram.org/bot{_token}/editMessageText";
@@ -105,11 +119,20 @@ namespace TERMINAL.Notifications
 
             using (response)
             {
-                if (response.IsSuccessStatusCode) return true;
                 string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                if (body.Contains("message is not modified")) return true;
+
+                if (response.IsSuccessStatusCode)
+                    return true;
+
+                // Текст не изменился — с точки зрения вызывающего это успех.
+                if (body.Contains("message is not modified", StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                // ★ "message to edit not found" — id устарел/удалён. Возвращаем false,
+                //   чтобы вызывающий код отправил новое сообщение и сохранил новый id.
+                System.Diagnostics.Debug.WriteLine(
+                    $"[TG Edit] id={messageId} HTTP {(int)response.StatusCode} body={body}");
                 return false;
             }
         }
     }
-}

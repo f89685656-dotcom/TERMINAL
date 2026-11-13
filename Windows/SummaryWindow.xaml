@@ -65,25 +65,9 @@
             <TabItem Header="Погрешность">
                 <ContentControl x:Name="ErrorsContent"/>
             </TabItem>
-            <!-- ★ НОВАЯ ВКЛАДКА "ПРОВЕРКА" ★ -->
             <TabItem Header="Проверка">
-                <DataGrid x:Name="VerificationGrid" 
-                          AutoGenerateColumns="True" 
-                          IsReadOnly="True" 
-                          CanUserAddRows="False"
-                          GridLinesVisibility="All"
-                          HeadersVisibility="Column"
-                          RowHeight="22"
-                          FontSize="12"
-                          Background="{DynamicResource PanelBackground}" 
-                          Foreground="{DynamicResource TextForeground}"
-                          BorderBrush="{DynamicResource PanelBorder}"
-                          HorizontalGridLinesBrush="{DynamicResource PanelBorder}"
-                          VerticalGridLinesBrush="{DynamicResource PanelBorder}"
-                          RowBackground="{DynamicResource PanelBackground}"
-                          AlternatingRowBackground="{DynamicResource WindowBackground}"/>
+                <ContentControl x:Name="VerificationGrid"/>
             </TabItem>
-            <!-- ★ КОНЕЦ НОВОЙ ВКЛАДКИ ★ -->
             <TabItem Header="ГСТ">
                 <ContentControl x:Name="GstContent"/>
             </TabItem>

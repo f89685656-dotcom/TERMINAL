@@ -371,6 +371,12 @@ namespace TERMINAL.Services
                         .Select(x => ParseDouble(x))
                         .ToList();
 
+                    // ★ Если заголовки пустые или сломаны, подставляем индексы
+                    if (headers.Count == 0 || headers.All(h => h == 0))
+                    {
+                        for (int h = 0; h < 4; h++) headers.Add(h + 1);
+                    }
+
                     var table = new TableData { ColumnHeaders = headers };
 
                     i++;

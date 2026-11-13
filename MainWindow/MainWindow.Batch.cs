@@ -200,7 +200,14 @@ namespace TERMINAL
 
             _batchRunning = true;
             StartBatchStatusTimer();
+
+            // ★ Полный сброс состояния уведомлений перед новым пакетом.
             _batchProgress.ResetTable();
+            _batchProgress.ResetProgress();
+
+            // ★ Сбрасываем VK-специфичное «сообщение стабилизации».
+            foreach (var vk in NotificationManager.GetServices().OfType<VkNotificationService>())
+                vk.ResetStabilizationMessage();
 
             // ★ УБРАНА ОТПРАВКА ТАБЛИЦЫ ЗДЕСЬ (во время стабилизации она не нужна)
 
@@ -231,8 +238,12 @@ namespace TERMINAL
 
                 string startMsg = $"🚀 Пакетный режим запущен.\nЗаданий: {enabledCount} (диапазон: {_selectedTargetPressure}, температуры: {tempsString}).\n{clientInfo}";
 
-                // ★ ОТПРАВЛЯЕМ ОДИН РАЗ ВО ВСЕ КАНАЛЫ (Telegram, VK, Email, SMS)
+                // ★ Стартовое сообщение — всем каналам.
                 await _batchProgress.SendStatusAsync(startMsg);
+
+                // ★★ ВАЖНО: с этого момента VK получает ТОЛЬКО таблицу/прогресс,
+                //    а шаги в него не идут — иначе они мешают таблице.
+                _batchProgress.SetStepsSuppressed<VkNotificationService>(true);
 
                 int completedCount = 0;
 
@@ -254,7 +265,7 @@ namespace TERMINAL
                     string stepSetPointText = job.SetPoint.ToString("0.##", CultureInfo.InvariantCulture);
 
                     string jobStartMsg = $"▶️ Задание {completedCount}/{enabledCount} (уставка {stepSetPointText} °C) — начато";
-                    await NotificationManager.NotifyOthersAsync(jobStartMsg);
+                    await _batchProgress.SendStatusAsync(jobStartMsg);
 
                     // --- Запись уставки ---
                     job.StatusText = "запись уставки";
@@ -338,10 +349,12 @@ namespace TERMINAL
 
                     _batchRunDoneSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-                    // ★ ОТПРАВЛЯЕМ ТАБЛИЦУ ПЕРЕД ЗАПУСКОМ РЕЖИМА (после стабилизации)
+                    // ★ Перед таблицей — сбрасываем табличное состояние (новый пакет, новый id).
+                    _batchProgress.ResetTable();
+
                     if (job.IsCalibrationMode)
                     {
-                        await UpdatePressureTableInTelegramAsync();
+                        await UpdatePressureTableInTelegramAsync();   // внутри — _batchProgress.UpdateTableAsync
                     }
                     else
                     {
@@ -387,7 +400,7 @@ namespace TERMINAL
                     SetStatus($"[Пакет {completedCount}/{enabledCount}] завершён");
 
                     string jobEndMsg = $"✅ Задание {completedCount}/{enabledCount} (уставка {stepSetPointText} °C) — успешно завершено.";
-                    await NotificationManager.NotifyOthersAsync(jobEndMsg);
+                    await _batchProgress.SendStatusAsync(jobEndMsg);
                 }
 
                 SetStatusSuccess($"Пакетный режим завершён: обработано {completedCount} температур");
@@ -449,7 +462,16 @@ namespace TERMINAL
 
                 BatchProgressText.Text = "";
                 UpdateStartButtonMode();
+
+                // ★ Разрешаем шаги в VK снова.
+                _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
+
+                // ★ Очищаем id таблицы/прогресса — старые сообщения могли быть удалены.
                 _batchProgress.ResetTable();
+                _batchProgress.ResetProgress();
+
+                foreach (var vk in NotificationManager.GetServices().OfType<VkNotificationService>())
+                    vk.ResetStabilizationMessage();
             }
         }
         private async Task UpdatePressureTableInTelegramAsync()
@@ -747,7 +769,9 @@ namespace TERMINAL
                     // ★ ОБНОВЛЕНИЕ УВЕДОМЛЕНИЙ
                     var now = DateTime.Now;
 
-                    // 1. TELEGRAM (раз в 1 секунду)
+                    // ★ Один блок для всех каналов. Telegram редактирует на каждом тике,
+                    //   VK — с 30-секундным троттлингом (внутри ShouldPush BatchProgressNotifier),
+                    //   Email/Max получают новые сообщения — это норма для них.
                     if (_lastStabNotify == DateTime.MinValue || (now - _lastStabNotify).TotalSeconds >= 1.0)
                     {
                         long elapsedMs = (long)(now - _lastStabNotify).TotalMilliseconds;
@@ -762,36 +786,16 @@ namespace TERMINAL
                         if (exactRemaining < TimeSpan.Zero) exactRemaining = TimeSpan.Zero;
 
                         string timeStr = $"{(int)exactRemaining.TotalHours:D2}:{exactRemaining.Minutes:D2}:{exactRemaining.Seconds:D2}";
-                        _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
+                        _lastStabStatus = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация " +
+                                          $"{setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStr}";
 
                         _ = _batchProgress.UpdateProgressAsync(_lastStabStatus);
                     }
 
-                    // 2. VK (раз в 5 секунд)
-                    if (_lastVkStabNotify == DateTime.MinValue || (now - _lastVkStabNotify).TotalSeconds >= 5.0)
+                    // ★ VK-блок УДАЛЁН — UpdateStabilizationAsync больше не нужен.
+                    //   VK-троттлинг обеспечивает сам BatchProgressNotifier (ShouldPush, 30 сек).                }
+                    else
                     {
-                        long elapsedMsVk = (long)(now - _lastVkStabNotify).TotalMilliseconds;
-                        int stepsVk = (int)(elapsedMsVk / 5000);
-                        if (stepsVk < 1) stepsVk = 1;
-
-                        // Сдвигаем таймер VK ровно на 5 секунд
-                        _lastVkStabNotify = _lastVkStabNotify.AddMilliseconds(stepsVk * 5000);
-                        if ((now - _lastVkStabNotify).TotalSeconds >= 3.0) _lastVkStabNotify = now;
-
-                        // ★ ВАЖНО: Используем ТОЛЬКО что сдвинутое время (_lastVkStabNotify)
-                        // для вычисления таймера. Это гарантирует, что цифры всегда ровные.
-                        var exactElapsedVk = TimeSpan.FromSeconds(Math.Round((_lastVkStabNotify - inRangeSince).TotalSeconds));
-                        var exactRemainingVk = TimeSpan.FromMinutes(requiredMinutes) - exactElapsedVk;
-                        if (exactRemainingVk < TimeSpan.Zero) exactRemainingVk = TimeSpan.Zero;
-
-                        string timeStrVk = $"{(int)exactRemainingVk.TotalHours:D2}:{exactRemainingVk.Minutes:D2}:{exactRemainingVk.Seconds:D2}";
-                        string statusVk = $"⏳ Задание {jobIndex}/{totalJobs}: стабилизация {setPoint.ToString("0.##", CultureInfo.InvariantCulture)} °C — осталось {timeStrVk}";
-
-                        _ = NotificationManager.UpdateStabilizationAsync(statusVk);
-                    }
-                }
-                else
-                {
                     if (outOfRangeSince == DateTime.MinValue)
                         outOfRangeSince = DateTime.Now;
 

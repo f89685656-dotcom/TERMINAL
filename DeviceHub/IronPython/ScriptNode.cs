@@ -5,19 +5,24 @@ using Microsoft.Scripting.Hosting;
 using IronPython.Hosting;
 using System.Windows.Media;
 using OxyPlot;
+using System.Threading.Tasks;
 
 namespace TERMINAL.DeviceHub
 {
     public class ScriptNode : ViewModelBase
     {
+        // Один общий движок на всё приложение (создается 1 раз)
         private static ScriptEngine _engine = Python.CreateEngine();
-        private ScriptScope _scope;
 
+        private ScriptScope _scope;
         private double _value = double.NaN;
 
         public string Name { get; set; }
         public string FullName => Name;
         public string Unit => "";
+
+        // ★ Флаг, показывающий, что в скрипте есть ошибка синтаксиса
+        public bool HasError { get; private set; } = false;
 
         private string _code;
         public string Code
@@ -96,57 +101,68 @@ namespace TERMINAL.DeviceHub
             Name = name;
             Code = code;
 
-            _scope = _engine.CreateScope();
+            // ★ ЗАПУСКАЕМ ИНИЦИАЛИЗАЦИЮ В ФОНЕ (чтобы не вешать UI при загрузке)
+            Task.Run(() => InitializeEngine(code));
+        }
 
-            // Заглушка для SessionID
-            _engine.Execute(@"
-class SessionID:
-    def __init__(self): pass
-", _scope);
-
+        private void InitializeEngine(string code)
+        {
             try
             {
-                _engine.Execute(code, _scope);
+                var newScope = _engine.CreateScope();
 
-                // ★ Проверяем, есть ли функция Evaluate сразу после загрузки
-                if (_scope.GetVariable("Evaluate") == null)
-                {
-                    MainWindow.Current?.LogExternal($"[Script {name}] ВНИМАНИЕ: Функция Evaluate не найдена!", Brushes.Red);
-                }
+                _engine.Execute(@"
+class SessionID:
+    def __init__(self): pass
+", newScope);
+
+                // Компилируем и выполняем
+                var source = _engine.CreateScriptSourceFromString(code, Microsoft.Scripting.SourceCodeKind.Statements);
+                var compiledCode = source.Compile();
+                compiledCode.Execute(newScope);
+
+                // Если все ок, сохраняем скоуп
+                _scope = newScope;
+                HasError = false;
             }
             catch (Exception ex)
             {
-                MainWindow.Current?.LogExternal($"[Script {name}] Ошибка при загрузке: {ex.Message}", Brushes.Red);
+                _scope = null; // Ломаем скоуп, чтобы скрипт не считался
+                HasError = true;
+                Value = double.NaN;
+                MainWindow.Current?.LogExternal($"[Script {Name}] Ошибка при инициализации: {ex.Message}", Brushes.Red);
             }
         }
 
         public void ReloadCode(string newCode)
         {
             Code = newCode;
-            _scope = _engine.CreateScope();
 
+            var newScope = _engine.CreateScope();
             _engine.Execute(@"
 class SessionID:
     def __init__(self): pass
-", _scope);
+", newScope);
 
-            try
-            {
-                _engine.Execute(newCode, _scope);
-            }
-            catch (Exception ex)
-            {
-                MainWindow.Current?.LogExternal($"[Script {Name}] Ошибка при перезагрузке: {ex.Message}", Brushes.Red);
-            }
+            // ★ КОМПИЛИРУЕМ КОД (при ошибке вылетит исключение)
+            var source = _engine.CreateScriptSourceFromString(newCode, Microsoft.Scripting.SourceCodeKind.Statements);
+            var compiledCode = source.Compile();
+
+            // Выполняем, чтобы объявить Evaluate
+            compiledCode.Execute(newScope);
+
+            // Если все ок — заменяем рабочий скоуп
+            _scope = newScope;
+            HasError = false;
         }
 
         public void UpdateValue()
         {
-            if (!IsSelected) return;
+            // ★ Защита: если скоуп сломан (ошибка) или галочка снята — ничего не делаем
+            if (!IsSelected || _scope == null) return;
 
             try
             {
-                // Ищем функцию Evaluate
                 dynamic evalFunc = _scope.GetVariable("Evaluate");
 
                 if (evalFunc != null)
@@ -162,15 +178,9 @@ class SessionID:
                         Value = double.NaN;
                     }
                 }
-                else
-                {
-                    // Если функция пропала (например, скрипт был перезаписан)
-                    MainWindow.Current?.LogExternal($"[Script {Name}] Функция Evaluate не найдена!", Brushes.Red);
-                }
             }
             catch (Exception ex)
             {
-                // ★ Это покажет реальную ошибку, почему скрипт не работает
                 MainWindow.Current?.LogExternal($"[Script {Name}] Ошибка Evaluate: {ex.Message}", Brushes.Red);
                 Value = double.NaN;
             }

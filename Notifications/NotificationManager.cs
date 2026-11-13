@@ -36,10 +36,11 @@ namespace TERMINAL.Notifications
             lock (_lock) { return new List<INotificationService>(_services); }
         }
 
+        // ── Широковещательные методы (для событий, не для «живых» сообщений) ──
+
         public static async Task NotifyAsync(string text)
         {
-            var servicesCopy = Snapshot();
-            foreach (var svc in servicesCopy)
+            foreach (var svc in Snapshot())
             {
                 try { await svc.SendAsync(text).ConfigureAwait(false); }
                 catch (Exception ex)
@@ -51,8 +52,7 @@ namespace TERMINAL.Notifications
 
         public static async Task NotifyOthersAsync(string text)
         {
-            var servicesCopy = Snapshot();
-            foreach (var svc in servicesCopy)
+            foreach (var svc in Snapshot())
             {
                 if (svc is not TelegramNotificationService)
                 {
@@ -65,10 +65,13 @@ namespace TERMINAL.Notifications
             }
         }
 
+        // ── Старые методы (оставлены для совместимости) ──
+        // ВНИМАНИЕ: возвращают id первого ответившего сервиса.
+        // Для «живых» сообщений (прогресс, таблица) НЕ ИСПОЛЬЗОВАТЬ — см. ниже.
+
         public static async Task<int?> SendMessageAsync(string text)
         {
-            var servicesCopy = Snapshot();
-            foreach (var svc in servicesCopy)
+            foreach (var svc in Snapshot())
             {
                 try
                 {
@@ -85,8 +88,7 @@ namespace TERMINAL.Notifications
 
         public static async Task<bool> EditMessageAsync(int messageId, string text)
         {
-            var servicesCopy = Snapshot();
-            foreach (var svc in servicesCopy)
+            foreach (var svc in Snapshot())
             {
                 try
                 {
@@ -101,14 +103,50 @@ namespace TERMINAL.Notifications
             return false;
         }
 
+        // ── ★ НОВОЕ: адресная работа с конкретным типом сервиса ──
+        // BatchProgressNotifier использует эти методы, чтобы вести id
+        // отдельно для каждого канала и не путать их.
+
         /// <summary>
-        /// Обновляет одно сообщение о стабилизации у всех VK-сервисов.
-        /// Внутри каждого сервиса свой троттлинг (StabilizationInterval).
+        /// Отправить сообщение через первый сервис указанного типа.
+        /// Возвращает id или null, если сервис не найден / отправка не удалась.
         /// </summary>
+        public static async Task<int?> SendMessageViaAsync<T>(string text) where T : INotificationService
+        {
+            var svc = Snapshot().OfType<T>().FirstOrDefault();
+            if (svc == null) return null;
+            try
+            {
+                return await svc.SendMessageAsync(text).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SendMessageViaAsync<{typeof(T).Name}>] {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Отредактировать сообщение через первый сервис указанного типа.
+        /// </summary>
+        public static async Task<bool> EditMessageViaAsync<T>(int messageId, string text) where T : INotificationService
+        {
+            var svc = Snapshot().OfType<T>().FirstOrDefault();
+            if (svc == null) return false;
+            try
+            {
+                return await svc.EditMessageAsync(messageId, text).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[EditMessageViaAsync<{typeof(T).Name}>] {ex.Message}");
+                return false;
+            }
+        }
+
         public static async Task UpdateStabilizationAsync(string text)
         {
-            var servicesCopy = Snapshot();
-            foreach (var svc in servicesCopy)
+            foreach (var svc in Snapshot())
             {
                 if (svc is VkNotificationService vk)
                 {

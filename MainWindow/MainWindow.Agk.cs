@@ -272,10 +272,6 @@ namespace TERMINAL
                     }
                 }
             }
-            if (_batchRunning && _currentStepIndexForNotify >= 0)
-            {
-                _ = UpdatePressureTableInTelegramAsync();  // fire-and-forget, потому что Timer_Tick — void
-            }
 
         }
 
@@ -713,8 +709,7 @@ namespace TERMINAL
 
         /// <summary>
         /// Обновляет кэш состояния печи. Одно TCP-соединение — два Modbus-запроса.
-        /// </summary>private async Task RefreshAgkStateAsync
-        /// 
+        /// </summary>
         private async Task RefreshFurnaceStateAsync()
         {
             var snap = new FurnaceSnapshot { UpdatedAt = DateTime.Now };

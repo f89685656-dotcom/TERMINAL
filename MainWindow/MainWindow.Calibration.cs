@@ -303,8 +303,7 @@ namespace TERMINAL
                 string units = _selectedTargetPressure?.Contains("МПа") == true ? "МПа" : "кгс/см²";
 
                 // ★ Уведомляем о старте шага в Email/VK/MAX
-                AppendLog($"Уведомления: отправка шага {human}, сервисы = {NotificationManager.DumpServices()}", Brushes.Gray);
-                await NotificationManager.NotifyOthersAsync($"▶️ Шаг {human}/{steps.Length} (давление {v} {units}) — начат");
+                await _batchProgress.SendStatusAsync($"▶️ Шаг {human}/{steps.Length} (давление {v} {units}) — начат");
 
                 if (IsTestPressureRange())
                 {
@@ -339,7 +338,7 @@ namespace TERMINAL
                     _completedSteps = i + 1;
                     UpdateStepCounter();
 
-                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
+                    await _batchProgress.SendStatusAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
@@ -397,7 +396,7 @@ namespace TERMINAL
                     _completedSteps = 1;
                     UpdateStepCounter();
 
-                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
+                    await _batchProgress.SendStatusAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
@@ -453,7 +452,7 @@ namespace TERMINAL
                     _completedSteps = i + 1;
                     UpdateStepCounter();
 
-                    await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
+                    await _batchProgress.SendStatusAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
                     continue;
                 }
 
@@ -493,7 +492,7 @@ namespace TERMINAL
                 _completedSteps = i + 1;
                 UpdateStepCounter();
 
-                await NotificationManager.NotifyOthersAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
+                await _batchProgress.SendStatusAsync($"✅ Шаг {human}/{steps.Length} (давление {v} {units}) — завершён");
             }
 
             // Финальный сброс
@@ -530,6 +529,8 @@ namespace TERMINAL
                 if (!await WaitIfPausedAsync()) return false;
 
                 // ★★★ ОБНОВЛЯЕМ ПРОГРЕСС-БАР (РЕДАКТИРУЕМ СООБЩЕНИЕ) ★★★
+                _currentStepStatus = "таймер";
+                _currentTimerRemaining = 0;
                 await _batchProgress.UpdateProgressAsync($"💨 Бароциклирование: цикл {cycle}/{totalCycles}");
 
                 MaxArrow.Text = "  ";

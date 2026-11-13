@@ -12,12 +12,16 @@ namespace TERMINAL.Notifications
     public class VkNotificationService : INotificationService
     {
         private static readonly HttpClient _http;
-        private const int VkTimeoutMs = 5000;
+        private const int VkTimeoutMs = 10000;   // ★ было 5000 — мало при бане
 
-        /// <summary>
-        /// Минимальный интервал между обновлениями одного сообщения стабилизации.
-        /// </summary>
-        public static TimeSpan StabilizationInterval { get; set; } = TimeSpan.FromSeconds(5);
+        /// <summary>Минимальный интервал между любыми запросами к VK (глобально).</summary>
+        public static TimeSpan MinRequestInterval { get; set; } = TimeSpan.FromSeconds(3);
+
+        /// <summary>Минимальный интервал между обновлениями одного сообщения стабилизации.</summary>
+        public static TimeSpan StabilizationInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+        private static readonly SemaphoreSlim _vkGate = new SemaphoreSlim(1, 1);
+        private static DateTime _lastVkRequestUtc = DateTime.MinValue;
 
         private readonly string _token;
         private readonly long _peerId;
@@ -30,7 +34,7 @@ namespace TERMINAL.Notifications
         {
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
             var handler = new HttpClientHandler { UseProxy = false, Proxy = null };
-            _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+            _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         }
 
         public VkNotificationService(string accessToken, long peerId)
@@ -50,18 +54,20 @@ namespace TERMINAL.Notifications
                 throw new Exception("VK: не удалось отправить сообщение");
         }
 
-        public async Task<int?> SendMessageAsync(string text)
-            => await SendRawReturningIdAsync(text).ConfigureAwait(false);
+        public Task<int?> SendMessageAsync(string text)
+            => SendRawReturningIdAsync(text);
 
         public async Task<bool> EditMessageAsync(int messageId, string text)
         {
-            bool edited = await TryEditMessageAsync(messageId, text).ConfigureAwait(false);
-            if (edited) return true;
-
-            await TryDeleteMessageAsync(messageId).ConfigureAwait(false);
-            var newId = await SendRawReturningIdAsync(text).ConfigureAwait(false);
-            return newId.HasValue;
+            // ★ Без delete+send. Если edit не удался — возвращаем false,
+            //   пусть вызывающий решает (BatchProgressNotifier сам отправит новое
+            //   при следующем обновлении, с учётом троттлинга).
+            return await TryEditMessageAsync(messageId, text).ConfigureAwait(false);
         }
+
+        /// <summary>Удалить сообщение (нужно для очистки «шагов», если они мешают таблице).</summary>
+        public async Task<bool> DeleteMessageAsync(int messageId)
+            => await TryDeleteMessageAsync(messageId).ConfigureAwait(false);
 
         // -------- Спец-метод для таймера стабилизации --------
 
@@ -70,7 +76,10 @@ namespace TERMINAL.Notifications
             int? messageId;
             lock (_stabLock)
             {
-                // Внутреннюю проверку убрали, т.к. интервал контролируется в MainWindow
+                // ★ Троттлинг: слишком часто — пропускаем.
+                if ((DateTime.UtcNow - _lastStabilizationUpdateUtc) < StabilizationInterval)
+                    return false;
+
                 _lastStabilizationUpdateUtc = DateTime.UtcNow;
                 messageId = _stabilizationMessageId;
             }
@@ -79,8 +88,7 @@ namespace TERMINAL.Notifications
             {
                 bool edited = await TryEditMessageAsync(messageId.Value, text).ConfigureAwait(false);
                 if (edited) return true;
-
-                await TryDeleteMessageAsync(messageId.Value).ConfigureAwait(false);
+                // id протух — отправим новое.
             }
 
             int? newId = await SendRawReturningIdAsync(text).ConfigureAwait(false);
@@ -88,7 +96,50 @@ namespace TERMINAL.Notifications
             return newId.HasValue;
         }
 
+        /// <summary>Сбросить id «сообщения стабилизации» (например, после Reset).</summary>
+        public void ResetStabilizationMessage()
+        {
+            lock (_stabLock)
+            {
+                _stabilizationMessageId = null;
+                _lastStabilizationUpdateUtc = DateTime.MinValue;
+            }
+        }
+
         // -------- низкоуровневые вызовы --------
+
+        /// <summary>
+        /// Единая точка входа для запросов к VK:
+        /// глобальный семафор + минимальный интервал между запросами + таймаут.
+        /// </summary>
+        private static async Task<(bool ok, int status, string body)> VkPostAsync(
+            string url,
+            Dictionary<string, string> data,
+            CancellationToken ct)
+        {
+            await _vkGate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                // Держим интервал между запросами
+                var sinceLast = DateTime.UtcNow - _lastVkRequestUtc;
+                if (sinceLast < MinRequestInterval)
+                {
+                    var wait = MinRequestInterval - sinceLast;
+                    await Task.Delay(wait, ct).ConfigureAwait(false);
+                }
+
+                _lastVkRequestUtc = DateTime.UtcNow;
+
+                using var content = new FormUrlEncodedContent(data);
+                using var response = await _http.PostAsync(url, content, ct).ConfigureAwait(false);
+                string body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                return (response.IsSuccessStatusCode, (int)response.StatusCode, body);
+            }
+            finally
+            {
+                _vkGate.Release();
+            }
+        }
 
         private async Task<bool> TryEditMessageAsync(int messageId, string text)
         {
@@ -101,26 +152,29 @@ namespace TERMINAL.Notifications
                 { "access_token", _token },
                 { "v", "5.199" }
             };
+
             using var cts = new CancellationTokenSource(VkTimeoutMs);
             try
             {
-                using var content = new FormUrlEncodedContent(data);
-                using var response = await _http.PostAsync(url, content, cts.Token).ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                bool ok = response.IsSuccessStatusCode && !body.Contains("\"error\"");
-                if (!ok)
-                    LogVk($"[VK] TryEditMessage: ошибка. HTTP {(int)response.StatusCode}. Ответ: {body}");
-                return ok;
+                var (ok, status, body) = await VkPostAsync(url, data, cts.Token).ConfigureAwait(false);
+                bool edited = ok && !body.Contains("\"error\"");
+                if (!edited)
+                    LogVk($"[VK] TryEditMessage: HTTP {status}. Ответ: {Trim(body)}");
+                return edited;
+            }
+            catch (OperationCanceledException)
+            {
+                LogVk($"[VK] TryEditMessage: таймаут ({VkTimeoutMs} мс)");
+                return false;
             }
             catch (Exception ex)
             {
-                LogVk($"[VK] TryEditMessage: исключение — {ex.Message}");
+                LogVk($"[VK] TryEditMessage: {ex.Message}");
                 return false;
             }
         }
 
-        private async Task TryDeleteMessageAsync(int messageId)
+        private async Task<bool> TryDeleteMessageAsync(int messageId)
         {
             string url = "https://api.vk.com/method/messages.delete";
             var data = new Dictionary<string, string>
@@ -130,19 +184,25 @@ namespace TERMINAL.Notifications
                 { "access_token", _token },
                 { "v", "5.199" }
             };
+
             using var cts = new CancellationTokenSource(VkTimeoutMs);
             try
             {
-                using var content = new FormUrlEncodedContent(data);
-                using var response = await _http.PostAsync(url, content, cts.Token).ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode || body.Contains("\"error\""))
-                    LogVk($"[VK] TryDeleteMessage: ошибка. HTTP {(int)response.StatusCode}. Ответ: {body}");
+                var (ok, status, body) = await VkPostAsync(url, data, cts.Token).ConfigureAwait(false);
+                bool deleted = ok && !body.Contains("\"error\"");
+                if (!deleted)
+                    LogVk($"[VK] TryDeleteMessage: HTTP {status}. Ответ: {Trim(body)}");
+                return deleted;
+            }
+            catch (OperationCanceledException)
+            {
+                LogVk($"[VK] TryDeleteMessage: таймаут ({VkTimeoutMs} мс)");
+                return false;
             }
             catch (Exception ex)
             {
-                LogVk($"[VK] TryDeleteMessage: исключение — {ex.Message}");
+                LogVk($"[VK] TryDeleteMessage: {ex.Message}");
+                return false;
             }
         }
 
@@ -157,16 +217,14 @@ namespace TERMINAL.Notifications
                 { "access_token", _token },
                 { "v", "5.199" }
             };
+
             using var cts = new CancellationTokenSource(VkTimeoutMs);
             try
             {
-                using var content = new FormUrlEncodedContent(data);
-                using var response = await _http.PostAsync(url, content, cts.Token).ConfigureAwait(false);
-                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode || body.Contains("\"error\""))
+                var (ok, status, body) = await VkPostAsync(url, data, cts.Token).ConfigureAwait(false);
+                if (!ok || body.Contains("\"error\""))
                 {
-                    LogVk($"[VK] SendMessage: ошибка. HTTP {(int)response.StatusCode}. Ответ: {body}");
+                    LogVk($"[VK] SendMessage: HTTP {status}. Ответ: {Trim(body)}");
                     return null;
                 }
 
@@ -181,21 +239,24 @@ namespace TERMINAL.Notifications
                     return id2;
                 return null;
             }
+            catch (OperationCanceledException)
+            {
+                LogVk($"[VK] SendMessage: таймаут ({VkTimeoutMs} мс)");
+                return null;
+            }
             catch (Exception ex)
             {
-                LogVk($"[VK] SendMessage: исключение — {ex.Message}");
+                LogVk($"[VK] SendMessage: {ex.Message}");
                 return null;
             }
         }
 
-        // ★ Вспомогательный метод для логирования в главное окно
+        private static string Trim(string s, int max = 200)
+            => string.IsNullOrEmpty(s) || s.Length <= max ? s : s.Substring(0, max) + "…";
+
         private static void LogVk(string message)
         {
-            try
-            {
-                MainWindow.Current?.LogExternal(message, Brushes.Gray);
-            }
-            catch { }
+            try { MainWindow.Current?.LogExternal(message, Brushes.Gray); } catch { }
         }
     }
 }

@@ -513,6 +513,14 @@ namespace TERMINAL
 
                 AppendLog($"Программа запущена, версия {GetAppVersion()}", Brushes.Green);
 
+                // ★ Троттлинг VK: не чаще 1 запроса в 3 сек и не чаще обновления
+                //   одного сообщения раз в 30 сек. Меняйте здесь, если нужно.
+                VkNotificationService.MinRequestInterval = TimeSpan.FromSeconds(3);
+                VkNotificationService.StabilizationInterval = TimeSpan.FromSeconds(10);
+
+                // ★ На старте шаги не подавлены — включим, когда реально начнётся таблица.
+                _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
+
                 AskForStartupMode();
                 StartBroadcastServer();
 
@@ -1598,6 +1606,10 @@ namespace TERMINAL
             // ★ Email-данные каждого провайдера уже сохранены в полях MainWindow
             //   (через SaveCurrentEmailFields в окне настроек)
 
+            _batchProgress.ResetTable();
+            _batchProgress.ResetProgress();
+            _batchProgress.SetStepsSuppressed<VkNotificationService>(false);
+
             NotificationManager.ClearServices();
 
             if (enabled)
@@ -1633,28 +1645,30 @@ namespace TERMINAL
                     NotificationManager.AddService(new MaxNotificationService(_maxToken, maxId));
             }
 
+            // ★ Сервисы пересозданы — все старые id протухли. Сбрасываем состояние,
+            //   чтобы BatchProgressNotifier не пытался редактировать чужие сообщения.
+            _batchProgress.ResetTable();
+            _batchProgress.ResetProgress();
+
             UpdateNotificationStatus(_notificationsEnabled);
             AppendLog($"Уведомления: сервисы = {NotificationManager.DumpServices()}", Brushes.Blue);
 
             // ★ Если пакет идёт и Telegram только что включили —
             //   сразу отправляем текущее состояние (таблицу или таймер стабилизации).
-            if (_batchRunning && _notifyTgEnabled && _selectedTargetPressure != null)
+            if (_batchRunning && _selectedTargetPressure != null)
             {
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await Task.Delay(500); // Даём NotificationManager время добавить сервис
-
+                        await Task.Delay(500);
                         if (_currentStepIndexForNotify >= 0)
                         {
-                            // ★ Градуировка идёт — отправляем таблицу
-                            await UpdatePressureTableInTelegramAsync();
+                            // ★ Через BatchProgressNotifier — VK уважает троттлинг
+                            await _batchProgress.UpdateTableAsync(_lastSentTable);
                         }
                         else
                         {
-                            // ★ Стабилизация идёт — отправляем сообщение с таймером
-                            // (или «проверка допуска», если стабилизация 0 мин)
                             string status = _lastStabStatus ?? "Ожидание стабилизации...";
                             await _batchProgress.UpdateProgressAsync(status);
                         }
@@ -1665,7 +1679,6 @@ namespace TERMINAL
                     }
                 });
             }
-
             SaveSettings();
         }
 
@@ -1768,15 +1781,9 @@ namespace TERMINAL
         // Отправляет событие во все каналы, КРОМЕ Telegram (чтобы не дублировать живую таблицу)
         private void NotifyEvents(string text)
         {
-            // Временно отключаем Telegram, чтобы событие не ушло туда
-            var services = NotificationManager.GetServices(); // Нам понадобится метод GetServices
-            foreach (var svc in services)
-            {
-                if (svc is not TelegramNotificationService)
-                {
-                    _ = svc.SendAsync(text);
-                }
-            }
+            // ★ Идём через BatchProgressNotifier: уважает SetStepsSuppressed
+            //   (VK не получает шаги, пока идёт таблица) и не дублирует Telegram.
+            _ = _batchProgress.SendStatusAsync(text);
         }
 
 
